@@ -281,5 +281,107 @@ class TestMultiDataFileReaderEmptyFiles(unittest.TestCase):
         self.assertEqual(type(reader.metadata_df), DataFrame)
 
 
+class TestLoadParquetMany(unittest.TestCase):
+    """load_parquet_many puts files with a time gap between them on one grid (L352)"""
+
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.tempdir = Path(self._tempdir.name)
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+    def _write_day(self, day: str, filename: str) -> Path:
+        # One day of 30-min data, timestamps at the end of each period
+        ix = pd.date_range(f'{day} 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        df = DataFrame({'TA': range(48)}, index=ix, dtype=float)
+        filepath = self.tempdir / filename
+        df.to_parquet(filepath)
+        return filepath
+
+    def test_files_with_a_time_gap_get_a_regular_index(self):
+        from diive.core.io.files import load_parquet_many
+        files = [self._write_day('2024-01-01', 'a.parquet'),
+                 self._write_day('2024-01-05', 'b.parquet')]
+        df = load_parquet_many(filepaths=files)
+        self.assertEqual(df.index.freqstr, '30min')
+        expected_ix = pd.date_range(df.index[0], df.index[-1], freq='30min')
+        self.assertTrue(df.index.equals(expected_ix))
+        self.assertEqual(len(df), 4 * 48 + 48)
+        # Both files are complete, the days between them are empty
+        self.assertEqual(int(df['TA'].notna().sum()), 2 * 48)
+        self.assertTrue(df.loc['2024-01-02 12:00':'2024-01-04 12:00', 'TA'].isna().all())
+
+    def test_contiguous_files_load_as_before(self):
+        from diive.core.io.files import load_parquet, load_parquet_many
+        files = [self._write_day('2024-01-01', 'a.parquet'),
+                 self._write_day('2024-01-02', 'b.parquet')]
+        df = load_parquet_many(filepaths=files)
+        expected = load_parquet(files[0]).combine_first(load_parquet(files[1]))
+        pd.testing.assert_frame_equal(df, expected)
+        self.assertEqual(df.index.freqstr, '30min')
+        self.assertEqual(len(df), 96)
+
+
+class TestMetadataUnits(unittest.TestCase):
+    """L323: each unit belongs to its own variable, also after the timestamp
+    columns were removed from the data."""
+
+    def test_eddypro_full_output_units(self):
+        _, m = ed.load_exampledata_EDDYPRO_FULL_OUTPUT_CSV_30MIN()
+        self.assertEqual(m.loc['DOY', 'UNITS'], '[ddd.ddd]')
+        self.assertEqual(m.loc['daytime', 'UNITS'], '[1=daytime]')
+
+    def test_toa5_units(self):
+        _, m = ed.load_exampledata_TOA5_DAT_1MIN()
+        self.assertEqual(m.loc['RECORD', 'UNITS'], 'RN')
+
+
+class TestDelimiter(unittest.TestCase):
+    """L342: a file separated by ';' reads like the same file separated by ','."""
+
+    def _read(self, filepath, delimiter):
+        from diive.core.io.filereader import DataFileReader
+        return DataFileReader(
+            filepath=filepath, data_header_section_rows=[0], data_skip_rows=[],
+            data_header_rows=[0], data_varnames_row=0, data_varunits_row=None,
+            data_na_vals=[-9999], data_freq="30min", data_delimiter=delimiter,
+            data_nrows=48, timestamp_idx_col=["TIMESTAMP_END"],
+            timestamp_datetime_format="%Y%m%d%H%M", timestamp_start_middle_end="end",
+            output_middle_timestamp=True, compression=None).get_data()[0]
+
+    def test_semicolon_file(self):
+        src = next(Path(ed.DIR_PATH).glob('exampledata_EDDYPRO-FLUXNET-CSV-30MIN_CH-AWS*.csv'))
+        with tempfile.TemporaryDirectory() as tmp:
+            semi = Path(tmp) / 'semicolon.csv'
+            semi.write_text(src.read_text(encoding='utf-8').replace(',', ';'), encoding='utf-8')
+            pd.testing.assert_frame_equal(self._read(semi, ';'), self._read(src, ','))
+
+
+class TestTimestampColumnsByPosition(unittest.TestCase):
+    """L343: date and time columns given by position read like given by name."""
+
+    def _read(self, filepath, idx_col):
+        from diive.core.io.filereader import DataFileReader
+        return DataFileReader(
+            filepath=filepath, data_header_section_rows=[0], data_skip_rows=[],
+            data_header_rows=[0], data_varnames_row=0, data_varunits_row=None,
+            data_na_vals=[-9999], data_freq="30min", data_delimiter=",",
+            data_nrows=None, timestamp_idx_col=idx_col,
+            timestamp_datetime_format="%Y-%m-%d %H:%M", timestamp_start_middle_end="end",
+            output_middle_timestamp=True, compression=None).get_data()[0]
+
+    def test_positions_and_names_agree(self):
+        idx = pd.date_range('2024-01-01 00:30', periods=48, freq='30min')
+        lines = ['date,time,TA'] + [f"{t:%Y-%m-%d},{t:%H:%M},{i}" for i, t in enumerate(idx)]
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / 'datetime_cols.csv'
+            f.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+            by_pos = self._read(f, [0, 1])
+            by_name = self._read(f, ['date', 'time'])
+        self.assertEqual(by_pos['TA'].notna().sum(), 48)
+        pd.testing.assert_frame_equal(by_pos, by_name)
+
+
 if __name__ == '__main__':
     unittest.main()

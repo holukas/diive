@@ -4,7 +4,7 @@ CORE.IO.DB.INFLUX: INFLUXDB I/O ENGINE
 
 diive's in-house InfluxDB v2 engine (download / upload / delete / schema
 browsing), a clean port of the former external ``dbc-influxdb`` package. The
-optional ``db`` group/extra provides the only third-party requirement
+optional ``db`` extra provides the only third-party requirement
 (``influxdb-client``); the client is imported lazily, so importing this package
 never requires it.
 

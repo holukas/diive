@@ -27,7 +27,7 @@ Energy Conversions
 Physical Properties
 ~~~~~~~~~~~~~~~~~~~
 
-- **feature_air.py** — Air density, resistance, heat capacity, viscosity
+- **feature_air.py** — Aerodynamic resistance and dry air density
 - **feature_vpd.py** — Vapor Pressure Deficit from temperature and humidity
 
 Radiation & Solar Geometry
@@ -40,7 +40,7 @@ Time-Based Features
 ~~~~~~~~~~~~~~~~~~~
 
 - **feature_laggedvariants.py** — Lagged and shifted variables for modeling
-- **feature_timesince.py** — Time-since-event features (days, hours)
+- **feature_timesince.py** — Time-since-event features (number of records since a condition last held)
 
 Testing & Synthetic Data
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -118,8 +118,9 @@ Available Functions
 
 See ``dv.variables`` for the complete API including:
 
-- Air: density, resistance, heat capacity, viscosity
+- Air: aerodynamic resistance, dry air density
 - Radiation: potential radiation (SW_IN_POT), ONEFlux/FLUXNET parity
-- Conversions: temperature, energy, water units
-- Derived: VPD, relative humidity from dew point
-- Temporal: day/night flags, diel cycles
+- Conversions: air temperature from sonic temperature, latent heat of vaporization, ET from LE
+- Derived: VPD from air temperature and relative humidity, combined variables
+- Temporal: day/night flags, time since a condition, lagged variants
+- Synthetic data: noisy time series, impulse noise

@@ -60,6 +60,8 @@ print(f"Missing values (gaps): {df[TARGET_COL].isnull().sum()}")
 #
 # MDS fills gaps using average flux from similar meteorological conditions.
 # Advantages: No training required, fast. Disadvantages: May miss non-linear patterns.
+# FluxMDS runs in its default ``mode='diive'`` (Vekuri et al. 2023 symmetric
+# mean). Use ``mode='oneflux'`` for values that match ONEFlux bit for bit.
 
 print("\n" + "-" * 80)
 print("METHOD 1: MARGINAL DISTRIBUTION SAMPLING (MDS)".ljust(80))
@@ -73,6 +75,7 @@ mds = dv.gapfilling.FluxMDS(
     ta='Tair_f',
     swin='Rg_f',
     vpd='VPD_f',
+    vpd_in_kpa=False,  # VPD_f in the example data is in hPa: 0.5 kPa -> 5 hPa
     swin_tol=[20, 50],
     ta_tol=2.5,
     vpd_tol=0.5,

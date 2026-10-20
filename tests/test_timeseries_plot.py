@@ -12,6 +12,7 @@ import pandas as pd
 from bokeh.io.state import curstate
 from matplotlib.collections import LineCollection
 from matplotlib.colors import to_rgb
+from matplotlib.figure import Figure
 from matplotlib.layout_engine import ConstrainedLayoutEngine
 
 import diive.core.plotting.timeseries as timeseries
@@ -554,6 +555,154 @@ class TestOwnFigureLayout(_TimeSeriesRenderMixin, unittest.TestCase):
         self.assertEqual(self._layout_warnings(caught), [])
         self.assertIsInstance(fig.get_layout_engine(), ConstrainedLayoutEngine)
         self.assertEqual(to_rgb(fig.get_facecolor()), to_rgb('#EEEEEE'))
+
+
+class TestStatsAndDefaultLook(_TimeSeriesRenderMixin, unittest.TestCase):
+    """Stats lines with the detected time resolution, and the default look."""
+
+    @staticmethod
+    def _stats_text(ax):
+        return '\n'.join(t.get_text() for t in ax.texts if 'Time resolution' in t.get_text())
+
+    def test_own_figure_shows_resolution_and_stats(self):
+        fc = self.fc.copy()
+        fc.iloc[:10] = np.nan
+        ax = TimeSeries(series=fc).plot()
+        text = self._stats_text(ax)
+        self.assertIn('Time resolution 30min', text)
+        self.assertIn(f'{self.N - 10:,} values', text)
+        self.assertIn('5.0 % missing', text)
+        for name in ('Mean', 'Median', 'SD', 'Min', 'Max'):
+            self.assertIn(name, text)
+        mean = fc.mean()
+        self.assertIn(f'Mean {mean:.3f}'.replace('-', '−'), text)
+
+    def test_given_axes_shows_no_stats_unless_asked(self):
+        fig, ax = plt.subplots()
+        TimeSeries(series=self.fc).plot(ax=ax)
+        self.assertEqual(self._stats_text(ax), '')
+        fig2, ax2 = plt.subplots()
+        TimeSeries(series=self.fc).plot(ax=ax2, show_stats=True)
+        self.assertIn('Time resolution 30min', self._stats_text(ax2))
+
+    def test_own_figure_can_leave_stats_out(self):
+        ax = TimeSeries(series=self.fc).plot(show_stats=False)
+        self.assertEqual(self._stats_text(ax), '')
+
+    def test_mixed_resolutions_are_listed(self):
+        a = pd.date_range('2024-06-01 00:10', periods=50, freq='10min')
+        b = pd.date_range(a[-1] + pd.Timedelta('1min'), periods=100, freq='1min')
+        s = pd.Series(np.arange(150.0), index=a.append(b), name='X')
+        text = self._stats_text(TimeSeries(series=s).plot())
+        self.assertIn('10min (50 records), 1min (100 records)', text)
+
+    def test_all_nan_series_still_draws(self):
+        s = pd.Series(np.nan, index=self.idx, name='X')
+        ax = TimeSeries(series=s).plot()
+        ax.figure.canvas.draw()
+        text = self._stats_text(ax)
+        self.assertIn('100.0 % missing', text)
+        self.assertIn('No values', text)
+
+    def test_finite_data_show_no_infinite_count(self):
+        self.assertNotIn('infinite', self._stats_text(TimeSeries(series=self.fc).plot()))
+
+    def _stats_with(self, values, **plot_kwargs):
+        """Stats text of a series that starts with *values*, then the random FC data."""
+        s = self.fc.copy()
+        s.iloc[:len(values)] = values
+        ax = TimeSeries(series=s).plot(**plot_kwargs)
+        ax.figure.canvas.draw()
+        return s, self._stats_text(ax)
+
+    def test_positive_infinity_is_counted_and_left_out_of_the_stats(self):
+        """L315: log10 of an infinite largest value raised OverflowError."""
+        s, text = self._stats_with([np.inf])
+        finite = s.iloc[1:]
+        self.assertIn(f'{self.N - 1:,} values', text)
+        self.assertIn('0.0 % missing', text)
+        self.assertIn('1 infinite', text)
+        self.assertIn(f'Mean {finite.mean():.3f}'.replace('-', '−'), text)
+        self.assertIn(f'Max {finite.max():.3f}'.replace('-', '−'), text)
+
+    def test_negative_infinity_is_counted_and_left_out_of_the_stats(self):
+        s, text = self._stats_with([-np.inf, -np.inf])
+        self.assertIn('2 infinite', text)
+        self.assertIn(f'Min {s.iloc[2:].min():.3f}'.replace('-', '−'), text)
+
+    def test_infinity_on_a_given_axes(self):
+        """The same stats code runs for a caller's axes with show_stats=True."""
+        s = self.fc.copy()
+        s.iloc[0] = np.inf
+        ax = Figure().subplots()
+        TimeSeries(series=s).plot(ax=ax, show_stats=True)
+        ax.figure.draw_without_rendering()
+        self.assertIn('1 infinite', self._stats_text(ax))
+
+    def test_only_infinite_and_missing_values(self):
+        s = pd.Series(np.nan, index=self.idx, name='X')
+        s.iloc[::2] = np.inf
+        s.iloc[1::4] = -np.inf
+        ax = TimeSeries(series=s).plot()
+        ax.figure.canvas.draw()
+        text = self._stats_text(ax)
+        self.assertIn('0 values', text)
+        self.assertIn('25.0 % missing', text)
+        self.assertIn(f'{3 * self.N // 4:,} infinite', text)
+        self.assertIn('No finite values', text)
+
+    def test_only_infinite_values(self):
+        s = pd.Series(np.inf, index=self.idx, name='X')
+        text = self._stats_text(TimeSeries(series=s).plot())
+        self.assertIn('0.0 % missing', text)
+        self.assertIn('No finite values', text)
+
+    def test_all_zeros(self):
+        s = pd.Series(0.0, index=self.idx, name='X')
+        text = self._stats_text(TimeSeries(series=s).plot())
+        for name in ('Mean', 'Median', 'SD', 'Min', 'Max'):
+            self.assertIn(f'{name} 0.000', text)
+
+    def test_negative_values_only(self):
+        s = -self.fc.abs() - 100  # largest absolute value above 100: one decimal
+        text = self._stats_text(TimeSeries(series=s).plot())
+        self.assertIn(f'Min {s.min():,.1f}'.replace('-', '−'), text)
+        self.assertIn(f'Max {s.max():,.1f}'.replace('-', '−'), text)
+
+    def test_single_finite_value_has_no_sd(self):
+        s = pd.Series(np.nan, index=self.idx, name='X')
+        s.iloc[5] = 7.0
+        s.iloc[6] = np.inf
+        text = self._stats_text(TimeSeries(series=s).plot())
+        self.assertIn('1 values', text)
+        self.assertIn('Mean 7.000', text)
+        self.assertIn('Max 7.000', text)
+        self.assertNotIn('SD', text)
+
+    def test_title_clears_the_stats_lines(self):
+        ax = TimeSeries(series=self.fc).plot()
+        ax.figure.canvas.draw()
+        renderer = ax.figure.canvas.get_renderer()
+        stats = next(t for t in ax.texts if 'Time resolution' in t.get_text())
+        title = ax._left_title
+        self.assertEqual(title.get_text(), 'FC')
+        self.assertGreater(title.get_window_extent(renderer).y0, stats.get_window_extent(renderer).y1)
+
+    def test_default_look_open_frame_and_no_legend(self):
+        fig, ax = plt.subplots()
+        TimeSeries(series=self.fc).plot(ax=ax)
+        self.assertFalse(ax.spines['top'].get_visible())
+        self.assertFalse(ax.spines['right'].get_visible())
+        self.assertIsNone(ax.get_legend())
+        self.assertEqual(ax.get_title(loc='left'), 'FC')
+        self.assertEqual(ax.get_title(), '')
+
+    def test_caller_style_keeps_its_chrome(self):
+        fig, ax = plt.subplots()
+        TimeSeries(series=self.fc).plot(ax=ax, format_style=timeseries.FormatStyle(title='T'))
+        self.assertTrue(ax.spines['top'].get_visible())
+        self.assertEqual(ax.get_title(), 'T')
+        self.assertIsNotNone(ax.get_legend())
 
 
 if __name__ == "__main__":

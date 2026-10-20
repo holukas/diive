@@ -15,6 +15,8 @@ Verbosity constants (pass as ``verbose=`` to any helper):
     VERBOSE_ERROR    = 1  — errors and warnings only
     VERBOSE_PROGRESS = 2  — section headers and key results  (default)
     VERBOSE_DEBUG    = 3  — all detail lines
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 from rich.console import Console
@@ -158,6 +160,8 @@ def set_verbosity(level: int | bool) -> None:
         level: One of ``VERBOSE_SILENT`` (0), ``VERBOSE_ERROR`` (1),
             ``VERBOSE_PROGRESS`` (2, the default) or ``VERBOSE_DEBUG`` (3).
             ``VERBOSE_DEBUG`` is what makes ``detail()`` lines appear.
+            A bool also works: True means ``VERBOSE_PROGRESS``, False means
+            ``VERBOSE_SILENT``.
     """
     global _default_verbose
     _default_verbose = _vlevel(level)

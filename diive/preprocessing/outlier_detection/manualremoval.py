@@ -35,12 +35,55 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 
 
-@ConsoleOutputDecorator()
 class ManualRemoval(FlagBase):
-    """Generate flag for data points that should be removed."""
+    """Generate flag for data points that should be removed.
+
+    Example:
+        Dates match the series index as it is. The example data are 30-minute
+        records with TIMESTAMP_MIDDLE, at :15 and :45.
+
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['Tair_f'].loc['2022-07']
+        >>> mr = dv.outliers.ManualRemoval(series=s, remove_dates=['2022-07-05 10:45']).run()
+        >>> cleaned = mr.filteredseries
+
+        Number of records each form of ``remove_dates`` removes:
+
+        >>> def n_removed(remove_dates):
+        ...     mr = dv.outliers.ManualRemoval(series=s, remove_dates=remove_dates).run()
+        ...     return int((mr.overall_flag == 2).sum())
+
+        A timestamp with time is one record, a bare date is the whole day:
+
+        >>> n_removed(['2022-07-05 10:45'])
+        1
+        >>> n_removed(['2022-07-05'])
+        48
+
+        A range is a nested ``[start, end]`` list and includes both ends. Bare
+        dates in a range cover whole days:
+
+        >>> n_removed([['2022-07-05 08:15', '2022-07-05 10:45']])
+        6
+        >>> n_removed([['2022-07-05', '2022-07-06']])
+        96
+
+        One list can mix all forms:
+
+        >>> n_removed(['2022-07-10 10:45', '2022-07-12',
+        ...            ['2022-07-05 08:15', '2022-07-05 10:45'],
+        ...            ['2022-07-20', '2022-07-21']])
+        151
+
+        A flat list of two strings means two single records, not a range:
+
+        >>> n_removed(['2022-07-05 08:15', '2022-07-05 10:45'])
+        2
+
+        See `examples/preprocessing/outlier_detection/outlier_manualremoval.py` for complete examples.
+    """
 
     flagid = 'OUTLIER_MANUAL'
 

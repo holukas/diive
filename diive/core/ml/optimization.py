@@ -1,14 +1,14 @@
 """
-============================================
-HYPERPARAMETER OPTIMIZATION FOR TIME SERIES
-optimization
-============================================
+ML: HYPERPARAMETER OPTIMIZATION
+===============================
 
-Generic hyperparameter optimization for any sklearn-compatible regressor
-using GridSearchCV with TimeSeriesSplit to avoid data leakage.
+Hyperparameter optimization for any sklearn-compatible regressor using
+GridSearchCV with TimeSeriesSplit to avoid data leakage.
 
 Supports Random Forest, XGBoost, and any model implementing the sklearn
 regressor interface.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 import pandas as pd
 from pandas import DataFrame
@@ -25,6 +25,11 @@ class OptimizeParamsTS:
 
     Supports Random Forest, XGBoost, and any model implementing the sklearn regressor interface.
     Uses GridSearchCV with TimeSeriesSplit to avoid data leakage on time series data.
+
+    :meth:`optimize` uses the complete rows only. It holds out the last 25% of
+    them (in time order), runs the grid search with 10 TimeSeriesSplit folds and
+    negative mean squared error as score on the first 75%, and then scores the
+    best model on the held-out 25%.
 
     Visualization Features:
         - Parameter slice plots showing sensitivity to each hyperparameter
@@ -101,14 +106,14 @@ class OptimizeParamsTS:
 
     @property
     def best_params(self) -> dict:
-        """Estimator which gave highest score (or smallest loss if specified) on the left out data"""
+        """Parameter setting that gave the best cross-validated score."""
         if not self._best_params:
             raise Exception(f'Not available: model scores.')
         return self._best_params
 
     @property
     def scores(self) -> dict:
-        """Return model scores for best model"""
+        """Return the scores of the best model on the held-out last 25% of the data."""
         if not self._scores:
             raise Exception(f'Not available: model scores.')
         return self._scores

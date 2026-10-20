@@ -27,8 +27,8 @@ import diive as dv
 df = dv.load_exampledata_parquet()
 
 # Site coordinates: CH-DAV (Davos, Switzerland)
-SITE_LAT = 47.286417
-SITE_LON = 7.733750
+SITE_LAT = 46.81533
+SITE_LON = 9.85591
 UTC_OFFSET = 1
 NIGHTTIME_THRESHOLD = 20  # W/m²
 

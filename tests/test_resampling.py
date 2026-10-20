@@ -47,12 +47,98 @@ class TestResampleToFreq(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             resample_series_to_freq(s, '10min')
 
+    def test_10min_to_1D_mean_and_sum(self):
+        # pandas 3 cannot compare a Day offset with a Minute one; the upsampling
+        # check must not raise a TypeError for daily targets.
+        s = self._hires()
+        out = resample_series_to_freq(s, '1D', agg='mean', mincounts_perc=0.9)
+        self.assertEqual(len(out), 3)
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-02 00:00:00'))
+        self.assertAlmostEqual(out.iloc[0], 71.5)  # mean of 0..143
+        out = resample_series_to_freq(s, '1D', agg='sum', mincounts_perc=0.9)
+        self.assertAlmostEqual(out.iloc[0], float(sum(range(144))))
+
+    def test_upsampling_daily_rejected(self):
+        idx = pd.date_range('2022-06-02', periods=10, freq='1D', name='TIMESTAMP_END')
+        s = pd.Series(np.arange(10, dtype=float), index=idx, name='TA')
+        with self.assertRaises(NotImplementedError):
+            resample_series_to_freq(s, '30min')
+
+    def test_daily_to_1D_is_noop(self):
+        # A Day offset has no to_timedelta conversion in pandas 3.
+        idx = pd.date_range('2022-06-02', periods=10, freq='1D', name='TIMESTAMP_END')
+        s = pd.Series(np.arange(10, dtype=float), index=idx, name='TA')
+        out = resample_series_to_freq(s, '1D')
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+        self.assertTrue(out.index.equals(idx))
+        self.assertTrue(out.equals(s))
+
     def test_same_resolution_is_noop(self):
         # Processed 30MIN data "resampled" to 30min: no aggregation, values kept.
         s = self._hires(freq='30min')
         out = resample_series_to_freq(s, '30min', agg='mean', mincounts_perc=0.9)
         self.assertEqual(len(out), len(s))
         self.assertTrue(out.equals(s))
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+
+    @staticmethod
+    def _to_middle(s):
+        s = s.copy()
+        s.index = s.index - pd.Timedelta(s.index.freq) / 2
+        s.index.name = 'TIMESTAMP_MIDDLE'
+        return s
+
+    def test_same_resolution_middle_input_returns_end(self):
+        # Meteo screening hands over TIMESTAMP_MIDDLE data; uploading it under
+        # its middle timestamps would shift every value half a period early.
+        s_end = self._hires(freq='30min')
+        out = resample_series_to_freq(self._to_middle(s_end), '30min')
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 00:10:00'))
+        self.assertAlmostEqual(out.iloc[0], 0.0)
+        self.assertTrue(out.index.equals(s_end.index))
+        self.assertTrue(np.array_equal(out.to_numpy(), s_end.to_numpy()))
+
+    def test_index_unit_is_kept(self):
+        # pandas 3 builds microsecond indexes; shifting by a nanosecond Timedelta
+        # used to return nanoseconds.
+        for unit in ('s', 'us', 'ns'):
+            with self.subTest(unit=unit):
+                s = self._hires()
+                s.index = s.index.as_unit(unit)
+                for out in (resample_series_to_freq(s, '30min'),
+                            resample_series_to_freq(self._to_middle(s.asfreq('10min')), '10min'),
+                            resample_series_to_freq(s, '1D')):
+                    self.assertEqual(out.index.unit, unit)
+
+    def test_same_resolution_middle_output(self):
+        s_end = self._hires(freq='30min')
+        for s in (s_end, self._to_middle(s_end)):
+            out = resample_series_to_freq(s, '30min', output_timestamp_shows='middle')
+            self.assertEqual(out.index.name, 'TIMESTAMP_MIDDLE')
+            self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 00:10:00') - pd.Timedelta('15min'))
+
+    def test_middle_input_coarser_matches_end_input(self):
+        s_end = self._hires()
+        ref = resample_series_to_freq(s_end, '30min', agg='mean')
+        out = resample_series_to_freq(self._to_middle(s_end), '30min', agg='mean')
+        self.assertEqual(out.index.name, 'TIMESTAMP_END')
+        self.assertEqual(out.index[0], pd.Timestamp('2022-06-01 00:30:00'))
+        self.assertAlmostEqual(out.iloc[0], 1.0)
+        self.assertTrue(out.equals(ref))
+
+    def test_rejected_edge_intervals_kept_as_nan(self):
+        # Rejected intervals at the start/end stay in the index as NaN, like the
+        # ones in between, so a re-upload deletes old values across the full range.
+        s = self._hires()
+        s.iloc[:6] = np.nan
+        s.iloc[-6:] = np.nan
+        out = resample_series_to_freq(s, '30min', agg='mean', mincounts_perc=0.9)
+        full = resample_series_to_freq(self._hires(), '30min', agg='mean', mincounts_perc=0.9)
+        self.assertTrue(out.index.equals(full.index))
+        self.assertTrue(out.iloc[:2].isna().all())
+        self.assertTrue(out.iloc[-2:].isna().all())
+        self.assertAlmostEqual(out.iloc[2], full.iloc[2])
 
 
 class TestResampling(unittest.TestCase):
@@ -80,6 +166,17 @@ class TestResampling(unittest.TestCase):
         self.assertEqual(longform_means_ranks.loc['2019-06-01'], monthly_means_ranks.loc[2019, 6])
         self.assertAlmostEqual(longform_means.sum(), monthly_means.sum().sum(), places=12)
         self.assertEqual(longform_means_ranks.sum(), monthly_means_ranks.sum().sum())
+
+    def test_resample_to_monthly_agg_matrix_keeps_input_unchanged(self):
+        # An unnamed series used to be renamed to 'data' in place.
+        idx = pd.date_range('2020-01-01', '2021-12-31', freq='D')
+        series = pd.Series(np.arange(len(idx), dtype=float), index=idx)
+        original = series.copy()
+        matrix = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean')
+        self.assertIsNone(series.name)
+        pd.testing.assert_series_equal(series, original)
+        self.assertEqual(matrix.shape, (2, 12))
+        self.assertEqual(matrix.loc[2020, 1], 15.0)
 
     def test_diel_cycle(self):
         df = ed.load_exampledata_parquet()

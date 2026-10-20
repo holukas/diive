@@ -33,9 +33,11 @@ print(f"  Values exceeding 100%: {(series > 100).sum()}")
 # Apply RH offset correction
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# The correction identifies days with excess values, calculates
-# the mean excess as the offset, and subtracts it from all data.
-# Values are then capped at 100%.
+# The correction takes the mean excess above 100% of each day as that
+# day's offset. Days without excess get the offset interpolated from the
+# nearest days with excess, or carried from the first or last such day.
+# The offset is subtracted from every record. Values still above 100% are
+# then capped at 100%.
 
 series_corr = dv.corrections.remove_relativehumidity_offset(series=series, showplot=True)
 

@@ -43,6 +43,7 @@ from diive.variables.utilities import (
 from diive.variables.classification import (
     classify_variable,
     auto_pick_column,
+    driver_flag_columns,
     VariableClass,
     CATEGORY_CARBON,
     CATEGORY_WATER,
@@ -75,6 +76,7 @@ __all__ = [
     # classification
     'classify_variable',
     'auto_pick_column',
+    'driver_flag_columns',
     'VariableClass',
     'CATEGORY_CARBON',
     'CATEGORY_WATER',

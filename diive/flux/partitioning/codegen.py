@@ -2,12 +2,13 @@
 FLUX.PARTITIONING.CODEGEN: RENDER NEE-PARTITIONING CHOICES AS A RUNNABLE SCRIPT
 ===============================================================================
 
-Turn the choices a caller makes (e.g. in the GUI's NEE-partitioning tabs) into a
-self-contained, runnable diive snippet calling the matching ``partition_nee_*``
-function with the picked input columns, site coordinates and VPD unit - so a
-point-and-click partitioning stays reproducible. Belongs in the library (not the
-GUI): it encodes the exact API call shape per method and must stay correct as
-that API evolves; the GUI only calls it.
+Turn the choices a caller makes (e.g. in the GUI's NEE partitioning tab) into a
+self-contained, runnable diive snippet with the picked input columns, site
+coordinates and VPD unit, so a point-and-click partitioning stays reproducible.
+``partition_nee_to_code`` renders ``partition_nee(..., method=..., mode=...)``,
+``partitioning_to_code`` the matching per-port ``partition_nee_*`` function.
+Belongs in the library (not the GUI): it encodes the exact API call shape per
+method and must stay correct as that API evolves. The GUI only calls it.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -40,7 +41,8 @@ _METHODS = {
     "DT_OF": {
         "func": "partition_nee_daytime_oneflux",
         "series": [("nee", "nee"), ("ta", "ta"), ("sw_in", "sw_in"),
-                   ("ta_f", "ta_f"), ("sw_in_f", "sw_in_f"), ("vpd", "vpd")],
+                   ("ta_f", "ta_f"), ("sw_in_f", "sw_in_f"), ("vpd", "vpd"),
+                   ("nee_f", "nee_f")],
         "needs_lat": False, "needs_lon": False, "needs_utc": False,
         "has_vpd_unit": True,
     },
@@ -64,7 +66,8 @@ def partitioning_to_code(method_suffix: str, picks: dict[str, str], *,
             ``"DT_OF"`` (daytime ONEFlux).
         picks: maps each input key (``nee`` / ``ta`` / ``sw_in`` / ``nee_f`` /
             ``ta_f`` / ``sw_in_f`` / ``vpd`` / ``nee_sd``) to the chosen column
-            name. Optional inputs (``nee_sd``) may be missing or empty.
+            name. Optional inputs (``nee_sd``, ``nee_f`` for ``"DT_OF"``) may be
+            missing or empty.
         lat: site latitude (decimal degrees); required by the methods that need it.
         lon: site longitude (decimal degrees); required by the methods that need it.
         utc_offset: UTC offset (hours) of the timestamps; required where needed.
@@ -98,5 +101,77 @@ def partitioning_to_code(method_suffix: str, picks: dict[str, str], *,
     lines.append(")")
     lines += ["",
               "# Results DataFrame holds the partitioned RECO_{0} / GPP_{0} columns.".format(method_suffix),
+              "print(results.columns.tolist())"]
+    return "\n".join(lines) + "\n"
+
+
+#: Column suffix each (method, mode) of ``partition_nee`` writes.
+_NEE_SUFFIX = {("nighttime", "oneflux"): "NT_OF", ("nighttime", "reddyproc"): "NT_RP",
+               ("daytime", "oneflux"): "DT_OF", ("daytime", "reddyproc"): "DT_RP"}
+
+_COORDS = ("lat", "lon", "utc_offset")
+
+
+def partition_nee_to_code(method: str, mode: str, picks: dict[str, str], *,
+                          lat: float | None = None, lon: float | None = None,
+                          utc_offset: float | None = None, vpd_in_kpa: bool = True,
+                          df_var: str = "df", load_hint: str | None = None) -> str:
+    """Render a ``dv.flux.partition_nee(..., method=..., mode=...)`` snippet.
+
+    Mirrors what the GUI's NEE partitioning tab runs. Only the inputs the chosen
+    method and mode need are written (see
+    :func:`diive.flux.partitioning.partitioning_inputs`), each built from a
+    column of ``df_var``.
+
+    Args:
+        method: ``'nighttime'`` or ``'daytime'``.
+        mode: ``'oneflux'`` or ``'reddyproc'``.
+        picks: maps each input name (``nee`` / ``ta`` / ``sw_in`` / ``ta_f`` /
+            ``sw_in_f`` / ``nee_f`` / ``vpd``, plus the optional inputs of
+            :func:`diive.flux.partitioning.partitioning_optional_inputs`:
+            ``nee_f`` for daytime / oneflux, ``nee_sd`` for daytime /
+            reddyproc) to the chosen column name. Inputs the variant does not
+            use are ignored. An optional input may be missing or empty.
+        lat: site latitude (decimal degrees), written where the variant needs it.
+        lon: site longitude (decimal degrees), written where the variant needs it.
+        utc_offset: UTC offset (hours) of the timestamps, written where needed.
+        vpd_in_kpa: whether the VPD column is in kPa (daytime methods only).
+        df_var: variable name used for the input DataFrame.
+        load_hint: if given, prepend ``df = <load_hint>`` so the snippet runs as-is.
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    # Imported here so the module stays light for callers that only need the
+    # per-port renderer above.
+    from diive.flux.partitioning.nee import partitioning_inputs, partitioning_optional_inputs
+
+    needed = partitioning_inputs(method, mode)
+    coords = {"lat": lat, "lon": lon, "utc_offset": utc_offset}
+
+    lines = ["import diive as dv", ""]
+    if load_hint is not None:
+        lines += [f"{df_var} = {load_hint}", ""]
+
+    lines += ["results = dv.flux.partition_nee(",
+              f"    nee={df_var}[{picks['nee']!r}],",
+              f"    method={method!r},",
+              f"    mode={mode!r},"]
+    series = [n for n in needed if n not in _COORDS]
+    series += list(partitioning_optional_inputs(method, mode))
+    for name in series:
+        col = picks.get(name)
+        if not col:
+            continue  # optional input left unset
+        lines.append(f"    {name}={df_var}[{col!r}],")
+    for name in _COORDS:
+        if name in needed:
+            lines.append(f"    {name}={coords[name]!r},")
+    if "vpd" in needed:
+        lines.append(f"    vpd_in_kpa={vpd_in_kpa!r},")
+    lines.append(")")
+    suffix = _NEE_SUFFIX[(method, mode)]
+    lines += ["",
+              f"# Results DataFrame holds the partitioned RECO_{suffix} / GPP_{suffix} columns.",
               "print(results.columns.tolist())"]
     return "\n".join(lines) + "\n"

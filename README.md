@@ -7,182 +7,182 @@
 [![PyPI Downloads](https://static.pepy.tech/badge/diive)](https://pepy.tech/projects/diive)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10884017.svg)](https://doi.org/10.5281/zenodo.10884017)
 
-_**`diive` is currently being prepared for the v1.0 release.**_
+_**`diive` is being prepared for the v1.0 release.**_
 
-# Time series data processing
+# Time series processing for ecosystem data
 
-`diive` is a Python library for time series processing, focused on ecosystem data. It was originally developed by the
-[ETH Grassland Sciences group](https://gl.ethz.ch/) for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/): eddy
-covariance flux processing, gap-filling, quality control, and the plots that go with them.
+`diive` is a Python library for processing time series of ecosystem measurements. The
+[ETH Grassland Sciences group](https://gl.ethz.ch/) developed it for [Swiss FluxNet](https://www.swissfluxnet.ethz.ch/),
+mainly to post-process eddy covariance fluxes: quality control, gap-filling, flux partitioning and plots.
 
-There are two ways to use it, and you can pick whichever fits:
+`diive` can be used in two ways:
 
-- a **library** — `import diive as dv`, ten domain namespaces
-- a **desktop GUI** — `diive-gui`, for interactive work without writing code
+- **As a library** in your own Python code: `import diive as dv`.
+- **As a desktop app** (`diive-gui`) for interactive work without writing code. For Windows, each
+  [release](https://github.com/holukas/diive/releases/latest) includes a ready-to-run version that needs no Python.
 
-`diive` works on averaged (e.g. 30-minute) data. For raw high-frequency (10/20 Hz) eddy covariance data — wind
-rotation, flux detection limit, time-lag detection and removal — see [dyco](https://github.com/holukas/dyco).
+`diive` works with averaged data, for example 30-minute values. For raw high-frequency (10 or 20 Hz) eddy covariance
+data, such as wind rotation, flux detection limits and time lags, use [dyco](https://github.com/holukas/dyco).
 
-[Documentation](https://diive.readthedocs.io/) | [Project overview](OVERVIEW.md) | [Examples](examples/README.md) |
+[Installation](#installation) | [Documentation](https://diive.readthedocs.io/) | [Project overview](OVERVIEW.md) | [Examples](examples/README.md) |
 [GUI manual](diive/gui/MANUAL.md) | [CHANGELOG](CHANGELOG.md) | [Releases](https://github.com/holukas/diive/releases)
 
 ---
 
-## Install
-
-Requires **Python 3.12 or 3.13**.
-
-```bash
-pip install diive                 # core library
-pip install 'diive[gui]'          # + desktop GUI, then launch with: diive-gui
-pip install 'diive[gui,gui3d]'    # + 3-D surface views (PyVista/VTK)
-pip install 'diive[db]'           # + InfluxDB read/write
-pip install 'diive[gui,gui3d,db]' # all of the above
-```
-
-### From a clone, with `uv`
-
-```bash
-uv sync                              # core library + the 'dev' group (synced by default)
-uv sync --all-extras --all-groups    # everything: all extras AND all groups
-```
-
-**`uv sync --all-extras` alone is not everything.** The optional pieces are split across two uv
-mechanisms, and `--all-extras` reaches only the first:
-
-| Kind          | Name    | Pulls in                                            | Install                 |
-|---------------|---------|-----------------------------------------------------|-------------------------|
-| extra         | `gui`   | PySide6 desktop GUI (`diive-gui`)                   | `uv sync --extra gui`   |
-| extra         | `gui3d` | PyVista/VTK 3-D surface tabs, `trimesh` glTF export | `uv sync --extra gui3d` |
-| extra + group | `db`    | `influxdb-client`, the InfluxDB read/write engine   | `uv sync --group db`    |
-| group         | `dev`   | test, lint and notebook tooling                     | synced by default       |
-| group         | `build` | PyInstaller, for the standalone Windows app         | `uv sync --group build` |
-
-`db` is deliberately both. Working *on* diive, use the group — `uv sync --group db`. Depending on
-diive from another project, ask for the extra — `diive[db]` — because a dependency group is local to
-the project that declares it and never reaches the published metadata.
-
-Combine as needed, e.g. `uv sync --extra gui --extra gui3d --group db`. Then run anything through
-`uv run`:
-
-```bash
-uv run pytest tests/ -v
-uv run diive-gui
-```
-
-### Standalone Windows app
-
-To build `diive-gui.exe` for users without Python, run `.\packaging\build_gui.ps1 -Clean` in
-PowerShell after installing the `build` group. Details: [packaging/README.md](packaging/README.md).
-
-[CONTRIBUTING.md](CONTRIBUTING.md) has the rest of the development setup.
-
 ## Quick start
+
+After [installing](#installation) `diive`, load the bundled example data and plot it:
 
 ```python
 import diive as dv
 
-df = dv.load_exampledata_parquet()  # bundled multi-year 30-min eddy covariance record
+df = dv.load_exampledata_parquet()  # bundled multi-year record of 30-minute eddy covariance data
 
 dv.plotting.TimeSeries(series=df['NEE_CUT_REF_f']).plot()
 dv.plotting.HeatmapDateTime(series=df['NEE_CUT_REF_f']).plot()
 ```
 
-Plots follow a two-phase pattern throughout: the constructor takes the data, `.plot()` takes the styling.
+Every plot works in two steps: the class takes the data, and `.plot()` takes the styling.
 
-From here, the [cookbook](examples/COOKBOOK.md) walks through six minimal workflows — load data, clean timestamps,
-remove
-outliers, gap-fill, run the flux chain, visualize.
+The [cookbook](examples/COOKBOOK.md) continues with six short workflows: load data, clean timestamps, remove outliers,
+gap-fill, run the flux post-processing chain and make plots.
 
-## What's in it
+## Library overview
 
-`import diive as dv` exposes ten domain namespaces. Each row links to runnable examples for that area:
+`import diive as dv` gives access to ten namespaces, one per topic. Each row links to runnable examples:
 
-| Namespace        | Covers                                                                                                                           | Examples                                                                 |
-|------------------|----------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| `dv.plotting`    | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface, ... | [visualization/](examples/visualization/README.md)                       |
-| `dv.gapfilling`  | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer`    | [gapfilling/](examples/gapfilling/README.md)                             |
-| `dv.flux`        | Flux processing chain (L2–L4.2), NEE partitioning, USTAR filtering, uncertainty                                                  | [flux/](examples/flux/README.md)                                         |
-| `dv.outliers`    | Nine detection methods (Hampel, z-score variants, local SD, LOF, absolute limits, ...)                                           | [outlier_detection/](examples/preprocessing/outlier_detection/README.md) |
-| `dv.corrections` | Offset corrections (measurement, radiation, humidity, wind direction), thresholds, missing values                                | [corrections/](examples/preprocessing/corrections/README.md)             |
-| `dv.qaqc`        | `FlagQCF` quality flags, EddyPro flag handling, meteo screening                                                                  | [qaqc/](examples/preprocessing/qaqc/README.md)                           |
-| `dv.analysis`    | Seasonal-trend decomposition, lagged correlation, grid aggregation, gap statistics, spectral analysis                            | [analysis/](examples/analysis/README.md)                                 |
-| `dv.times`       | Timestamp sanitization, frequency detection, resampling, date-range handling                                                     | [times/](examples/times/README.md)                                       |
-| `dv.variables`   | Derived variables (VPD, potential radiation, day/night flags, air properties), feature engineering                               | [features/](examples/features/README.md)                                 |
-| `dv.events`      | Time-stamped event markers, 0/1 flag columns, plot overlays                                                                      | [events/](examples/events/README.md)                                     |
+| Namespace        | Contents                                                                                                                                | Examples                                                                  |
+|------------------|-----------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `dv.plotting`    | 18 plot types: time series, heatmaps, diel cycle, cumulative, ridgeline, scatter, hexbin, wind rose, tree ring, 3-D surface and more    | [visualization/](examples/visualization/README.rst)                       |
+| `dv.gapfilling`  | `RandomForestTS`, `XGBoostTS`, `SWINGapFillerXGBoost`, `FluxMDS`, linear interpolation, long-term variants, `FeatureEngineer`           | [gapfilling/](examples/gapfilling/README.rst)                             |
+| `dv.flux`        | Flux post-processing chain (Levels 2 to 4.2), NEE partitioning, u* filtering, uncertainty                                               | [flux/](examples/flux/README.rst)                                         |
+| `dv.outliers`    | Nine detection methods, including Hampel, z-score variants, local SD, local outlier factor and absolute limits                          | [outlier_detection/](examples/preprocessing/outlier_detection/README.rst) |
+| `dv.corrections` | Offset corrections (measurement, radiation, relative humidity, wind direction), thresholds, missing values                             | [corrections/](examples/preprocessing/corrections/README.rst)             |
+| `dv.qaqc`        | `FlagQCF` overall quality flag, EddyPro flags, meteo screening                                                                          | [qaqc/](examples/preprocessing/qaqc/README.rst)                           |
+| `dv.analysis`    | Seasonal-trend decomposition, lagged correlation, grid aggregation, gap statistics, spectral analysis                                   | [analysis/](examples/analysis/README.rst)                                 |
+| `dv.times`       | Timestamp checks and fixes, time resolution detection, resampling, date ranges                                                          | [times/](examples/times/README.rst)                                       |
+| `dv.variables`   | Derived variables (VPD, potential radiation, day/night flags, air properties), feature engineering                                      | [features/](examples/features/README.rst)                                 |
+| `dv.events`      | Event markers with dates, 0/1 flag columns, plot overlays                                                                               | [events/](examples/events/README.rst)                                     |
 
-I/O helpers are top-level (`dv.load_parquet`, `dv.save_parquet`, `dv.ReadFileType`) — see [io/](examples/io/README.md).
-For the authoritative symbol list, check `diive.__all__` and each namespace's `__all__`.
+Reading and writing files is available directly on `dv` (`dv.load_parquet`, `dv.save_parquet`, `dv.ReadFileType`), see
+[io/](examples/io/README.rst). The full list of names is in `diive.__all__` and in the `__all__` of each namespace.
 
-## Highlights
+## Main features
 
-**Flux processing chain** — post-processing from quality flags through gap-filling and NEE partitioning (Levels 2 to
-4.2),
-following [Swiss FluxNet standards](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
-Either `run_chain(data, config)` for the standard workflow, or composable per-level callables when you need every
-detector, hyperparameter and diagnostic flag. → [examples/flux/fluxprocessingchain/](examples/flux/fluxprocessingchain/)
+**Flux post-processing chain.** Takes fluxes from quality flags through gap-filling to NEE partitioning (Levels 2 to
+4.2), following the [Swiss FluxNet processing chain](https://www.swissfluxnet.ethz.ch/index.php/data/ecosystem-fluxes/flux-processing-chain/).
+`run_chain(data, config)` runs the standard workflow. The levels can also be called one by one, with full control over
+each test, model setting and flag. Examples: [examples/flux/postprocessingchain/](examples/flux/postprocessingchain/)
 
-**NEE partitioning** — four faithful ports of the reference routines, each validated against its original
-implementation: nighttime and daytime (Reichstein 2005, Lasslop 2010) × ONEFlux and REddyProc. Output columns are tagged
-so all four coexist in one dataframe. → [examples/flux/partitioning/](examples/flux/partitioning/)
+**NEE partitioning.** Four methods, each ported from its reference code and checked against it: nighttime
+(Reichstein et al. 2005) and daytime (Lasslop et al. 2010), each as in ONEFlux and as in REddyProc. `PartitioningNEE`
+picks one with `method='nighttime'|'daytime'` and `mode='oneflux'|'reddyproc'`. The default is ONEFlux, the method used
+by ICOS. Each method writes columns with its own suffix, so all four can sit in one table. Examples:
+[examples/flux/partitioning/](examples/flux/partitioning/)
 
-**Gap-filling** — Random Forest and XGBoost with SHAP-based feature reduction, plus a faithful MDS port that needs no
-training. An 8-stage feature engineer feeds them all. → [examples/gapfilling/](examples/gapfilling/README.md)
+**Gap-filling.** Random Forest and XGBoost models that use SHAP values to drop unimportant features, and an MDS
+gap-filler that needs no training. By default, MDS follows the ONEFlux rules and adds the symmetric mean of Vekuri et
+al. (2023). Two more modes reproduce the MDS of ONEFlux and of REddyProc. A feature engineer with 8 stages builds the inputs
+for the machine-learning models. Examples: [examples/gapfilling/](examples/gapfilling/README.rst)
 
-**Desktop GUI** — the same library code behind an interactive app: plotting, cleaning, gap-filling and flux tabs, a
-guided processing chain, per-variable metadata with full provenance, and portable `.diive` project folders.
-→ [GUI manual](diive/gui/MANUAL.md)
+**Desktop app.** Provides the library functions in an interactive interface: plotting, data cleaning, gap-filling and flux tabs,
+a guided post-processing chain, metadata for each variable with its processing history, and project folders
+(`.diive`) that can be moved to another computer. On Windows, it also runs without Python, see
+[Windows app](#windows-app-no-python-needed). Manual: [GUI manual](diive/gui/MANUAL.md)
 
-![The diive desktop GUI showing the Overview tab: variable list, summary statistics, and linked time series, heatmap, cumulative, diel cycle and distribution panels](images/diive-gui_v0.91.0_20260820.png)
+![The diive desktop app showing the Overview tab: variable list, summary statistics, and linked time series, heatmap, cumulative, diel cycle and distribution panels](images/diive-gui_v0.91.0_20260820.png)
 
-*The Overview tab in diive-gui v0.91.0, showing ten years of half-hourly data. Selecting a variable on the left redraws
-every panel; zooming one of the date panels recomputes stats and panels for the visible range.*
+*The Overview tab in diive-gui v0.91.0 with ten years of half-hourly data. Selecting a variable on the left redraws all
+panels. Zooming into one of the date panels updates the statistics and panels for the visible period.*
 
 ## Documentation
 
-| Where                                                      | What                                                       |
-|------------------------------------------------------------|------------------------------------------------------------|
-| [diive.readthedocs.io](https://diive.readthedocs.io/)      | Hosted docs: API reference and example gallery             |
-| [OVERVIEW.md](OVERVIEW.md)                                 | How the pieces fit together: library, GUI, docs, packaging |
-| [examples/COOKBOOK.md](examples/COOKBOOK.md)               | Six minimal workflows — the place to start                 |
-| [examples/CATALOG.md](examples/CATALOG.md)                 | All 113 examples, indexed by use case                      |
-| [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled 37-variable dataset                            |
-| [diive/gui/MANUAL.md](diive/gui/MANUAL.md)                 | Desktop GUI user manual                                    |
-| [diive/gui/README.md](diive/gui/README.md)                 | GUI architecture, for developers                           |
-| [notebooks/README.md](notebooks/README.md)                 | Jupyter workflows, including the InfluxDB database         |
-| [packaging/README.md](packaging/README.md)                 | Building the standalone Windows app                        |
-| [CONTRIBUTING.md](CONTRIBUTING.md)                         | Development setup, coding standards, testing               |
-| [CHANGELOG.md](CHANGELOG.md)                               | Version history                                            |
+| Where                                                      | What                                                         |
+|------------------------------------------------------------|--------------------------------------------------------------|
+| [diive.readthedocs.io](https://diive.readthedocs.io/)      | Online documentation: API reference and example gallery      |
+| [OVERVIEW.md](OVERVIEW.md)                                 | How library, desktop app, docs and packaging fit together    |
+| [examples/COOKBOOK.md](examples/COOKBOOK.md)               | Six short workflows, the recommended starting point         |
+| [examples/CATALOG.md](examples/CATALOG.md)                 | All 113 examples, sorted by task                             |
+| [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled example dataset (37 variables)                   |
+| [diive/gui/MANUAL.md](diive/gui/MANUAL.md)                 | User manual of the desktop app                               |
+| [diive/gui/README.md](diive/gui/README.md)                 | How the desktop app is built, for developers                 |
+| [notebooks/README.md](notebooks/README.md)                 | Jupyter notebooks                                            |
+| [packaging/README.md](packaging/README.md)                 | Building the standalone Windows app                          |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                         | Development setup, coding standards, testing                 |
+| [CHANGELOG.md](CHANGELOG.md)                               | Version history                                              |
 
-Examples run as plain scripts:
+The examples are plain scripts in the repository (see the
+[development setup](https://diive.readthedocs.io/en/latest/installation.html#development-setup)). The online example
+gallery also offers each example as a Python file and as a Jupyter notebook to download. In a clone, run one with
+`python`, or with `uv run python` in a uv setup:
 
 ```bash
-uv run python examples/visualization/plot_heatmap_datetime_basic.py
+python examples/visualization/plot_heatmap_datetime_basic.py
 uv run python examples/gapfilling/gapfill_randomforest.py
-uv run python examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py
 ```
+
+## Installation
+
+`diive` needs Python 3.12 or 3.13. For new Python users, the recommended way is to install
+[Miniforge](https://conda-forge.org/download/) first. On Windows, open **Miniforge Prompt** from the Start menu. On
+macOS and Linux, open a terminal.
+
+### Library
+
+```bash
+conda create -n diive python=3.12
+conda activate diive
+python -m pip install diive
+```
+
+Conda creates an environment named `diive` with its own Python, and pip installs `diive` from PyPI into it. In a new
+terminal, run `conda activate diive` first.
+
+### Library and desktop app
+
+```bash
+conda create -n diive python=3.12
+conda activate diive
+python -m pip install "diive[gui]"
+```
+
+Start the desktop app with `diive-gui`. The desktop app is a large download. Keep the double quotes around
+`"diive[gui]"`, because some shells need them.
+
+### Windows app (no Python needed)
+
+Each [release](https://github.com/holukas/diive/releases/latest) includes the desktop app for Windows as a zip file
+(`diive-gui-...-win64.zip` under **Assets**). Download it, unzip it and start `diive-gui.exe` in the unzipped
+folder. Nothing else needs to be installed. Windows may show a SmartScreen warning the first time, because the app is
+not signed. Click **More info**, then **Run anyway**.
+
+The app contains the same functions as `diive[gui]`. To use `diive` in your own Python code, install the library as
+described above.
+
+### More options
+
+The [installation guide](https://diive.readthedocs.io/en/latest/installation.html) covers the development setup,
+updates, Jupyter, the newest code from GitHub and solutions to common problems.
 
 ---
 
 ## Citation
 
-Cite `diive` using DOI [10.5281/zenodo.10884017](https://doi.org/10.5281/zenodo.10884017). This concept DOI resolves to
-the latest release, so include the version number in your citation.
+Cite `diive` with the DOI [10.5281/zenodo.10884017](https://doi.org/10.5281/zenodo.10884017). This DOI always points to
+the latest release, so add the version number you used:
 
 ```bibtex
 @software{diive2026,
   author = {Hörtnagl, Lukas},
   title = {diive: Python library for time series processing},
-  version = {0.91.2},
+  version = {0.92.0},
   year = {2026},
   doi = {10.5281/zenodo.10884017}
 }
 ```
 
-Replace `version` and `year` with the values for your target release.
+Replace `version` and `year` with the release you used.
 
 ## License
 
 `diive` is released under the [GNU General Public License v3.0](LICENSE).
-</content>
-</invoke>

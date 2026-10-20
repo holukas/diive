@@ -15,6 +15,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 - [Flux Processing](#flux-processing)
 - [Gap-Filling](#gap-filling)
 - [Curve Fitting](#curve-fitting)
+- [File I/O](#file-io)
 
 ---
 
@@ -47,7 +48,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_windrose_basic.py**](visualization/plot_windrose_basic.py) | Wind rose: a variable aggregated into wind-direction sectors (mean/median/min/max/sum/std/count) drawn as polar bars, with a per-sector results table |
 | [**plot_compound_extremes.py**](visualization/plot_compound_extremes.py) | `CompoundExtremesPlot`: quadrant scatter of two z-scores coloured/marked by compound-extreme category with threshold lines (Wang et al., Fig. 2); from a fitted analysis, custom styling, or pre-classified data |
 
-See: [visualization/README.md](visualization/README.md)
+See: [visualization/README.rst](visualization/README.rst)
 
 ---
 
@@ -61,7 +62,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
 | [**analysis_decoupling.py**](analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |
 | [**analysis_gapfinder.py**](analysis/analysis_gapfinder.py) | Identify and characterize consecutive missing data periods in time series |
-| [**analysis_gapstats.py**](analysis/analysis_gapstats.py) | Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich report, three-panel figure |
+| [**analysis_gapstats.py**](analysis/analysis_gapstats.py) | Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich report, four-panel figure |
 | [**analysis_gridaggregator.py**](analysis/analysis_gridaggregator.py) | 2D grid aggregation with quantile, equal-width, and custom binning methods |
 | [**analysis_histogram_distribution.py**](analysis/analysis_histogram_distribution.py) | Histogram binning methods: fixed bins, unique values, fringe bin removal |
 | [**analysis_optimumrange.py**](analysis/analysis_optimumrange.py) | Find optimal value ranges, condition-based filtering |
@@ -70,7 +71,7 @@ See: [visualization/README.md](visualization/README.md)
 | [**analysis_harmonic.py**](analysis/analysis_harmonic.py) | `harmonic_analysis` + `spectrogram`: diel/annual cycles, window effect, time-frequency map |
 | [**analysis_compound_extremes.py**](analysis/analysis_compound_extremes.py) | `CompoundExtremes` + `CompoundExtremesPlot`: classify months/days into none/air/soil/compound dry-hot extremes from VPD & SWC z-scores |
 
-See: [analysis/README.md](analysis/README.md)
+See: [analysis/README.rst](analysis/README.rst)
 
 ---
 
@@ -80,7 +81,7 @@ See: [analysis/README.md](analysis/README.md)
 |---------|-------------|
 | [**events_event.py**](events/events_event.py) | Create instant/period `Event`s, encode them as 0/1 data columns with `event_to_flag`, overlay them on plots with `overlay_events`, and apply a custom category palette |
 
-See: [events/README.md](events/README.md)
+See: [events/README.rst](events/README.rst)
 
 ---
 
@@ -96,7 +97,7 @@ See: [events/README.md](events/README.md)
 | [**times_temporal_matrices.py**](times/times_temporal_matrices.py) | Convert time series to year × month matrix for heatmap visualization |
 | [**times_statistics.py**](times/times_statistics.py) | Quick statistical profiling and data quality assessment |
 
-See: [times/README.md](times/README.md)
+See: [times/README.rst](times/README.rst)
 
 ---
 
@@ -119,7 +120,7 @@ See: [times/README.md](times/README.md)
 | [**correction_setto_value.py**](preprocessing/corrections/correction_setto_value.py) | Replace values in time periods with constant (malfunction times) |
 | [**correction_setto_threshold.py**](preprocessing/corrections/correction_setto_threshold.py) | Clip values to physically realistic min/max bounds |
 
-See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
+See: [preprocessing/corrections/README.rst](preprocessing/corrections/README.rst)
 
 ---
 
@@ -147,7 +148,7 @@ See: [preprocessing/corrections/README.md](preprocessing/corrections/README.md)
 | [**qc_eddypro_flags.py**](preprocessing/qaqc/qc_eddypro_flags.py) | Extract EddyPro quality flags (VM97 tests, signal strength, completeness) |
 | [**qaqc_detect_timestamp_shifts.py**](preprocessing/qaqc/qaqc_detect_timestamp_shifts.py) | Detect clock/timestamp errors via radiation phase analysis: FFT phase shift, cross-correlation, and noon-shift peak detection |
 
-See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection/README.md) and [preprocessing/qaqc/README.md](preprocessing/qaqc/README.md)
+See: [preprocessing/outlier_detection/README.rst](preprocessing/outlier_detection/README.rst) and [preprocessing/qaqc/README.rst](preprocessing/qaqc/README.rst)
 
 ---
 
@@ -161,35 +162,37 @@ See: [preprocessing/outlier_detection/README.md](preprocessing/outlier_detection
 | [**feature_evapotranspiration.py**](features/feature_evapotranspiration.py) | Evapotranspiration from latent heat flux |
 | [**feature_daynightflag.py**](features/feature_daynightflag.py) | Daytime/nighttime classification from solar geometry |
 | [**feature_vpd.py**](features/feature_vpd.py) | Vapor Pressure Deficit calculation |
-| [**feature_air.py**](features/feature_air.py) | Air properties (density, resistance, heat capacity) |
+| [**feature_air.py**](features/feature_air.py) | Air properties (aerodynamic resistance, dry air density) |
 | [**feature_potentialradiation.py**](features/feature_potentialradiation.py) | Potential radiation (SW_IN_POT) from solar geometry, ONEFlux/FLUXNET parity |
 | [**feature_laggedvariants.py**](features/feature_laggedvariants.py) | Lagged and shifted variable creation for modeling |
 | [**feature_timesince.py**](features/feature_timesince.py) | Time-since-event features |
 | [**feature_noise.py**](features/feature_noise.py) | Synthetic noise generation |
 
-See: [features/README.md](features/README.md)
+See: [features/README.rst](features/README.rst)
 
 ---
 
 ## Flux Processing
 
-### Multi-Level Processing Pipeline
+### Multi-Level Post-Processing Chain
 
 | Example | Description |
 |---------|-------------|
-| [**fluxprocessingchain_level2.py**](flux/fluxprocessingchain/fluxprocessingchain_level2.py) | Level 2 in isolation — load a real EddyPro FLUXNET output file, `init_flux_data`, `run_level2`; expand EddyPro quality diagnostics into per-test flags + one overall QCF. `level2_test_inputs` (column each test reads), QCF-filtered vs. high-quality (QCF=0) series, accept-threshold effect. The smallest standalone entry into the chain |
-| [**fluxprocessingchain_runchain.py**](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.1 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
-| [**fluxprocessingchain_composable.py**](flux/fluxprocessingchain/fluxprocessingchain_composable.py) | Full L2→L4.1 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1 |
-| [**fluxprocessingchain_partitioning.py**](flux/fluxprocessingchain/fluxprocessingchain_partitioning.py) | Level 4.2 NEE→GPP+RECO partitioning wired into the chain; all four variants (`run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`) via `run_chain`, one fit per USTAR scenario; `partitioned_cols()` to discover the `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` output columns |
+| [**postprocessingchain_level2.py**](flux/postprocessingchain/postprocessingchain_level2.py) | Level 2 in isolation — load a real EddyPro FLUXNET output file, `init_flux_data`, `run_level2`; expand EddyPro quality diagnostics into per-test flags + one overall QCF. `level2_test_inputs` (column each test reads), QCF-filtered vs. high-quality (QCF=0) series, accept-threshold effect. The smallest standalone entry into the chain |
+| [**postprocessingchain_runchain.py**](flux/postprocessingchain/postprocessingchain_runchain.py) | Single-call `run_chain(data, FluxConfig)` — minimal config drives the full L2→L4.2 pipeline with sensible defaults. Shows the easy path; for full control over per-detector / per-model knobs use the composable example below |
+| [**postprocessingchain_composable.py**](flux/postprocessingchain/postprocessingchain_composable.py) | Full L2→L4.2 pipeline using composable level callables; RF, XGBoost, and MDS gap-filling from the same L3.3 state; `gap_stats()` after L3.3; `plot_gapfilled_heatmaps()` and `plot_cumulative_comparison()` after L4.1, then the four L4.2 partitioning variants |
+| [**postprocessingchain_partitioning.py**](flux/postprocessingchain/postprocessingchain_partitioning.py) | Level 4.2 NEE→GPP+RECO partitioning wired into the chain; all four variants (`run_level42_nighttime_oneflux` / `_nighttime_reddyproc` / `_daytime_reddyproc` / `_daytime_oneflux`) via `run_chain`, one fit per USTAR scenario (`partition_method` / `partition_mode` select one variant); `partitioned_cols()` to discover the `*_NT_OF` / `*_NT_RP` / `*_DT_RP` / `*_DT_OF` output columns |
 
 ### NEE Partitioning (GPP / RECO)
+
+`dv.flux.PartitioningNEE(method=..., mode=...)` runs any of the four ports below: `method='nighttime'` or `'daytime'`, `mode='oneflux'` (default) or `'reddyproc'`.
 
 | Example | Description |
 |---------|-------------|
 | [**partitioning_nighttime_oneflux.py**](flux/partitioning/partitioning_nighttime_oneflux.py) | Partition NEE into GPP and RECO with the nighttime method ONEFlux (Reichstein et al. 2005), a faithful Python port of ONEFlux (`NighttimePartitioningOneFlux`, `_NT_OF` columns); sanity-checked against the independent, ReddyProc-derived `Reco_CUT_REF`/`GPP_CUT_REF` columns |
-| [**partitioning_nighttime_reddyproc.py**](flux/partitioning/partitioning_nighttime_reddyproc.py) | Partition NEE into GPP and RECO with the nighttime method REddyProc (Reichstein et al. 2005), a faithful Python port of REddyProc's `sMRFluxPartition` (`NighttimePartitioningReddyProc`, `_NT_RP` columns); whole-record single-E0 processing reproduces the ReddyProc-derived `Reco_CUT_REF`/`GPP_CUT_REF_f` columns (RECO r≈0.997 on CH-DAV) |
-| [**partitioning_daytime_reddyproc.py**](flux/partitioning/partitioning_daytime_reddyproc.py) | Partition NEE into GPP and RECO with the daytime method REddyProc (Lasslop et al. 2010), a faithful Python port of REddyProc's `partitionNEEGL` (`DaytimePartitioningReddyProc`, `_DT_RP` columns); fits a rectangular-hyperbola light-response curve to daytime NEE with E0 fixed from nighttime, matching a fresh REddyProc run on identical inputs to r>0.999 (GPP r≈0.96 vs the provenance-different bundled `GPP_DT_CUT_REF`) |
-| [**partitioning_daytime_oneflux.py**](flux/partitioning/partitioning_daytime_oneflux.py) | Partition NEE into GPP and RECO with the daytime method ONEFlux (Lasslop et al. 2010), a faithful Python port of ONEFlux's `flux_part_gl2010` / FLUXNET2015 (`DaytimePartitioningOneFlux`, `_DT_OF` columns); per-window light-response-curve fit with a measured-radiation day/night split (no latitude) and an internal NEE-uncertainty look-up, matching a native ONEFlux run on identical inputs to RECO r≈0.999 / GPP r≈0.9999 (provenance-different vs the bundled `GPP_DT_CUT_REF`) |
+| [**partitioning_nighttime_reddyproc.py**](flux/partitioning/partitioning_nighttime_reddyproc.py) | Partition NEE into GPP and RECO with the nighttime method REddyProc (Reichstein et al. 2005), a faithful Python port of REddyProc's `sMRFluxPartition` (`NighttimePartitioningReddyProc`, `_NT_RP` columns); whole-record single-E0 processing; matches a native REddyProc run on identical inputs to about 1e-15 (the bundled `Reco_CUT_REF`/`GPP_CUT_REF_f` come from a different setup and are a plausibility check) |
+| [**partitioning_daytime_reddyproc.py**](flux/partitioning/partitioning_daytime_reddyproc.py) | Partition NEE into GPP and RECO with the daytime method REddyProc (Lasslop et al. 2010), a faithful Python port of REddyProc's `partitionNEEGL` (`DaytimePartitioningReddyProc`, `_DT_RP` columns); fits a rectangular-hyperbola light-response curve to daytime NEE with E0 fixed from nighttime, matching a native REddyProc run on identical inputs (half-hourly values mostly within 1e-4 µmol m⁻² s⁻¹, annual sums within 0.001 %) (GPP r≈0.97 vs the provenance-different bundled `GPP_DT_CUT_REF`) |
+| [**partitioning_daytime_oneflux.py**](flux/partitioning/partitioning_daytime_oneflux.py) | Partition NEE into GPP and RECO with the daytime method ONEFlux (Lasslop et al. 2010), a faithful Python port of ONEFlux's `flux_part_gl2010` / FLUXNET2015 (`DaytimePartitioningOneFlux`, `_DT_OF` columns); per-window light-response-curve fit with a measured-radiation day/night split (no latitude) and an internal NEE-uncertainty look-up, matching a native ONEFlux run on identical inputs fit for fit, RECO/GPP to about 1e-5 (provenance-different vs the bundled `GPP_DT_CUT_REF`) |
 | [**partitioning_comparison.py**](flux/partitioning/partitioning_comparison.py) | Run all four diive partitioning ports — ONEFLUX nighttime `_NT_OF`, REddyProc nighttime `_NT_RP`, REddyProc daytime `_DT_RP`, ONEFLUX daytime `_DT_OF` — on identical inputs and compare them against each other and the bundled references for each method (daily-mean + cumulative panels for RECO and GPP); shows how the reference implementation and the nighttime-temperature vs daytime-light approach affect the partitioning |
 
 ### Low-Resolution (30-min) Processing
@@ -206,7 +209,7 @@ See: [features/README.md](features/README.md)
 | [**flux_ustar_vekuri_detection.py**](flux/lowres/flux_ustar_vekuri_detection.py) | Simplified quantile-based USTAR detection (Vekuri method) |
 | [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare ONEFlux and Vekuri USTAR detection methods |
 
-See: [flux/README.md](flux/README.md)
+See: [flux/README.rst](flux/README.rst)
 
 ---
 
@@ -222,12 +225,12 @@ See: [flux/README.md](flux/README.md)
 | [**gapfill_optimize_randomforest.py**](gapfilling/gapfill_optimize_randomforest.py) | Random Forest with hyperparameter tuning | Yes |
 | [**gapfill_xgboost.py**](gapfilling/gapfill_xgboost.py) | XGBoost | Yes |
 | [**gapfill_optimize_xgboost.py**](gapfilling/gapfill_optimize_xgboost.py) | XGBoost with hyperparameter tuning | Yes |
-| [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Meteorological Data Similarity | No |
+| [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Marginal Distribution Sampling; compares the default `mode='diive'` (Vekuri et al. 2023 symmetric mean) with `mode='oneflux'` (bit for bit as ONEFlux `gf_mds`) | No |
 | [**gapfill_mds_comparison.py**](gapfilling/gapfill_mds_comparison.py) | MDS reproducibility / determinism check | No |
 | [**gapfill_comparison.py**](gapfilling/gapfill_comparison.py) | Compare all methods side-by-side | Mixed |
 | [**gapfill_swin.py**](gapfilling/gapfill_swin.py) | SW_IN physics + XGBoost (nighttime zero, daytime ML) | Yes |
 
-See: [gapfilling/README.md](gapfilling/README.md)
+See: [gapfilling/README.rst](gapfilling/README.rst)
 
 ---
 
@@ -238,7 +241,7 @@ See: [gapfilling/README.md](gapfilling/README.md)
 | [**fit_binfittercp.py**](fits/fit_binfittercp.py) | Binned curve fitting with confidence/prediction intervals, result exploration |
 | [**fit_fitter.py**](fits/fit_fitter.py) | Ecosystem driver-response fitting, NEE-VPD relationship, uncertainty quantification |
 
-See: [fits/README.md](fits/README.md)
+See: [fits/README.rst](fits/README.rst)
 
 ---
 
@@ -252,4 +255,4 @@ See: [fits/README.md](fits/README.md)
 | [**io_read_single_file_with_readfiletype.py**](io/io_read_single_file_with_readfiletype.py) | Read single EddyPro CSV with pre-defined filetype configuration |
 | [**io_extract.py**](io/io_extract.py) | Binary value extraction, bit-level data manipulation |
 
-See: [io/README.md](io/README.md)
+See: [io/README.rst](io/README.rst)

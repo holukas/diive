@@ -84,7 +84,8 @@ class SelectRecordsTab(DiiveTab):
     # --- build ---------------------------------------------------------
     def build(self) -> QWidget:
         self._df: pd.DataFrame | None = None
-        self._all_cols: list[str] = []
+        #: Numeric (non-boolean) columns: the only ones offered as condition.
+        self._cond_cols: list[str] = []
         self._target: str | None = None
         #: Boolean Series (index-aligned), True = record currently kept.
         self._keep_mask: pd.Series | None = None
@@ -153,7 +154,8 @@ class SelectRecordsTab(DiiveTab):
         # Condition variable + availability marker.
         self.cond_combo = QComboBox()
         self.cond_combo.setToolTip(
-            "The variable whose value decides which target records are selected.")
+            "The variable whose value decides which target records are selected. "
+            "Only numeric variables are listed.")
         self.cond_combo.currentTextChanged.connect(self._on_condition_changed)
         self.cond_mark = QLabel("")
         cell = QWidget()
@@ -286,7 +288,10 @@ class SelectRecordsTab(DiiveTab):
     # --- data / inputs -------------------------------------------------
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._df = df
-        self._all_cols = [str(c) for c in df.columns]
+        # A datetime or boolean column has no numeric range to select from.
+        self._cond_cols = [str(c) for c, dt in df.dtypes.items()
+                           if pd.api.types.is_numeric_dtype(dt)
+                           and not pd.api.types.is_bool_dtype(dt)]
         self.varpanel.set_variables(df.columns, created)
         if self._target is not None and self._target not in df.columns:
             self._target = None
@@ -296,8 +301,8 @@ class SelectRecordsTab(DiiveTab):
         cur = self.cond_combo.currentText()
         self.cond_combo.blockSignals(True)
         self.cond_combo.clear()
-        self.cond_combo.addItems(self._all_cols)
-        if cur in self._all_cols:
+        self.cond_combo.addItems(self._cond_cols)
+        if cur in self._cond_cols:
             self.cond_combo.setCurrentText(cur)
         self.cond_combo.blockSignals(False)
         self._refresh_condition_marker()
@@ -335,7 +340,7 @@ class SelectRecordsTab(DiiveTab):
         self._seed_limits()
 
     def _refresh_condition_marker(self) -> None:
-        present = self.cond_combo.currentText() in self._all_cols
+        present = self.cond_combo.currentText() in self._cond_cols
         self.cond_mark.setText("✓" if present else "✗")
         self.cond_mark.setStyleSheet(
             f"color: {'#2E7D32' if present else '#C62828'}; font-weight: bold;")
@@ -346,7 +351,7 @@ class SelectRecordsTab(DiiveTab):
         if self._df is None:
             return
         cond = self.cond_combo.currentText()
-        if cond not in self._all_cols:
+        if cond not in self._cond_cols:
             return
         series = self._df[cond]
         lo, hi = series.min(skipna=True), series.max(skipna=True)
@@ -392,8 +397,8 @@ class SelectRecordsTab(DiiveTab):
         if self._df is None or self._target is None:
             return "Select a target on the left first."
         cond = self.cond_combo.currentText()
-        if cond not in self._all_cols:
-            return "Pick a valid condition variable."
+        if cond not in self._cond_cols:
+            return "Pick a numeric condition variable."
         # The condition may be the target itself (filter a variable by its own value).
         if not self.use_lower.isChecked() and not self.use_upper.isChecked():
             return "Enable at least one of the lower / upper limits."
@@ -515,7 +520,8 @@ class SelectRecordsTab(DiiveTab):
                 origin=DERIVED, parent=str(self._target), operation=self.title,
                 params={"steps": self._steps}, tags=["selected"]),
         }
-        self.featuresCreated.emit(result)
+        if not self._emit_features(result):
+            return
         self.status.setText(f"Added {out.name} to the variable list.")
         self.add_btn.setEnabled(False)
 
@@ -529,7 +535,7 @@ class SelectRecordsTab(DiiveTab):
         if self._df is None or self._target is None:
             return
         cond = self.cond_combo.currentText()
-        have_cond = cond in self._all_cols
+        have_cond = cond in self._cond_cols
         target_s = self._df[self._target]
 
         self.canvas.reset_layout()

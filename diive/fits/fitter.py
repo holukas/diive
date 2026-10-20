@@ -1,4 +1,11 @@
-"""Curve fitting with confidence and prediction intervals."""
+"""
+FITS: BINNED CURVE FITTING
+==========================
+
+Fit polynomials to binned (or unbinned) data, with confidence and prediction intervals.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from typing import Literal
 
 import matplotlib.gridspec as gridspec
@@ -17,16 +24,16 @@ from diive.core.plotting.plotfuncs import default_legend, default_format, add_ze
 class BinFitterCP:
     """Fit polynomial functions to binned data with confidence intervals and prediction bands.
 
-    Bins data into equal-width intervals along the x-axis, aggregates y-values within each bin,
-    and fits polynomial functions (linear, quadratic, cubic) with 95% confidence intervals and
-    prediction bands. Useful for analyzing driver-response relationships in ecosystem data.
+    Bins data into quantile bins along the x-axis (similar record counts per bin), aggregates
+    y-values within each bin, and fits polynomial functions (linear, quadratic, cubic) with 95%
+    confidence intervals and prediction bands. Useful for analyzing driver-response relationships
+    in ecosystem data. Call :meth:`run` to fit, then read :attr:`fit_results`.
 
     Examples
     --------
-    See `examples/fits/fit_binfittercp.py` for comprehensive example demonstrating
-    binned fitting with temperature-VPD relationship, result exploration, and interval
-    interpretation. See `examples/fits/fit_fitter.py` for ecosystem driver-response
-    (NEE-VPD) fitting example.
+    See `examples/fits/fit_binfittercp.py` for binned fitting of a temperature-VPD
+    relationship, result exploration and interval interpretation. See
+    `examples/fits/fit_fitter.py` for an ecosystem driver-response (NEE-VPD) fit.
     """
 
     def __init__(
@@ -41,19 +48,23 @@ class BinFitterCP:
             bins_y_agg: Literal['mean', 'median'] = 'mean',
             fit_type: Literal['linear', 'quadratic_offset', 'quadratic', 'cubic'] = 'quadratic_offset'
     ):
-        """Fit function to (binned) data and give CI and bootstrapped PI.
+        """Fit function to (binned) data and give the confidence interval (CI) and prediction interval (PI).
 
         Args:
-            df: Dataframe with data for variables *xcol* and *ycol*.
+            df: Dataframe with data for variables *xcol* and *ycol*. Rows with NaN in either are dropped.
             xcol: Variable name in *df*, will be used for creating *n_bins_x* number of bins.
             ycol: Variable name in *df*, will be aggregated in x-bins using method *bins_y_agg*.
-            predict_max_x: Maximum x to predict y.
-            predict_min_x: Minimum x to predict y.
+            predict_max_x: Currently unused. Predictions cover the x range of the fitted data.
+            predict_min_x: Currently unused. Predictions cover the x range of the fitted data.
             n_predictions: Number of predictions, e.g. 1000 means y will be predicted for 1000 x-values.
-            n_bins_x: Number of bins for y-aggregation. Bins are equally-sized, based on variable defined in *xcol*.
-                If *n_bins_x=0*, then the fit is done for the unbinned data.
+                A value that is not an int uses the number of records, values below 2 use 2.
+            n_bins_x: Number of bins for y-aggregation. Bins are quantile bins of *xcol*, so each
+                bin holds about the same number of records. If *n_bins_x=0*, then the fit is done
+                for the unbinned data.
             bins_y_agg: Aggregation type for y in each x-bin. Options: 'mean', 'median'
-            fit_type: Fit type to fit to the bins. Options: 'linear', 'quadratic_offset', 'quadratic', 'cubic'
+            fit_type: Fit type to fit to the bins. Options: 'linear' (ax+b),
+                'quadratic_offset' (ax^2+bx+c), 'quadratic' (ax^2+bx, no offset), 'cubic'
+                (ax^3+bx^2+cx+d). Unknown values fall back to 'quadratic_offset'.
         """
         self.df = df[[xcol, ycol]].dropna()  # Remove NaNs, working data
         self.xcol = xcol
@@ -276,7 +287,35 @@ class BinFitterCP:
 
         # Fitplot. Honor a caller-supplied axes (two-phase contract); only create
         # and show our own figure when ax is None.
-        """Show the fit plot."""
+        """Plot the data, the bins and the fitted curve with its intervals. Needs :meth:`run` first.
+
+        Args:
+            ax: Axes to draw on. A new figure is created and shown when None.
+            show_unbinned_data: Show the input records as open circles.
+            show_bin_variation: Show the spread in each bin: SD error bars for
+                ``bins_y_agg='mean'``, the interquartile range for ``'median'``.
+            unbinned_alpha: Transparency of the input records.
+            highlight_year: Highlight the fitted points of this year. Needs the fitted
+                data to have a DatetimeIndex, so in practice unbinned data (*n_bins_x=0*).
+            bin_size: Marker size of the bins.
+            bin_color: Marker color of the bins.
+            bin_edgecolor: Marker edge color of the bins.
+            bin_marker: Marker style of the bins and the highlighted year.
+            bin_alpha: Transparency of the bins.
+            fitline_color: Color of the fit line, confidence region and prediction interval.
+            label: Legend label prefix for the highlighted year.
+            showfit: Show the fit line and the 95% confidence region.
+            show_prediction_interval: Also show the 95% prediction interval (needs *showfit*).
+            xlim: x-axis limits as (min, max).
+            ylim: y-axis limits as (min, max).
+            title: Axes title. Defaults to a description of the bins.
+            xlabel: x-axis label. Defaults to *xcol*.
+            ylabel: y-axis label. Defaults to *ycol*.
+
+        Returns:
+            Tuple of artists: (last scatter drawn, fit line, confidence region,
+            upper prediction band, highlighted year). Each is None when not drawn.
+        """
         own_fig = ax is None
         if own_fig:
             fig = plt.figure(facecolor='white', figsize=(9, 9), dpi=100)
@@ -292,6 +331,7 @@ class BinFitterCP:
                   f"({n_vals_min}-{n_vals_max} values per bin)")
 
         # Input data
+        line_xy = None
         if show_unbinned_data:
             line_xy = ax.scatter(
                 x=self.fit_results['input_df'][self.xcol],
@@ -306,8 +346,8 @@ class BinFitterCP:
         # Binned data
         if self.usebins > 0:
             line_xy = ax.scatter(
-                x=self.fit_results['bin_df'][self.xcol]['mean'],
-                y=self.fit_results['bin_df'][self.ycol]['mean'],
+                x=self.fit_results['bin_df'][self.xcol][self.bins_y_agg],
+                y=self.fit_results['bin_df'][self.ycol][self.bins_y_agg],
                 edgecolor=bin_edgecolor, color=bin_color, alpha=bin_alpha, s=bin_size,
                 label=_label,
                 zorder=1, marker=bin_marker)

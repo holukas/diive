@@ -2,8 +2,7 @@
 ANALYSIS: GRID AGGREGATION
 ==========================
 
-2D grid binning and aggregation for tabular time series data.
-Flexible binning strategies and multiple aggregation methods for analysis and visualization.
+Bin two variables (x, y) into a 2D grid and aggregate a third (z) in each cell.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -18,12 +17,21 @@ from diive.core.utils.console import info, warn
 
 class GridAggregator:
     """
-    Performs data aggregation over a 2D grid based on specified binning mechanisms.
+    Aggregate z over a 2D grid of x and y bins.
 
-    The GridAggregator class facilitates the aggregation of Z-axis data over a
-    2D grid defined by X and Y axes. The binning can be configured through
-    quantiles, equal-width bins, or custom bins. The class supports multiple aggregation
-    functions, including built-in statistical measures and custom callable functions.
+    x and y are binned by quantiles, equal-width bins or custom bin edges, then z
+    is aggregated in each x/y cell with a named statistic or a custom callable.
+    Binning and aggregation run on initialization.
+
+    Bin labels: quantile bins are labelled by their lower percentile (0, 10, ...,
+    90 for 10 bins). Equal-width and custom bins are labelled by their lower edge.
+
+    Properties:
+        df_long: Input records with their x and y bin labels (not aggregated).
+        df_agg_wide: Aggregated z as a grid, y bins as rows and x bins as columns.
+            Empty bins stay in the grid as NaN cells.
+        df_agg_long: The same aggregates in long format, one row per cell. Empty
+            cells are dropped, except for custom binning.
 
     Example:
         See `examples/analysis/analysis_gridaggregator.py` for complete examples demonstrating
@@ -74,8 +82,8 @@ class GridAggregator:
                 for x and y dimensions. Options include quantiles, equal-width, or custom boundaries.
             n_bins (int, optional): Number of bins to create for x and y when using quantiles or
                 equal-width binning. Defaults to 10.
-            min_n_vals_per_bin (int, optional): Minimum number of values required in each bin. If bins
-                do not meet this threshold, outputs will reflect adjusted binning. Defaults to 1.
+            min_n_vals_per_bin (int, optional): Minimum number of records an x/y cell needs.
+                Cells with fewer records are left empty (NaN). Defaults to 1.
             aggfunc (Union[Literal['mean', 'min', 'max', 'median', 'sum', 'count'], Callable], optional):
                 Aggregation function to apply to z-values within each bin. Can be a predefined function
                 string ('mean', 'min', 'max', 'median', 'sum', 'count') or a callable. Defaults to 'mean'.

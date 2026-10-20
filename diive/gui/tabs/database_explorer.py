@@ -10,6 +10,11 @@ timestamps). Mirrors InfluxDB's bucket -> measurement -> field hierarchy, with
 the ``data_version`` tag diive stores alongside each variable folded in as a
 filter step.
 
+A field can then be downloaded for a date range, in the project's UTC offset
+(read-only from Project settings). **Match dataset time range** sets the range
+to cover the working dataset. The download is plotted as it arrives, and **Send
+to Meteo screening** hands it to the Meteo screening (database) tab.
+
 Needs an active connection (see the Database connection tab); the backend lives
 in ``diive.gui.db.manager``. All schema queries are the backend's job
 (``diive.core.io.db``); this tab only renders lists and
@@ -27,7 +32,6 @@ from PySide6.QtCore import QDateTime, QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDateTimeEdit,
-    QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -39,10 +43,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from diive.gui import db, site, theme
+from diive.gui import db, theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.progress_bar import ProgressBar
+from diive.gui.widgets.project_offset import (
+    NOT_SET_WARNING,
+    ProjectUtcOffset,
+    format_utc_offset,
+)
 from diive.gui.widgets.tab_chrome import build_titlebar
 from diive.gui.widgets.weak_slot import weak_slot
 from diive.gui.widgets.worker import WorkerRunner
@@ -89,7 +98,7 @@ class DatabaseExplorerTab(DiiveTab):
         self._field: str | None = None
         self._dl_t0: float = 0.0  # download start time (set on each download)
         # The selected field's record span, kept in UTC (the DB's native time);
-        # the pickers show this shifted into the chosen UTC offset.
+        # the pickers show this shifted into the project's UTC offset.
         self._first_utc: QDateTime | None = None
         self._last_utc: QDateTime | None = None
         # The working dataset's (MIDDLE) index, for "Match dataset time range".
@@ -188,29 +197,19 @@ class DatabaseExplorerTab(DiiveTab):
 
         self._dl_group = QGroupBox("Time range")
         form = QFormLayout(self._dl_group)
-        # UTC offset of the start/end below AND of the returned timestamps. The
-        # DB stores everything in UTC; the download converts to this offset. It
-        # MUST match the working dataset's timezone or the merged data are shifted,
-        # so it defaults to the project's configured timezone (else CET = +1).
-        self._utc_offset = QDoubleSpinBox()
-        self._utc_offset.setRange(-12.0, 14.0)
-        self._utc_offset.setSingleStep(1.0)
-        self._utc_offset.setDecimals(1)
-        self._utc_offset.setValue(
-            float(site.manager.utc_offset) if site.manager.configured else 1.0)
-        self._utc_offset.setToolTip(
-            "Timezone (offset to UTC, hours) the start/end are given in and the "
-            "downloaded data are returned in. The database stores all data in UTC; "
-            "set this to your dataset's timezone (default = the project timezone, "
-            "or 1 = CET). A wrong offset silently shifts the merged data.")
-        self._utc_offset.valueChanged.connect(self._on_offset_changed)
+        # UTC offset of the start/end below AND of the returned timestamps: the
+        # project's. The DB stores everything in UTC and the download converts to
+        # this offset, so it must be the working dataset's timezone or the merged
+        # data are shifted.
+        self._utc_offset = ProjectUtcOffset()
+        self._utc_offset.changed.connect(self._on_offset_changed)
         self._start_edit = QDateTimeEdit()
         self._start_edit.setDisplayFormat(_DT_FORMAT)
         self._start_edit.setCalendarPopup(True)
         self._end_edit = QDateTimeEdit()
         self._end_edit.setDisplayFormat(_DT_FORMAT)
         self._end_edit.setCalendarPopup(True)
-        form.addRow("UTC offset (h)", self._utc_offset)
+        form.addRow("UTC offset", self._utc_offset)
         form.addRow("Start", self._start_edit)
         form.addRow("End", self._end_edit)
         self._match_btn = QPushButton("Match dataset time range")
@@ -218,17 +217,16 @@ class DatabaseExplorerTab(DiiveTab):
             "Set the high-res END range so that, after screening and resampling to "
             "the dataset's resolution, the TIMESTAMP_MIDDLE output covers the working "
             "dataset's time range (shifted by half a period for the END↔MIDDLE "
-            "convention). Assumes the dataset is in the selected UTC offset.")
+            "convention). Assumes the dataset is in the project's UTC offset.")
         self._match_btn.clicked.connect(self._match_dataset_range)
         form.addRow("", self._match_btn)
         lay.addWidget(self._dl_group)
 
-        # Visible (not just tooltip) timezone note — the database stores UTC, so
+        # Visible (not just tooltip) timezone note: the database stores UTC, so
         # the offset must match the dataset's timezone or the merge is shifted.
+        # It turns into a warning while Project settings have no offset.
         self._tz_note = QLabel()
         self._tz_note.setWordWrap(True)
-        self._tz_note.setStyleSheet("color: #6B7780; font-size: 11px;")
-        self._utc_offset.valueChanged.connect(self._update_tz_note)
         lay.addWidget(self._tz_note)
         self._update_tz_note()
 
@@ -473,7 +471,7 @@ class DatabaseExplorerTab(DiiveTab):
 
     def _seed_download_range(self, first: str | None, last: str | None) -> None:
         """Store the field's (UTC) record span and seed the pickers to its last
-        month of data in the chosen offset; enable the download controls."""
+        month of data in the project's offset; enable the download controls."""
         first_dt = QDateTime.fromString(first or "", _DT_FORMAT)
         last_dt = QDateTime.fromString(last or "", _DT_FORMAT)
         if not first_dt.isValid() or not last_dt.isValid():
@@ -486,30 +484,30 @@ class DatabaseExplorerTab(DiiveTab):
         self._set_download_enabled(True)
 
     def _offset_secs(self) -> int:
-        """Selected UTC offset in seconds (rounded to the minute)."""
-        return int(round(self._utc_offset.value() * 3600))
+        """The project's UTC offset in seconds."""
+        return int(self._utc_offset.value()) * 3600
 
     def _offset_label(self) -> str:
         """The offset as an ISO-style label, e.g. ``'UTC+01:00'``."""
-        total = self._offset_secs()
-        sign = "+" if total >= 0 else "-"
-        hours, mins = divmod(abs(total) // 60, 60)
-        return f"UTC{sign}{hours:02d}:{mins:02d}"
+        return format_utc_offset(self._utc_offset.value())
 
-    def _update_tz_note(self, *_) -> None:
-        """Keep the visible timezone note in sync with the chosen offset."""
-        note = (f"All times here are <b>{self._offset_label()}</b>. The database "
-                f"stores UTC; this offset must match your dataset's timezone.")
-        if site.manager.configured:
-            same = float(self._utc_offset.value()) == float(site.manager.utc_offset)
-            note += (" Default is the project timezone"
-                     + (" (matches)." if same else " — currently differs!"))
+    def _update_tz_note(self) -> None:
+        """Keep the visible timezone note in sync with the project's offset;
+        a warning while it is not set."""
+        if self._utc_offset.is_set():
+            self._tz_note.setText(
+                f"All times here are <b>{self._offset_label()}</b> (Project "
+                f"settings). The database stores UTC; this offset must match your "
+                f"dataset's timezone.")
+            self._tz_note.setStyleSheet("color: #6B7780; font-size: 11px;")
         else:
-            note += " Default 1 = CET."
-        self._tz_note.setText(note)
+            danger = theme.manager.tokens.get("DANGER_BG", "#E04646")
+            self._tz_note.setText(NOT_SET_WARNING)
+            self._tz_note.setStyleSheet(
+                f"color: {danger}; font-size: 11px; font-weight: 600;")
 
     def _apply_offset_to_pickers(self) -> None:
-        """Shift the (UTC) record span into the chosen offset and default the
+        """Shift the (UTC) record span into the project's offset and default the
         selection to the last month of data."""
         if self._first_utc is None or self._last_utc is None:
             return
@@ -523,8 +521,9 @@ class DatabaseExplorerTab(DiiveTab):
         self._end_edit.setDateTime(last_local)
 
     def _on_offset_changed(self) -> None:
-        """Re-seed the pickers when the timezone changes (the displayed range and
-        the last-month default are both offset-dependent)."""
+        """Project settings changed: update the note and re-seed the pickers (the
+        displayed range and the last-month default are both offset-dependent)."""
+        self._update_tz_note()
         self._apply_offset_to_pickers()
 
     def _request_key(self, start: str, stop: str) -> tuple:
@@ -574,7 +573,8 @@ class DatabaseExplorerTab(DiiveTab):
                 self._status.setText(f"Plotted {self._field} from already-downloaded data.")
                 return
         self._status.setText(
-            f"Downloading {self._field} from {start} to {stop} ({self._offset_label()})…")
+            f"Downloading {self._field} from {start} to {stop} ({self._offset_label()})…"
+            f"{self._offset_warning()}")
         self._begin_download(self._download_runner, backend.download_detailed_chunked,
                              start, stop)
 
@@ -626,9 +626,15 @@ class DatabaseExplorerTab(DiiveTab):
             self._status.setText(
                 f"Sent {self._field} to Meteo screening (reused downloaded data).")
             return
-        self._status.setText(f"Downloading {self._field} for screening…")
+        self._status.setText(
+            f"Downloading {self._field} for screening ({self._offset_label()})…"
+            f"{self._offset_warning()}")
         self._begin_download(self._detailed_runner, backend.download_detailed_chunked,
                              start, stop)
+
+    def _offset_warning(self) -> str:
+        """Status suffix while Project settings have no UTC offset."""
+        return "" if self._utc_offset.is_set() else f"  {NOT_SET_WARNING}"
 
     def _hand_off(self, data_detailed: dict) -> None:
         """Send a downloaded field (data_detailed) to the Meteo screening tab."""

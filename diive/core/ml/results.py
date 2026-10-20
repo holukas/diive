@@ -32,8 +32,8 @@ class GapFillingResult:
         scores_traintest: Held-out (out-of-sample) metrics from the train/test split —
             the generalization estimate; same keys as *scores*. The test set is a
             *random* subset of complete rows (scattered in time), not a temporal
-            block — the appropriate validation for gap-filling (interpolating short
-            scattered gaps), not extrapolation. None for MDS.
+            block, because gap records are predicted from drivers measured at the
+            same timestamp. None for MDS.
         feature_importances: SHAP importances from the gap-filling model. None for MDS.
         feature_importances_traintest: SHAP importances from the train/test model. None for MDS.
         feature_importances_reduction: SHAP importances measured during feature

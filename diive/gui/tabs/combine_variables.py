@@ -4,8 +4,9 @@ GUI.TABS.COMBINE_VARIABLES: COMBINE TWO VARIABLES INTO A NEW ONE
 
 Drag a variable from the shared list onto **heatmap 1** and another onto
 **heatmap 2**, pick how to combine them (multiply / add / subtract / divide,
-optionally only where both have data), and **heatmap 3** previews the resulting
-variable. Name it and add it to the dataset.
+always only where both have data, or fill the gaps of a with b), and
+**heatmap 3** previews the resulting variable. Name it and add it to the
+dataset.
 
 Three independent date/time heatmaps sit side by side: the two sources are drop
 targets (heatmap 3 is read-only output). All combination maths is the library's
@@ -595,7 +596,8 @@ class CombineVariablesTab(DiiveTab):
                         "method": self.method.currentData()},
                 tags=["combined"]),
         }
-        self.featuresCreated.emit(result)
+        if not self._emit_features(result):
+            return
         self.status.setText(f"Added {name} to the variable list.")
         self.add_btn.setEnabled(False)
 

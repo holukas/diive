@@ -2,7 +2,8 @@
 I/O: INPUT/OUTPUT UTILITIES
 ============================
 
-File I/O for parquet, EddyPro, binary extraction, and FLUXNET format conversion.
+Extraction of bit-encoded values and file format conversion for EddyPro and FLUXNET.
+Parquet and data file reading live in ``diive.core.io`` and are exposed on ``dv``.
 
 Part of the diive library: https://github.com/holukas/diive
 """

@@ -75,6 +75,16 @@ def slot_exceptions():
             pytrace=False)
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _no_save_prompt():
+    """Answer "Save changes?" with Don't save, so closing, opening or loading
+    over unsaved changes never blocks on a dialog nobody clicks. Tests that
+    check the question patch ``ask_save_changes`` again for themselves."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("diive.gui.app.ask_save_changes", lambda *a, **k: "discard")
+        yield
+
+
 @pytest.fixture(scope="module")
 def app():
     yield QApplication.instance() or QApplication([])
@@ -990,6 +1000,242 @@ def test_add_dataset_extends_without_overwrite(window):
                for p in store.peek("NEWVAR").provenance)
 
 
+def _record_warnings(monkeypatch):
+    """Replace QMessageBox.warning with a recorder (no modal dialog)."""
+    from PySide6.QtWidgets import QMessageBox
+    shown = []
+    monkeypatch.setattr(QMessageBox, "warning",
+                        lambda parent, title, text, *a, **k: shown.append(text))
+    return shown
+
+
+@pytest.mark.parametrize("new_freq, start", [
+    ("10min", "2021-01-01 03:10"),   # another resolution
+    ("30min", "2021-01-01 03:15"),   # same resolution, other time steps
+])
+def test_add_dataset_refuses_other_time_resolution(window, monkeypatch,
+                                                   new_freq, start):
+    # L331: one dataset has one time resolution. 10-min data added to 30-min
+    # data (or 30-min data at :15/:45) used to be merged, and later the steps
+    # that regularize (Stepwise screening, Feature engineering, heatmaps)
+    # silently dropped those records. Now the add is refused and nothing changes.
+    base_idx = pd.date_range("2021-01-01", periods=6, freq="30min",
+                             name="TIMESTAMP_END")
+    base = pd.DataFrame({"TA": [1., 2., 3., 4., 5., 6.]}, index=base_idx)
+    window._set_data(base, source="base.parquet")
+    QApplication.processEvents()
+    before = window._full_data
+
+    new_idx = pd.date_range(start, periods=12, freq=new_freq, name="TIMESTAMP_END")
+    new_df = pd.DataFrame({"TA": 9., "NEWVAR": 7.}, index=new_idx)
+    shown = _record_warnings(monkeypatch)
+    window._add_dataset(new_df, "other.parquet")
+    QApplication.processEvents()
+
+    assert window._full_data is before            # same frame, nothing merged
+    assert list(window._full_data.columns) == ["TA"]
+    assert "NEWVAR" not in window._created
+    assert len(shown) == 1
+    if new_freq == "10min":
+        assert "30min" in shown[0] and "10min" in shown[0]
+        assert "same time resolution" in shown[0]
+    else:
+        assert "time grid" in shown[0]
+
+
+def test_add_dataset_later_period_gives_a_regular_index(window, monkeypatch):
+    # L331/L332: same-resolution data from a later period are added, and the gap
+    # between the two periods becomes empty rows, so the index stays regular
+    # (a gapped index made the flux chain and MDS fail after a project reopen).
+    base_idx = pd.date_range("2021-01-01", periods=6, freq="30min",
+                             name="TIMESTAMP_END")
+    base = pd.DataFrame({"TA": [1., 2., 3., 4., 5., 6.]}, index=base_idx)
+    window._set_data(base, source="base.parquet")
+    QApplication.processEvents()
+
+    new_idx = pd.date_range("2021-01-02", periods=4, freq="30min",
+                            name="TIMESTAMP_END")
+    new_df = pd.DataFrame({"TA": [7., 8., 9., 10.]}, index=new_idx)
+    shown = _record_warnings(monkeypatch)
+    window._add_dataset(new_df, "later.parquet")
+    QApplication.processEvents()
+
+    fd = window._full_data
+    assert shown == []
+    expected = pd.date_range(base_idx[0], new_idx[-1], freq="30min")
+    assert fd.index.equals(expected)
+    assert fd.index.name == "TIMESTAMP_END"
+    assert pd.infer_freq(fd.index) == "30min"
+    assert list(fd["TA"].loc[base_idx]) == [1., 2., 3., 4., 5., 6.]
+    assert list(fd["TA"].loc[new_idx]) == [7., 8., 9., 10.]
+    gap = fd["TA"].loc[base_idx[-1] + pd.Timedelta("30min"):
+                       new_idx[0] - pd.Timedelta("30min")]
+    assert len(gap) == 42 and gap.isna().all()     # empty rows in the gap
+    assert window._data.index.equals(expected)     # pushed to the tabs
+
+
+def test_open_project_warns_once_about_mixed_resolutions(window, tmp_path, monkeypatch):
+    # L331: projects saved by earlier versions can hold records of two time
+    # resolutions. Opening one says so in the Log once, and leaves the data as
+    # they are.
+    from diive.gui import app as app_mod
+    idx = pd.date_range("2021-01-01", periods=96, freq="30min").append(
+        pd.date_range("2021-01-03 00:10", periods=144, freq="10min"))
+    idx.name = "TIMESTAMP_END"
+    mixed = pd.DataFrame({"TA": range(len(idx))}, index=idx, dtype=float)
+    window._set_data(mixed, source="mixed.parquet")
+    QApplication.processEvents()
+    folder = tmp_path / "Mixed.diive"
+    assert window._write_project(folder, "Mixed")
+
+    warned = []
+    monkeypatch.setattr(app_mod, "warn", lambda msg, **k: warned.append(msg))
+    assert window._load_project_folder(folder)
+    QApplication.processEvents()
+    assert len(warned) == 1
+    assert "mixes time resolutions" in warned[0]
+    assert "30min" in warned[0] and "10min" in warned[0]
+    assert window._full_data.index.equals(idx)     # data unchanged
+
+    # A regular project opens without the warning.
+    window._set_data(window._full_data.iloc[:96], source="regular.parquet")
+    folder2 = tmp_path / "Regular.diive"
+    assert window._write_project(folder2, "Regular")
+    warned.clear()
+    assert window._load_project_folder(folder2)
+    assert warned == []
+
+
+def _answer_question(monkeypatch, button):
+    """Replace QMessageBox.question: record the prompt, answer with `button`."""
+    from PySide6.QtWidgets import QMessageBox
+    asked = []
+
+    def _question(parent, title, text, *a, **k):
+        asked.append(text)
+        return button
+    monkeypatch.setattr(QMessageBox, "question", _question)
+    return asked
+
+
+def test_add_features_asks_before_replacing_a_column(window, monkeypatch):
+    # L334: a new variable named like an existing one (a name typed in Combine
+    # variables, or a default such as SW_IN_POT) silently replaced the column.
+    # Every Add goes through `_add_features`, which now asks first.
+    from PySide6.QtWidgets import QMessageBox
+    from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
+    from diive.gui import metadata_store
+
+    original = window._full_data["Tair_f"].copy()
+    new = pd.DataFrame({"Tair_f": original * 0 + 99., "BRANDNEW": 1.},
+                       index=original.index)
+    new.attrs[ATTRS_KEY] = {c: provenance_attr(origin=DERIVED, operation="test")
+                            for c in new.columns}
+
+    # Cancel: nothing changes, not even the column without a clash.
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    before = window._full_data
+    window._add_features(new)
+    QApplication.processEvents()
+    assert len(asked) == 1 and "Tair_f" in asked[0] and "BRANDNEW" not in asked[0]
+    assert window._full_data is before
+    pd.testing.assert_series_equal(window._full_data["Tair_f"], original)
+    assert "BRANDNEW" not in window._full_data.columns
+    assert "Tair_f" not in window._created
+    assert metadata_store.manager.store.peek("Tair_f").origin != DERIVED
+
+    # Yes: replaced, and the new column is added too.
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Yes)
+    window._add_features(new)
+    QApplication.processEvents()
+    assert len(asked) == 1
+    assert (window._full_data["Tair_f"].dropna() == 99.).all()
+    assert "BRANDNEW" in window._full_data.columns
+    assert "Tair_f" in window._data.columns and (window._data["Tair_f"] == 99.).all()
+
+    # No clash, no question.
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    window._add_features(new[["BRANDNEW"]].rename(columns={"BRANDNEW": "OTHER"}))
+    assert asked == [] and "OTHER" in window._full_data.columns
+
+
+def test_combine_and_potrad_tabs_ask_before_replacing(window, monkeypatch,
+                                                       configured_site):
+    # The two tabs named in L334, through their real Add buttons: a typed name
+    # equal to a measured column, and the default name SW_IN_POT of Potential
+    # radiation when the data already have SW_IN_POT.
+    from PySide6.QtWidgets import QMessageBox
+
+    window._open_menu_tab("Combine variables")
+    tab = window._menu_tab_list[-1]
+    tab._assign(1, "Tair_f")
+    tab._assign(2, "VPD_f")
+    QApplication.processEvents()
+    tab.name_edit.setText("NEE_CUT_REF_f")          # the measured column
+    original = window._full_data["NEE_CUT_REF_f"].copy()
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    tab._add()
+    QApplication.processEvents()
+    assert len(asked) == 1 and "NEE_CUT_REF_f" in asked[0]
+    pd.testing.assert_series_equal(window._full_data["NEE_CUT_REF_f"], original)
+    # After Cancel the tab says so and Add stays enabled.
+    assert tab.status.text().startswith("Nothing added") and tab.add_btn.isEnabled()
+    # A new name is added without a question.
+    tab.name_edit.setText("TA_X_VPD")
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    tab._add()
+    QApplication.processEvents()
+    assert asked == [] and "TA_X_VPD" in window._full_data.columns
+
+    window._add_features(window._full_data[["Rg_f"]].rename(
+        columns={"Rg_f": "SW_IN_POT"}))            # data already have SW_IN_POT
+    stored = window._full_data["SW_IN_POT"].copy()
+    window._open_menu_tab("Potential radiation")
+    tab = window._menu_tab_list[-1]
+    tab._calculate()
+    QApplication.processEvents()
+    assert tab._out_name() == "SW_IN_POT" and tab.add_btn.isEnabled()
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
+    tab._add()
+    QApplication.processEvents()
+    assert len(asked) == 1 and "SW_IN_POT" in asked[0]
+    pd.testing.assert_series_equal(window._full_data["SW_IN_POT"], stored)
+    assert tab.status.text().startswith("Nothing added") and tab.add_btn.isEnabled()
+    asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Yes)
+    tab.name_edit.setText("SW_IN_POT")             # re-enables Add
+    tab._add()
+    QApplication.processEvents()
+    assert len(asked) == 1
+    assert not window._full_data["SW_IN_POT"].equals(stored)
+
+
+def test_events_with_the_same_name_are_all_marked(window):
+    # L335: events with one name share one EVENT_* column. Only the last one
+    # was marked (two "Harvest" events, May and August: 0 records in May).
+    from diive.events import Event
+    from diive.gui import events
+
+    events.manager.add(Event(name="Harvest", start="2021-05-01", end="2021-05-02"))
+    events.manager.add(Event(name="Harvest", start="2021-08-01", end="2021-08-02"))
+    QApplication.processEvents()
+    col = window._full_data["EVENT_Harvest"]
+    may = col.loc[pd.Timestamp("2021-05-01"):pd.Timestamp("2021-05-02")]
+    aug = col.loc[pd.Timestamp("2021-08-01"):pd.Timestamp("2021-08-02")]
+    assert len(may) > 0 and (may == 1).all()
+    assert len(aug) > 0 and (aug == 1).all()
+    assert int(col.sum()) == len(may) + len(aug)
+    assert set(col.unique()) == {0, 1}
+
+    # Deleting one of them unmarks only its records.
+    assert events.manager.events[0].start.month == 5
+    events.manager.remove(0)
+    QApplication.processEvents()
+    col = window._full_data["EVENT_Harvest"]
+    assert (col.loc[may.index] == 0).all()
+    assert (col.loc[aug.index] == 1).all()
+    assert int(col.sum()) == len(aug)
+
+
 def test_daterange_dialog_clamps_and_orders(app):
     from diive.gui.widgets.daterange_dialog import DateRangeDialog
     start, end = pd.Timestamp("2020-01-01"), pd.Timestamp("2020-12-31 23:30")
@@ -1794,7 +2040,19 @@ def test_feature_engineer_index_only(window):
     assert tab.add_btn.isEnabled()
 
 
-def test_flux_chain_tab_level31(app):
+@pytest.fixture
+def configured_site():
+    """Project settings with a site (the flux chain refuses to run or copy its
+    script without one), restored afterwards."""
+    from diive.gui import site
+    snap = site.manager.as_dict()
+    site.manager.update(name="X", latitude=47.42, longitude=8.49, elevation=0.0,
+                        utc_offset=1)
+    yield site.manager
+    site.manager.load_dict(snap)
+
+
+def test_flux_chain_tab_level31(app, configured_site):
     # The flux chain needs real EddyPro-FLUXNET input (FC, USTAR, *_TEST cols),
     # so load the dedicated EC example dataset (one month for speed).
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -1825,7 +2083,7 @@ def test_flux_chain_tab_level31(app):
                 if "Cannot plot" in t.get_text()]
 
 
-def test_flux_chain_tab_level32(app):
+def test_flux_chain_tab_level32(app, configured_site):
     # L3.2 chain: add outlier steps via the registry, run through make_level32_detector
     # + run_level32, and surface the overall QCF separately.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -2133,6 +2391,619 @@ def test_stepwise_screening_runs_one_chain_at_a_time(app):
     release.set()
 
 
+def test_stepwise_screening_tab_keeps_the_base_path(app):
+    """The Stepwise screening tab runs the base implementation of every seam the
+    Meteo tab overrides, and its worker still screens the working frame itself
+    (a StepwiseOutlierDetection on the input index), not the library class."""
+    from diive.gui.tabs._screening_base import ScreeningTabBase
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+    from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+
+    for seam in ("_chain_input", "_run_chain", "_compute_corrected", "_raw_series",
+                 "_display_lines", "_display_heatmap", "_emit_frame"):
+        assert getattr(StepwiseScreeningTab, seam) is getattr(ScreeningTabBase, seam), seam
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-01-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    tab._steps = [ZScoreParams().step()]
+    assert tab._chain_input() is tab._df
+    tab._worker(tab._chain_input(), "observed_value", tab._steps, tab._coords(), False,
+                tab._run_id)
+    QApplication.processEvents()
+    assert isinstance(tab._payload["detector"], StepwiseOutlierDetection)
+    assert "mscr" not in tab._payload
+    assert tab._payload["detector"].series_hires_orig.index.equals(df.index)
+    assert tab._result_df.index.equals(df.index)
+
+
+def _meteo_download(segments, field="TA_T1_2_1", spikes=()):
+    """A database download (data_detailed frame) of *segments* [(freq, span), ...]
+    one after the other, TIMESTAMP_END index and tag columns, as the Database
+    explorer hands it over."""
+    import numpy as np
+    from diive.core.io.db.influx.common import TAGS
+
+    parts, t = [], pd.Timestamp("2021-07-01 00:00")
+    for freq, span in segments:
+        idx = pd.date_range(t + pd.Timedelta(freq), t + pd.Timedelta(span), freq=freq)
+        part = pd.DataFrame(dict(site="CH-XYZ", varname=field, units="degC",
+                                 raw_varname="TA_raw", raw_units="degC", hpos="T1",
+                                 vpos="2", repl="1", data_raw_freq=freq, freq=freq,
+                                 filegroup="meteo", config_filetype="TEST",
+                                 data_version="raw", gain="1", offset="0"), index=idx)
+        parts.append(part)
+        t = idx[-1]
+    df = pd.concat(parts)
+    hour = df.index.hour.to_numpy() + df.index.minute.to_numpy() / 60
+    df[field] = (15 + 5 * np.sin(2 * np.pi * (hour - 9) / 24)
+                 + np.random.default_rng(42).normal(0, 0.2, len(df)))
+    for ts in spikes:
+        df.loc[pd.Timestamp(ts), field] = 80.0
+    df.index = pd.DatetimeIndex(df.index.to_numpy(), name="TIMESTAMP_END")
+    return df[[c for c in TAGS if c in df.columns] + [field]]
+
+
+def _staged_meteo_tab(frame, field="TA_T1_2_1"):
+    """A Meteo screening tab with a 30-min working dataset and *frame* staged."""
+    from diive.gui import site
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+
+    site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                        utc_offset=1)
+    dataset = pd.DataFrame(
+        {"x": 1.0}, index=pd.date_range("2021-06-30 00:15", "2021-07-10 23:45",
+                                        freq="30min", name="TIMESTAMP_MIDDLE"))
+    tab = MeteoScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(dataset)
+    tab.load_staged({"data_detailed": {field: frame}, "field": field,
+                     "measurement": "TA", "bucket": "ch-xyz_raw",
+                     "data_version": "raw", "utc_offset": 1})
+    _wait_for_worker(tab)
+    return tab
+
+
+def _run_meteo_chain(tab, steps):
+    """Run *steps* through the tab's worker synchronously (as the stepwise tests do)."""
+    tab._steps = steps
+    tab._worker(tab._chain_input(), tab._var, tab._steps, tab._coords(), True, tab._run_id)
+    QApplication.processEvents()
+
+
+@pytest.mark.parametrize("segments, n_records, resolutions", [
+    ([("10min", "2D")], 288, "10min"),
+    ([("10min", "2D"), ("1min", "1D")], 288 + 1440, "10min and 1min"),
+])
+def test_meteo_screening_tab_end_to_end(app, segments, n_records, resolutions):
+    """Stage a download, run a chain with absolute limits, correct, resample and
+    add: the tab runs StepwiseMeteoScreeningDb and every record is kept."""
+    from diive.core.metadata import ATTRS_KEY
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams, HampelParams
+    from diive.preprocessing.qaqc.meteoscreening import StepwiseMeteoScreeningDb
+
+    field = "TA_T1_2_1"
+    spikes = ["2021-07-01 13:00", "2021-07-02 02:00"]
+    frame = _meteo_download(segments, spikes=spikes)
+    tab = _staged_meteo_tab(frame)
+
+    # Status line: records and resolutions from the library, not grid slots.
+    assert isinstance(tab._mscr, StepwiseMeteoScreeningDb)
+    assert f"({n_records} records at {resolutions}," in tab.status.text()
+    assert tab._var == field and list(tab._df.columns) == [field]
+    assert tab._df[field].notna().sum() == n_records
+
+    lim = AbsLimParams()
+    lim.maxval.setValue(50.0)
+    hampel = HampelParams()
+    hampel.window.setValue(48)
+    hampel.dn_cb.setChecked(True)
+    _run_meteo_chain(tab, [lim.step(), hampel.step()])
+
+    payload = tab._payload
+    assert payload is not None and payload["mscr"] is not tab._mscr  # a copy was screened
+    removed = payload["removed"]
+    assert len(removed) == 2
+    # Absolute limits removed exactly the two planted spikes (at their END - grid/2).
+    grid_half = pd.Timedelta(tab._df.index.freq) / 2
+    assert sorted(removed[0] + grid_half) == [pd.Timestamp(t) for t in spikes]
+    # The QCF counts records, not grid slots.
+    qcf = payload["qcf"]
+    assert int(qcf.flagqcf.notna().sum()) == n_records
+    assert "STEPWISE SCREENING REPORT" in tab.report_text.toPlainText()
+    if len(segments) > 1:
+        assert payload["bounds"][1] == (None, None)  # Hampel ran per resolution period
+    # Per-step highlight + limit lines + the lazy heatmap pages all render.
+    tab.limits_cb.setChecked(True)
+    for i in (0, 1):
+        tab._select_step(i)
+        tab._select_step(i)
+    for page in (1, 2, 0):
+        tab._preview_tabs.set_page(page)
+        QApplication.processEvents()
+    for canvas in tab._page_canvases:
+        assert canvas.fig.axes
+        assert not [t for a in canvas.fig.axes for t in a.texts
+                    if "Cannot plot" in t.get_text()]
+
+    # Corrections go through the library class; empty grid slots stay empty.
+    row = tab.corrections_panel._rows["setto_max"]
+    row.enable.setChecked(True)
+    row.threshold.setValue(19.0)
+    tab.run_corrections_btn.click()
+    QApplication.processEvents()
+    corrected = tab._corrected
+    assert corrected is not None and corrected.max() == 19.0
+    assert int(corrected.notna().sum()) == n_records - int((qcf.flagqcf == 2).sum())
+
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._freq.setCurrentText("30min")
+    tab._agg.setCurrentText("mean")
+    tab._mincounts.setValue(0.5)  # a period missing one 10-min record keeps 2/3
+    assert tab.add_btn.isEnabled()
+    tab.add_btn.click()
+    out = emitted["df"]
+    assert list(out.columns) == [field]
+    assert out.index.name == "TIMESTAMP_MIDDLE" and out.index.freqstr == "30min"
+    assert out.index[0] == pd.Timestamp("2021-07-01 00:15")
+    assert out[field].max() <= 19.0
+    # Every period of the download is filled, the coarse era included.
+    assert int(out[field].notna().sum()) == len(out)
+    history = out.attrs[ATTRS_KEY][field]
+    # The download's tags, not the ones resample() rewrote.
+    assert history["params"]["freq"] == ("10min" if len(segments) == 1 else "10min,1min")
+    assert history["params"]["data_version"] == "raw"
+
+
+def test_meteo_screening_tab_failed_load_clears_previous_field(app):
+    """A download the library cannot screen shows the error in the status line
+    and leaves nothing of the previous field behind."""
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    _run_meteo_chain(tab, [ZScoreParams().step()])
+    assert tab._payload is not None and tab.add_btn.isEnabled()
+
+    # Too few records to screen: the library refuses to build the screening.
+    bad = _meteo_download([("10min", "10min")])
+    tab.load_staged({"data_detailed": {"TA_T1_2_1": bad}, "field": "TA_T1_2_1",
+                     "utc_offset": 1})
+    _wait_for_worker(tab)
+    assert tab.status.text().startswith("Could not load TA_T1_2_1 for screening:")
+    assert tab._mscr is None and tab._df is None and tab._var is None
+    assert tab._payload is None and tab._result_df is None and tab._corrected is None
+    assert tab.varpanel.list.count() == 0
+    assert not tab.add_btn.isEnabled()
+    assert tab.qcf_label.text() == "QCF: run to compute."
+    assert tab.report_text.toPlainText() == ""
+    assert [t.get_text() for a in tab.canvas.fig.axes for t in a.texts] == \
+        ["Select a variable to screen."]
+    tab._run()  # nothing to run, and no error
+    assert tab._payload is None
+
+
+def test_meteo_screening_tab_state_round_trip(app):
+    """save_state / restore_state keep the chain and the measurement. The
+    corrections rows are covered by test_meteo_screening_restores_saved_corrections."""
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams
+
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    tab._steps = [AbsLimParams().step()]
+    row = tab.corrections_panel._rows["setto_min"]
+    row.enable.setChecked(True)
+    row.threshold.setValue(5.0)
+    state = tab.save_state()
+
+    fresh = MeteoScreeningTab()
+    fresh.widget()
+    fresh.restore_state(state)
+    assert fresh._steps == tab._steps
+    assert fresh.corrections_panel.measurement() == "TA"
+
+
+def test_meteo_screening_copy_python_renders_the_library_script(app):
+    """Copy Python renders a StepwiseMeteoScreeningDb script with the staged
+    download, the chain, the corrections and the resample settings."""
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams
+
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    lim = AbsLimParams()
+    lim.maxval.setValue(50.0)
+    tab._steps = [lim.step()]
+    row = tab.corrections_panel._rows["setto_max"]
+    row.enable.setChecked(True)
+    row.threshold.setValue(19.0)
+    tab._freq.setCurrentText("1h")
+    tab._agg.setCurrentText("mean")
+    tab._mincounts.setValue(0.5)
+
+    code = tab._code_provider()
+    compile(code, "<copy-python>", "exec")
+    assert "StepwiseOutlierDetection" not in code
+    for needle in ("dv.qaqc.StepwiseMeteoScreeningDb(", "dbc.download(",
+                   "bucket='ch-xyz_raw'", "measurements=['TA']", "fields=['TA_T1_2_1']",
+                   # The records' END range; stop is excluded, so one step later.
+                   "start='2021-07-01 00:10:00'", "stop='2021-07-03 00:10:00'",
+                   "timezone_offset_to_utc_hours=1,", "data_version='raw'",
+                   "site='CH-XYZ'", "site_lat=47.29", "site_lon=7.73", "utc_offset=1,",
+                   "mscr.flag_outliers_abslim_test(", "maxval=50.0", "mscr.addflag()",
+                   "mscr.finalize_outlier_detection()",
+                   "{'key': 'setto_max', 'kwargs': {'threshold': 19.0}}",
+                   "mscr.resample(to_freqstr='1h', agg='mean', mincounts_perc=0.5)"):
+        assert needle in code, needle
+
+
+def test_meteo_screening_follows_site_coordinates(app):
+    """Coordinates edited in Project settings after the download apply to the
+    next run and correction; results computed with the old ones are cleared.
+    An edit that leaves the screening coordinates alone keeps the results."""
+    from diive.gui import site
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    field = "TA_T1_2_1"
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    try:
+        _run_meteo_chain(tab, [ZScoreParams().step()])
+        assert tab._payload["mscr"].site_lat == 47.29
+
+        # Name only: nothing the screening computed is stale.
+        site.manager.update(name="renamed", latitude=47.29, longitude=7.73,
+                            elevation=0.0, utc_offset=1)
+        assert tab._payload is not None
+
+        # The project's UTC offset: the screening keeps the offset the staged
+        # data were downloaded in (UTC+01:00, L277), so the results stay, and
+        # the status line says to send the field again.
+        site.manager.update(name="X", latitude=47.29, longitude=7.73,
+                            elevation=0.0, utc_offset=2)
+        assert tab._coords()["utc_offset"] == 1
+        assert tab._payload is not None
+        assert "send the field again" in tab.status.text()
+        site.manager.update(name="X", latitude=47.29, longitude=7.73,
+                            elevation=0.0, utc_offset=1)
+        _run_meteo_chain(tab, tab._steps)
+        assert tab._payload["mscr"].utc_offset == 1
+
+        site.manager.update(name="X", latitude=-33.9, longitude=18.4, elevation=0.0,
+                            utc_offset=1)
+        assert tab._payload is None and tab._result_df is None
+        assert tab._chain_dirty and not tab.add_btn.isEnabled()
+        assert tab.status.text().startswith("Site coordinates changed")
+
+        _run_meteo_chain(tab, tab._steps)
+        mscr = tab._payload["mscr"]
+        assert (mscr.site_lat, mscr.site_lon, mscr.utc_offset) == (-33.9, 18.4, 1)
+        assert mscr.outlier_detection[field].site_lat == -33.9
+        assert "site_lat=-33.9" in tab._code_provider()
+
+        # Corrections without a run use the new coordinates too.
+        site.manager.update(name="X", latitude=46.0, longitude=8.0, elevation=0.0,
+                            utc_offset=1)
+        assert tab._payload is None
+        row = tab.corrections_panel._rows["setto_max"]
+        row.enable.setChecked(True)
+        row.threshold.setValue(19.0)
+        tab.run_corrections_btn.click()
+        QApplication.processEvents()
+        assert tab._corrected is not None and tab._corrected.max() == 19.0
+        assert (tab._mscr_work.site_lat, tab._mscr_work.site_lon) == (46.0, 8.0)
+    finally:
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=1)
+
+
+def test_meteo_screening_uses_project_utc_offset(app):
+    """The staged data are screened in the UTC offset they were downloaded in
+    (the Database explorer downloads in the project's offset), and Copy Python
+    uses the same offset (L277). After the project's offset changes, or is no
+    longer set, the status line says to send the field again. Without staged
+    data the project's offset is used. A saved offset from an older project is
+    ignored on restore."""
+    from diive.gui import site
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING
+    from diive.gui.widgets.stepwise_method_params import AbsLimParams
+
+    changed = "UTC offset changed after the download"
+    tab = _staged_meteo_tab(_meteo_download([("10min", "2D")]))
+    try:
+        assert NOT_SET_WARNING not in tab.status.text()
+        _run_meteo_chain(tab, [AbsLimParams().step()])
+        assert tab._payload["mscr"].utc_offset == 1
+        assert "utc_offset=1," in tab._code_provider()
+
+        state = tab.save_state()
+        assert "utc_offset" not in state
+        fresh = MeteoScreeningTab()
+        fresh.widget()
+        fresh.restore_state({**state, "utc_offset": 5})  # older project
+        assert fresh._coords()["utc_offset"] == 1
+
+        # The rule (L277): the staged timestamps are in the download's offset
+        # (UTC+1), so the run and Copy Python both keep it after the project's
+        # offset changed. Before, the run took the project's offset and the
+        # script the download's, so the script did not reproduce the run.
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=3)
+        assert changed in tab.status.text()
+        _run_meteo_chain(tab, tab._steps)
+        assert tab._payload["mscr"].utc_offset == 1
+        assert "utc_offset=1," in tab._code_provider()
+        assert "utc_offset=3" not in tab._code_provider()
+        assert changed in tab.status.text()
+
+        site.manager.configured = False
+        site.manager.changed.emit()
+        _run_meteo_chain(tab, tab._steps)
+        assert tab._payload["mscr"].utc_offset == 1
+        assert changed in tab.status.text()
+        assert "utc_offset=1," in tab._code_provider()
+        # Data downloaded while the offset was not set are in UTC+00:00 (0 is
+        # used and the status line warns).
+        assert fresh._coords()["utc_offset"] == 0
+        tab.load_staged({"data_detailed": {"TA_T1_2_1": _meteo_download([("10min", "2D")])},
+                         "field": "TA_T1_2_1", "measurement": "TA",
+                         "bucket": "ch-xyz_raw", "data_version": "raw", "utc_offset": 0})
+        _wait_for_worker(tab)
+        _run_meteo_chain(tab, [AbsLimParams().step()])
+        assert tab._payload["mscr"].utc_offset == 0
+        assert NOT_SET_WARNING in tab.status.text()
+        assert changed not in tab.status.text()
+    finally:
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=1)
+
+
+def test_database_explorer_downloads_in_project_utc_offset(app, monkeypatch):
+    """The Database explorer shows the project's UTC offset read-only, seeds the
+    pickers in it and passes it to the download and the screening hand-off.
+    While it is not set, the note and the download status warn and 0 is used."""
+    from diive.gui import db, site
+    from diive.gui.tabs.database_explorer import DatabaseExplorerTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING, ProjectUtcOffset
+
+    calls, handed = [], []
+    frame = _meteo_download([("10min", "1D")])
+
+    class _Backend:
+        def download_detailed_chunked(self, *args):
+            calls.append(args)
+            return {"TA_T1_2_1": frame}
+
+    def _download(tab):
+        tab._on_download()
+        status = tab._status.text()
+        while tab._download_runner.is_running:
+            QApplication.processEvents()
+            time.sleep(0.005)
+        QApplication.processEvents()
+        return status
+
+    site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                        utc_offset=1)
+    monkeypatch.setattr(db.manager, "request_screening", handed.append)
+    tab = DatabaseExplorerTab()
+    tab.widget()
+    try:
+        assert isinstance(tab._utc_offset, ProjectUtcOffset)
+        assert tab._utc_offset.text() == "UTC+01:00"
+        assert tab._utc_offset.warning_mark.isHidden()
+        assert "UTC+01:00" in tab._tz_note.text()
+        tab._bucket, tab._measurement = "ch-xyz_raw", "TA"
+        tab._field, tab._data_version = "TA_T1_2_1", "raw"
+        tab._seed_download_range("2021-07-01 00:00:00", "2021-07-03 00:00:00")
+        assert tab._start_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss") == \
+            "2021-07-01 01:00:00"                        # UTC shown in UTC+01:00
+        monkeypatch.setattr(db.manager, "backend", _Backend())
+        status = _download(tab)
+        assert NOT_SET_WARNING not in status
+        assert calls[-1][6] == 1                         # utc_offset
+        tab._hand_off({"TA_T1_2_1": frame})
+        assert handed[-1]["utc_offset"] == 1
+
+        site.manager.configured = False
+        site.manager.changed.emit()
+        assert tab._utc_offset.text() == "not set"
+        assert not tab._utc_offset.warning_mark.isHidden()
+        assert tab._tz_note.text() == NOT_SET_WARNING
+        assert tab._start_edit.dateTime().toString("yyyy-MM-dd HH:mm:ss") == \
+            "2021-07-01 00:00:00"                        # re-seeded in UTC
+        status = _download(tab)
+        assert NOT_SET_WARNING in status
+        assert calls[-1][6] == 0
+    finally:
+        site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                            utc_offset=1)
+
+
+def _set_screening_corrections(panel):
+    """Enable two corrections with non-default parameters on *panel* (TA or SW)."""
+    rmax = panel._rows["setto_max"]
+    rmax.enable.setChecked(True)
+    rmax.threshold.setValue(19.0)
+    rval = panel._rows["setto_value"]
+    rval.enable.setChecked(True)
+    rval.dates.setText("2021-07-01 06:00..2021-07-01 08:00")
+    rval.value.setValue(-1.5)
+
+
+def test_stepwise_screening_restores_saved_corrections(app):
+    """Saved correction rows survive restore_state on a fresh tab, both before
+    any data arrives and after a push that auto-detected another measurement
+    (the project-open order). The panel's set_state used to switch the
+    measurement after taking over the saved rows, and the rebuild overwrote
+    them with the fresh panel's defaults."""
+    import numpy as np
+    from diive.gui import site
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+
+    site.manager.update(name="X", latitude=47.29, longitude=7.73, elevation=0.0,
+                        utc_offset=1)
+    idx = pd.date_range("2021-07-01 00:30", periods=48 * 5, freq="30min",
+                        name="TIMESTAMP_END")
+    hour = idx.hour.to_numpy() + idx.minute.to_numpy() / 60
+    ta = 15 + 5 * np.sin(2 * np.pi * (hour - 9) / 24)
+    # First column is not TA: a fresh tab auto-selects it on the push.
+    df = pd.DataFrame({"x": 1.0, "TA_T1_2_1": ta}, index=idx)
+
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("TA_T1_2_1")
+    _set_screening_corrections(tab.corrections_panel)
+    tab.run_corrections_btn.click()
+    saved_corrs = tab.corrections_panel.corrections()
+    assert [c["key"] for c in saved_corrs] == ["setto_max", "setto_value"]
+    assert tab._corrected is not None and tab._corrected.max() == 19.0
+    state = tab.save_state()
+
+    # Direct restore, no data yet.
+    fresh = StepwiseScreeningTab()
+    fresh.widget()
+    fresh.restore_state(state)
+    assert fresh.corrections_panel.get_state() == state["corrections"]
+    assert fresh.corrections_panel.corrections() == saved_corrs
+
+    # Project-open order: data pushed first (measurement detected from "x").
+    fresh = StepwiseScreeningTab()
+    fresh.widget()
+    fresh.on_data_loaded(df)
+    assert fresh.corrections_panel.measurement() != "TA"
+    fresh.restore_state(state)
+    assert fresh.corrections_panel.measurement() == "TA"
+    assert fresh.meas_combo.currentData() == "TA"
+    assert fresh.corrections_panel.get_state() == state["corrections"]
+    assert fresh.corrections_panel.corrections() == saved_corrs
+    assert fresh._var == "TA_T1_2_1"
+    pd.testing.assert_series_equal(fresh._corrected, tab._corrected)
+
+
+def test_meteo_screening_restores_saved_corrections(app):
+    """Saved correction rows survive restore_state on a fresh Meteo screening
+    tab, and apply once the field is staged again."""
+    from diive.gui.tabs.meteo_screening import MeteoScreeningTab
+
+    frame = _meteo_download([("10min", "2D")])
+    tab = _staged_meteo_tab(frame)
+    _set_screening_corrections(tab.corrections_panel)
+    tab.run_corrections_btn.click()
+    QApplication.processEvents()
+    saved_corrs = tab.corrections_panel.corrections()
+    assert [c["key"] for c in saved_corrs] == ["setto_max", "setto_value"]
+    assert tab._corrected is not None and tab._corrected.max() == 19.0
+    state = tab.save_state()
+
+    fresh = MeteoScreeningTab()
+    fresh.widget()
+    fresh.restore_state(state)
+    assert fresh.corrections_panel.get_state() == state["corrections"]
+    assert fresh.corrections_panel.corrections() == saved_corrs
+
+    # The staged download is not part of the project; stage it again and run.
+    fresh.on_data_loaded(pd.DataFrame(
+        {"x": 1.0}, index=pd.date_range("2021-06-30 00:15", "2021-07-10 23:45",
+                                        freq="30min", name="TIMESTAMP_MIDDLE")))
+    fresh.load_staged({"data_detailed": {"TA_T1_2_1": frame}, "field": "TA_T1_2_1",
+                       "measurement": "TA", "bucket": "ch-xyz_raw",
+                       "data_version": "raw", "utc_offset": 1})
+    _wait_for_worker(fresh)
+    assert fresh.corrections_panel.corrections() == saved_corrs
+    fresh.run_corrections_btn.click()
+    QApplication.processEvents()
+    pd.testing.assert_series_equal(fresh._corrected, tab._corrected)
+
+
+def test_project_round_trip_keeps_screening_corrections(window, tmp_path):
+    """A project saved with a Stepwise screening tab reopens with its
+    correction rows and the corrected series, through MainWindow's open path."""
+    window._open_menu_tab("Stepwise screening")
+    tab = window._menu_tab_list[-1]
+    tab._select("Tair_f")
+    assert tab.corrections_panel.measurement() == "TA"
+    panel = tab.corrections_panel
+    rmax = panel._rows["setto_max"]
+    rmax.enable.setChecked(True)
+    rmax.threshold.setValue(19.0)
+    rmiss = panel._rows["set_exact_to_missing"]
+    rmiss.enable.setChecked(True)
+    rmiss.values.setText("0, -9999")
+    tab.run_corrections_btn.click()
+    saved_state = panel.get_state()
+    saved_corrs = panel.corrections()
+    assert tab._corrected is not None and tab._corrected.max() == 19.0
+
+    folder = tmp_path / "P.diive"
+    assert window._write_project(folder, "P")
+    assert window._load_project_folder(folder)
+    QApplication.processEvents()
+
+    restored = next(t for t in window._menu_tab_list
+                    if t._menu_label == "Stepwise screening")
+    assert restored is not tab
+    assert restored.corrections_panel.get_state() == saved_state
+    assert restored.corrections_panel.corrections() == saved_corrs
+    assert restored._var == "Tair_f"
+    pd.testing.assert_series_equal(restored._corrected, tab._corrected)
+
+
+def test_abslim_step_in_the_picker(app):
+    """Absolute limits is offered in the step picker; its per-period limits are
+    seeded from the global ones and round-trip through the editor; it runs."""
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.stepwise_cards import StepEditorDialog
+    from diive.gui.widgets.stepwise_method_params import (
+        STEP_METHOD_BY_KEY,
+        AbsLimParams,
+        method_labels,
+    )
+
+    assert ("flag_outliers_abslim_test", "Absolute limits") in method_labels()
+    assert STEP_METHOD_BY_KEY["flag_outliers_abslim_test"] is AbsLimParams
+
+    p = AbsLimParams()
+    assert p.kwargs() == dict(minval=-10_000.0, maxval=10_000.0, separate_day_night=False)
+    p.minval.setValue(-5.0)
+    p.maxval.setValue(30.0)
+    assert not p.min_dt.isEnabled()
+    p.dn_cb.setChecked(True)  # seeds all four per-period limits
+    assert (p.min_dt.value(), p.max_dt.value(), p.min_nt.value(), p.max_nt.value()) == \
+        (-5.0, 30.0, -5.0, 30.0)
+    p.max_nt.setValue(20.0)
+    step = p.step()
+    assert step["kwargs"]["maxval_nighttime"] == 20.0
+    assert step["kwargs"]["separate_day_night"] is True
+
+    dlg = StepEditorDialog(step=step)
+    assert dlg.method.currentData() == "flag_outliers_abslim_test"
+    assert dlg.step() == step
+    dlg.deleteLater()
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.0)
+    df.index.name = "TIMESTAMP_END"
+    df.loc[df.index[[10, 100]], "observed_value"] = 500.0
+    tab = StepwiseScreeningTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._select("observed_value")
+    glob = AbsLimParams()
+    glob.maxval.setValue(100.0)
+    tab._steps = [glob.step(), step]
+    tab._worker(df, "observed_value", tab._steps, tab._coords(), True, tab._run_id)
+    QApplication.processEvents()
+    assert list(tab._payload["removed"][0]) == list(df.index[[10, 100]])
+    assert len(tab._step_cards) == 2
+
+
 def test_correction_tabs(app):
     # The standalone correction tabs (RF/XGB-style shared template): each is one
     # correction on a selected variable, producing a corrected column + provenance,
@@ -2209,6 +3080,150 @@ def test_correction_tabs(app):
     miss._run()                                      # no values entered
     assert miss._result_df is None
     assert "value" in miss.status.text().lower()
+
+
+def _project_site(utc_offset: int | None):
+    """Configure Project settings with *utc_offset*, or leave them unset (None)."""
+    from diive.gui import site
+    site.manager.update(author="t", description="", name="X", latitude=47.4,
+                        longitude=8.5, elevation=500, utc_offset=utc_offset or 0)
+    if utc_offset is None:
+        site.manager.configured = False
+        site.manager.changed.emit()
+
+
+def test_correction_tab_uses_project_utc_offset(app):
+    """The radiation correction shows the project's offset (read-only), passes it
+    to the library and the script, stops saving it, and drops a pending result
+    when the offset changes."""
+    from diive.gui.tabs.corrections_nighttime_offset import NighttimeZeroOffsetTab
+    from diive.gui.widgets.project_offset import ProjectUtcOffset
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.0)
+    df = df.rename(columns={"observed_value": "SW_IN_T1_2_1"})
+    df.index.name = "TIMESTAMP_END"
+    try:
+        _project_site(2)
+        tab = NighttimeZeroOffsetTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._select("SW_IN_T1_2_1")
+        assert isinstance(tab.utc, ProjectUtcOffset)
+        assert tab.utc.text() == "UTC+02:00" and not tab.utc.warning_mark.isVisibleTo(tab.utc)
+        assert tab._coords()[2] == 2
+        assert "utc_offset=2" in tab._python_code()
+        state = tab.save_state()
+        assert "utc" not in state["controls"]
+        # An older project's saved offset is ignored.
+        tab.restore_state({"var": "SW_IN_T1_2_1", "controls": {**state["controls"], "utc": 7}})
+        assert tab._coords()[2] == 2
+
+        tab._worker(df["SW_IN_T1_2_1"], tab._current_kwargs(), *tab._coords())
+        QApplication.processEvents()
+        assert tab._result_df is not None and tab.add_btn.isEnabled()
+        _project_site(3)
+        assert tab._result_df is None and not tab.add_btn.isEnabled()
+        assert "UTC offset changed" in tab.status.text()
+
+        _project_site(None)
+        assert tab.utc.text() == "not set" and tab.utc.warning_mark.isVisibleTo(tab.utc)
+        assert tab._coords()[2] == 0
+    finally:
+        _project_site(None)
+
+
+def test_outlier_tabs_use_project_utc_offset(app):
+    """Outlier tabs pass the project's offset to the detector and the script, warn
+    when it is not set, and ignore an offset saved by an older project."""
+    from diive.gui.tabs.outliers import HampelOutlierTab
+    from diive.gui.tabs.outliers_trim import TrimLowOutlierTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    try:
+        _project_site(2)
+        tab = HampelOutlierTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._select("observed_value")
+        tab.daynight_cb.setChecked(True)
+        assert tab.utc.text() == "UTC+02:00"
+        kwargs = tab._current_kwargs()
+        assert kwargs["utc_offset"] == 2
+        assert "utc_offset=2" in tab._python_code()
+        state = tab.save_state()
+        assert "utc" not in state["controls"]
+        tab.restore_state({"var": "observed_value",
+                           "controls": {**state["controls"], "utc": 7}})
+        assert tab._current_kwargs()["utc_offset"] == 2
+
+        # A pending result made with another offset is dropped on a change.
+        tab._worker(df["observed_value"], kwargs, False, True)
+        QApplication.processEvents()
+        assert tab._result_df is not None
+        _project_site(1)
+        assert tab._result_df is None and not tab.add_btn.isEnabled()
+
+        # Not set: the trim-low day/night split runs with 0 and warns.
+        _project_site(None)
+        trim = TrimLowOutlierTab()
+        trim.widget()
+        trim.on_data_loaded(df)
+        trim._select("observed_value")
+        trim.trim_daytime.setChecked(True)
+        assert trim.trim_utc.text() == "not set"
+        kw = trim._current_kwargs()
+        assert kw["utc_offset"] == 0
+        assert "trim_utc" not in trim.save_state()["controls"]
+        trim._worker(df["observed_value"], kw, False)
+        QApplication.processEvents()
+        assert trim._result_df is not None
+        assert NOT_SET_WARNING in trim.status.text()
+    finally:
+        _project_site(None)
+
+
+def test_stepwise_screening_uses_project_utc_offset(app):
+    """Stepwise screening screens and scripts with the project's offset, clears a
+    result when the offset changes, and warns when it is not set."""
+    from diive.gui.tabs.stepwise import StepwiseScreeningTab
+    from diive.gui.widgets.project_offset import NOT_SET_WARNING
+    from diive.gui.widgets.stepwise_method_params import ZScoreParams
+
+    df = dv.variables.generate_noisy_timeseries(
+        start_date="2024-06-01", periods=48 * 5, freq="30min", trend_slope=0.0,
+        seasonal_strength=5, noise_level=1, outlier_fraction=0.05)
+    df.index.name = "TIMESTAMP_END"
+    try:
+        _project_site(2)
+        tab = StepwiseScreeningTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        tab._select("observed_value")
+        tab._steps = [ZScoreParams().step()]
+        assert tab._coords()["utc_offset"] == 2
+        assert "utc_offset=2" in tab._code_provider()
+        tab._worker(df, "observed_value", tab._steps, tab._coords(), True, tab._run_id)
+        QApplication.processEvents()
+        assert tab._payload is not None
+        assert NOT_SET_WARNING not in tab.status.text()
+
+        _project_site(3)
+        assert tab._payload is None and tab._chain_dirty
+        assert "UTC offset" in tab.status.text()
+
+        _project_site(None)
+        tab._worker(df, "observed_value", tab._steps, tab._coords(), False, tab._run_id)
+        QApplication.processEvents()
+        assert tab._payload is not None
+        assert NOT_SET_WARNING in tab.status.text()
+    finally:
+        _project_site(None)
 
 
 def test_derived_variable_vpd_tab(app):
@@ -2347,7 +3362,7 @@ def test_derived_variable_potrad_tab(app):
     assert "rename('SW_IN_POT_calc')" in tab._python_code()
 
 
-def test_flux_chain_tab_level33_detection(app):
+def test_flux_chain_tab_level33_detection(app, configured_site):
     # L3.3 supports auto-detecting the USTAR threshold (moving point bootstrap)
     # as an alternative to constant thresholds. The detected CUT percentiles
     # become USTAR scenarios; Copy Python renders run_level33_ustar_detection.
@@ -2393,7 +3408,7 @@ def test_flux_chain_tab_level33_detection(app):
     assert tab2.l33_ta.currentText() == ta
 
 
-def test_flux_chain_tab_level33_vut(app):
+def test_flux_chain_tab_level33_vut(app, configured_site):
     # L3.3 detection can apply per-year VUT thresholds instead of a constant CUT.
     # CUT and VUT are mutually exclusive strategies.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -2458,7 +3473,7 @@ def test_ustar_detection_tab(app):
                 if "failed" in t.get_text().lower()]
 
 
-def test_flux_chain_tab_level33(app):
+def test_flux_chain_tab_level33(app, configured_site):
     # L3.3 USTAR filtering: requires an L3.2 step, applies constant thresholds,
     # and exposes per-scenario QCFs.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -2551,7 +3566,7 @@ def test_flux_chain_tab_level2_details(app):
     # The L2 page shows the variables each test reads, exposes the 8 VM97 sub-tests,
     # gates tests on input availability, and the run produces a QCF report.
     from diive.gui.tabs.fluxchain import FluxChainTab
-    from diive.flux.fluxprocessingchain import VM97_SUBTESTS
+    from diive.flux.postprocessingchain import VM97_SUBTESTS
     from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
     df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
 
@@ -2702,7 +3717,7 @@ def test_flux_chain_tab_level41_layout(app):
     assert set(fp.selected()) == set(picked) | {str(df.columns[0])}
 
 
-def test_flux_chain_tab_per_level_run(app):
+def test_flux_chain_tab_per_level_run(app, configured_site):
     # Each level runs separately, its output feeding the next; the per-level run
     # buttons are gated by how far the chain has reached.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -2757,7 +3772,7 @@ def test_flux_chain_tab_per_level_run(app):
     assert not tab.rail._cards[3]._reached
 
 
-def test_flux_chain_tab_add_level_results(app):
+def test_flux_chain_tab_add_level_results(app, configured_site):
     # Each level can push its results (flag/QCF columns + QCF-filtered flux) to
     # the dataset via featuresCreated, after the level has run.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -2807,7 +3822,7 @@ def test_flux_chain_tab_add_level_results(app):
     assert all(prov[c]["parent"] == fluxcol for c in out.columns)
 
 
-def test_flux_chain_tab_level41(app):
+def test_flux_chain_tab_level41(app, configured_site):
     # L4.1 gap-filling: fan out one gap-fill per USTAR scenario. MDS is fast and
     # has no ML training, so drive a real run with it; rf/xgb are checked via codegen.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -2901,13 +3916,138 @@ def test_flux_chain_tab_level41(app):
     assert tab2.l41_features.selected() == tab.l41_features.selected()
 
 
+def test_flux_chain_tab_level41_mds_driver_qc(app, monkeypatch, configured_site):
+    # L4.1 MDS driver QC flags: "(none)" by default (config and script
+    # unchanged); a picked flag reaches run_level41_mds and the script, and
+    # round-trips through save/restore. Old projects restore to none.
+    import diive.gui.tabs.fluxchain as fc
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.column_picker import NONE_ITEM
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+    vpd_flag = "FLAG_VPD_T1_47_1_gfXG_ISFILLED"
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    assert tab.mds_vpd.currentText() == "VPD_T1_47_1_gfXG"
+
+    # Default: no QC, nothing extra in the config or the script.
+    assert all(c.currentText() == NONE_ITEM for c in tab._mds_qc.values())
+    assert not any(k.endswith("_qc") for k in tab._level41_cfg()["mds"])
+    assert "_qc=" not in tab._code()
+    # The VPD driver's own flag column is offered right after "(none)".
+    assert tab._mds_qc["vpd"].itemText(1) == vpd_flag
+
+    tab._mds_qc["vpd"].setCurrentText(vpd_flag)
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["vpd_qc"] == vpd_flag
+    assert "swin_qc" not in cfg["mds"] and "ta_qc" not in cfg["mds"]
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert f"vpd_qc={vpd_flag!r}," in code
+
+    # A real run through L4.1 passes the flag column to the library.
+    seen = []
+    real = fc.run_level41_mds
+
+    def spy(data, **kw):
+        seen.append(kw)
+        return real(data, **kw)
+
+    monkeypatch.setattr(fc, "run_level41_mds", spy)
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, tab._level33_kwargs(), cfg)
+    assert seen and seen[0]["vpd_qc"] == vpd_flag
+    assert "swin_qc" not in seen[0] and "ta_qc" not in seen[0]
+    assert "CUT_50" in data.gapfilled_cols()["mds"]
+
+    # Save/restore round-trips the pick; an older project without the key -> none.
+    state = tab.save_state()
+    assert state["controls"]["mds_vpd_qc"] == vpd_flag
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._mds_qc["vpd"].currentText() == vpd_flag
+    assert tab2._level41_cfg()["mds"]["vpd_qc"] == vpd_flag
+    old = dict(state, controls={k: v for k, v in state["controls"].items()
+                                if not k.endswith("_qc")})
+    tab2.restore_state(old)
+    assert tab2._mds_qc["vpd"].currentText() == NONE_ITEM
+    assert "vpd_qc" not in tab2._level41_cfg()["mds"]
+
+
+def test_flux_chain_tab_level41_mds_mode(app, monkeypatch, configured_site):
+    # L4.1 MDS mode: 'diive' by default, always written to the config and the
+    # script, passed to run_level41_mds, saved as the value. Chain projects saved
+    # before the option used the plain mean and restore to 'oneflux'.
+    import diive.gui.tabs.fluxchain as fc
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+
+    assert tab.mds_mode.currentText() == "diive (Vekuri 2023 mean)"
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["mode"] == "diive"
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "mode='diive'," in code
+
+    # _run_level41 hands the mode to the library (spy: no real gap-filling).
+    seen = []
+    monkeypatch.setattr(fc, "run_level41_mds",
+                        lambda data, **kw: seen.append(kw) or data)
+    assert tab._run_level41("data", cfg) == "data"
+    assert seen[-1]["mode"] == "diive"
+
+    tab.mds_mode.setCurrentText("ONEFlux (bit for bit)")
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["mode"] == "oneflux"
+    assert "mode='oneflux'," in tab._code()
+    tab._run_level41("data", cfg)
+    assert seen[-1]["mode"] == "oneflux"
+
+    tab.mds_mode.setCurrentText("REddyProc")
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["mode"] == "reddyproc"
+    assert "mode='reddyproc'," in tab._code()
+    tab._run_level41("data", cfg)
+    assert seen[-1]["mode"] == "reddyproc"
+    tab.mds_mode.setCurrentText("ONEFlux (bit for bit)")
+
+    state = tab.save_state()
+    assert state["controls"]["mds_mode"] == "oneflux"
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    assert tab2.mds_mode.currentData() == "diive"
+    tab2.restore_state(state)
+    assert tab2.mds_mode.currentData() == "oneflux"
+    # An older chain project (no mds_mode key) restores to 'oneflux'.
+    tab3 = FluxChainTab(); tab3.widget(); tab3.on_data_loaded(df)
+    tab3.restore_state(dict(state, controls={k: v for k, v in state["controls"].items()
+                                             if k != "mds_mode"}))
+    assert tab3.mds_mode.currentData() == "oneflux"
+
+
 def test_stepwise_method_params_run_on_detector(app):
     # Every stepwise method-params widget must produce a {method, kwargs} step that
     # StepwiseOutlierDetection actually accepts and runs — this guards the kwarg
     # mapping (which differs from the raw-detector tabs) against the library API.
     import diive as dv
     from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
-    from diive.flux.fluxprocessingchain import level32_to_code
+    from diive.flux.postprocessingchain import level32_to_code
     from diive.gui.widgets.stepwise_method_params import STEP_METHODS
 
     df = dv.variables.generate_noisy_timeseries(
@@ -2992,6 +4132,28 @@ def test_icon_glyphs_are_identical_at_every_device_pixel_ratio(app, monkeypatch)
         left, top, right, bottom = boxes[2.0]
         assert left >= 0.02 and top >= 0.02
         assert right <= 0.98 and bottom <= 0.98
+
+
+def test_multi_panel_render_leaves_update_disabled(window):
+    # L152: re-applying each panel's own settings during a render, or switching
+    # the panel pills, fired settings.changed and re-enabled Update plot.
+    window._open_menu_tab("Diel cycle")
+    tab = window._menu_tab_list[-1]
+    tab._on_selected("Tair_f", True)
+    QApplication.processEvents()
+    assert tab._panels == ["NEE_CUT_REF_f", "Tair_f"]
+    tab.panel_pills.changed.emit(1)
+    tab.settings.dc_agg.setCurrentText("Median")  # panels now differ
+    assert tab.update_btn.isEnabled() is True
+    tab.update_btn.click()
+    QApplication.processEvents()
+    assert tab.update_btn.isEnabled() is False
+    assert tab.settings.dc_agg.currentText() == "Median"  # active panel's controls back
+    tab.panel_pills.changed.emit(0)
+    assert tab.settings.dc_agg.currentText() == "Mean"
+    assert tab.update_btn.isEnabled() is False
+    tab.settings.dc_agg.setCurrentText("Max")  # a real edit still marks it dirty
+    assert tab.update_btn.isEnabled() is True
 
 
 def test_diel_cycle_tab(window):
@@ -4239,6 +5401,30 @@ def test_project_save_and_open(window, tmp_path, monkeypatch):
     assert var in [str(c) for c in window._data.columns]
 
 
+def test_project_keeps_database_path_not_app_settings(window, tmp_path, monkeypatch):
+    """The InfluxDB config path is saved with the project only, never in the app
+    settings, so a fresh start without a project shows an empty field."""
+    from diive.gui import config, db
+    from PySide6.QtWidgets import QFileDialog
+
+    monkeypatch.setattr(db.manager, "dirconf", "D:/somewhere/configs")
+    folder = tmp_path / "Db.diive"
+    assert window._write_project(folder, "Db")
+
+    db.manager.dirconf = ""
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    window._open_project()
+    window._wait_for_io()
+    QApplication.processEvents()
+    assert db.manager.dirconf == "D:/somewhere/configs"
+
+    saved = {}
+    monkeypatch.setattr(config, "save_config", saved.update)
+    window.close()
+    assert saved and "database" not in saved
+
+
 def test_event_manager_load_dict_clears_on_empty(app):
     """L93: loading empty event data must clear, not keep the previous events.
 
@@ -4450,6 +5636,13 @@ def test_project_saves_and_restores_open_tabs(window, tmp_path, monkeypatch):
     assert {"Time series", "Driver explorer"} <= restored
     # Always-on tabs are never duplicated by the restore.
     assert _tabs(window)[:2] == ["Overview", "Log"]
+
+
+def test_project_restores_tab_saved_under_old_label(window):
+    # Projects saved before the rename store the old menu label.
+    window._close_all_menu_tabs()
+    window._restore_tabs([{"label": "Flux processing chain"}])
+    assert [t._menu_label for t in window._menu_tab_list] == ["Flux post-processing chain"]
 
 
 def test_project_restores_per_tab_state(window, tmp_path, monkeypatch):
@@ -5216,6 +6409,31 @@ def test_old_classic_config_loads_into_studio():
     theme.manager.reset(silent=True)
 
 
+def test_database_menu_hidden_without_db_extra(app, monkeypatch, example_year):
+    """Without influxdb-client (the public exe, a plain diive[gui] install) the
+    File menu has no Database submenu, and a project that saved a Database tab
+    does not reopen it."""
+    import diive
+    from PySide6.QtWidgets import QToolButton
+    from diive.gui import db
+    monkeypatch.setattr(diive, "load_exampledata_parquet", lambda: example_year.copy())
+    monkeypatch.setattr(db, "influxdb_available", lambda: False)
+    from diive.gui.app import MainWindow
+    win = MainWindow()
+    try:
+        win.show()
+        QApplication.processEvents()
+        file_menu = win._header.findChildren(QToolButton, "headermenu")[0].menu()
+        file_items = [a.text() for a in file_menu.actions()]
+        assert any("Open" in t for t in file_items)
+        assert not any("Database" in t for t in file_items)
+
+        win._restore_tabs([{"label": "Database connection"}])
+        assert "Database connection" not in _tabs(win)
+    finally:
+        _destroy_window(win)
+
+
 def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_year):
     from diive.gui import theme
     import diive
@@ -5247,12 +6465,13 @@ def test_studio_chrome_builds_frameless_with_header(app, monkeypatch, example_ye
         assert any("Hampel" in t for t in cleaning_items)
         assert any("nighttime zero offset" in t for t in cleaning_items)
         # Open and Save live inside the File menu (no separate buttons); the
-        # Database submenu is folded in there too.
+        # Database submenu is folded in there too, when the 'db' extra is installed.
+        from diive.gui import db
         file_menu = menu_btns[0].menu()
         file_items = [a.text() for a in file_menu.actions()]
         assert any("Open" in t for t in file_items)
         assert any("Save" in t for t in file_items)
-        assert any("Database" in t for t in file_items)
+        assert any("Database" in t for t in file_items) == db.influxdb_available()
         # Events fold into the Data menu.
         data_items = [a.text() for a in menu_btns[1].menu().actions()]
         assert any("Events" in t for t in data_items)
@@ -5604,16 +6823,452 @@ def test_gapfilling_mds_tab(app, example_year):
     assert tab2.vpd_tol.value() == 0.8
 
 
+def test_gapfilling_mds_tab_driver_qc(app, example_year):
+    # Optional per-driver QC flags: "(none)" by default (run and script unchanged);
+    # a picked flag column reaches FluxMDS, changes the fill, shows up in Copy
+    # Python and round-trips through save/restore. Old projects restore to none.
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+    from diive.gui.widgets.column_picker import NONE_ITEM
+    df = example_year.loc["2021-05":"2021-07"].copy()
+    # The example drivers are nearly gap-free: mark June TA as gap-filled so the
+    # QC rule removes those records from the similar samples.
+    flag = pd.Series(0.0, index=df.index)
+    flag.loc["2021-06"] = 1.0
+    df["FLAG_Tair_f_ISFILLED"] = flag
+    target = "NEE_CUT_REF_orig"
+    tab = MdsGapFillingTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._set_target(target)
+    for key, col in (("swin", "Rg_f"), ("ta", "Tair_f"), ("vpd", "VPD_f")):
+        tab._combos[key].setCurrentText(col)
+
+    # Default: no QC anywhere, nothing extra in the kwargs or the script.
+    assert all(c.currentText() == NONE_ITEM for c in tab._qc_combos.values())
+    assert not any(k.endswith("_qc") for k in tab._method_kwargs())
+    assert "_qc=" not in tab._python_code()
+    # The chosen driver's flag column is offered right after "(none)".
+    assert tab._qc_combos["ta"].itemText(1) == "FLAG_Tair_f_ISFILLED"
+
+    tab._qc_combos["ta"].setCurrentText("FLAG_Tair_f_ISFILLED")
+    kwargs = tab._method_kwargs()
+    assert kwargs["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    assert "swin_qc" not in kwargs and "vpd_qc" not in kwargs
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "ta_qc='FLAG_Tair_f_ISFILLED'," in code
+    assert "Driver QC: TA=FLAG_Tair_f_ISFILLED" in tab.status.text()
+
+    # _run hands the flag column to the worker together with the drivers.
+    calls = []
+    tab._runner.run = lambda fn, *args: calls.append(args)
+    tab._run()
+    assert calls
+    work, _, _, _, _, run_kwargs = calls[0]
+    assert "FLAG_Tair_f_ISFILLED" in work.columns
+    assert run_kwargs["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    tab._set_running(False)
+    tab.progress.finish()
+
+    payload = tab._compute_payload(*calls[0])
+    model = payload[3]
+    assert model.ta_qc == "FLAG_Tair_f_ISFILLED"
+    base = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                {k: v for k, v in run_kwargs.items() if k != "ta_qc"})
+    assert base[3].ta_qc is None
+    # Same gaps filled, different values: June TA no longer serves as a sample.
+    assert payload[2].notna().sum() == base[2].notna().sum()
+    assert (payload[2] - base[2]).abs().max() > 0
+    tab._on_done(payload)
+    QApplication.processEvents()
+    assert tab._result_df is not None
+
+    # Save/restore round-trips the pick; an older project without the key -> none.
+    state = tab.save_state()
+    assert state["controls"]["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    tab2 = MdsGapFillingTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._qc_combos["ta"].currentText() == "FLAG_Tair_f_ISFILLED"
+    assert tab2._method_kwargs()["ta_qc"] == "FLAG_Tair_f_ISFILLED"
+    old = {"target": state["target"],
+           "controls": {k: v for k, v in state["controls"].items()
+                        if not k.endswith("_qc")}}
+    tab2.restore_state(old)
+    assert tab2._qc_combos["ta"].currentText() == NONE_ITEM
+    assert "ta_qc" not in tab2._method_kwargs()
+    # A reload without the flag column drops the pick back to none.
+    tab._qc_combos["ta"].setCurrentText("FLAG_Tair_f_ISFILLED")
+    tab.on_data_loaded(df.drop(columns="FLAG_Tair_f_ISFILLED"))
+    assert tab._qc_combos["ta"].currentText() == NONE_ITEM
+
+
+def test_gapfilling_mds_tab_mode(app, example_year):
+    # MDS mode combo: 'diive' (Vekuri 2023 mean) by default, reaching FluxMDS and
+    # Copy Python; 'ONEFlux' gives mode 'oneflux' and other fills. Old projects
+    # with the 'sym_mean' checkbox restore False -> 'oneflux', True -> 'diive'.
+    from PySide6.QtWidgets import QApplication, QTableWidget
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+    df = example_year.loc["2021-06":"2021-06"].copy()
+    target = "NEE_CUT_REF_orig"
+    tab = MdsGapFillingTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._set_target(target)
+    for key, col in (("swin", "Rg_f"), ("ta", "Tair_f"), ("vpd", "VPD_f")):
+        tab._combos[key].setCurrentText(col)
+
+    assert tab.mode.currentText() == "diive (Vekuri 2023 mean)"
+    assert tab._method_kwargs()["mode"] == "diive"
+    assert "sym_mean" not in tab._method_kwargs()
+    code = tab._python_code()
+    compile(code, "<gen>", "exec")
+    assert "mode='diive'," in code
+
+    work = df[[target, "Rg_f", "Tair_f", "VPD_f"]].copy()
+    diive_payload = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                         tab._method_kwargs())
+    assert diive_payload[3].mode == "diive"
+    tab._on_done(diive_payload)
+    QApplication.processEvents()
+    # The Results configuration table lists the mode.
+    cells = {(t.item(r, 0).text(), t.item(r, 1).text())
+             for t in tab.results_panel.findChildren(QTableWidget)
+             if t.columnCount() == 2
+             for r in range(t.rowCount()) if t.item(r, 0) and t.item(r, 1)}
+    assert ("mode", "diive") in cells
+
+    tab.mode.setCurrentText("ONEFlux (bit for bit)")
+    assert tab._method_kwargs()["mode"] == "oneflux"
+    assert "mode='oneflux'," in tab._python_code()
+    oneflux_payload = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                           tab._method_kwargs())
+    assert oneflux_payload[3].mode == "oneflux"
+    # Same gaps filled, different daytime values.
+    assert oneflux_payload[2].notna().sum() == diive_payload[2].notna().sum()
+    assert (oneflux_payload[2] - diive_payload[2]).abs().max() > 0
+
+    tab.mode.setCurrentText("REddyProc")
+    assert tab._method_kwargs()["mode"] == "reddyproc"
+    assert "mode='reddyproc'," in tab._python_code()
+    reddyproc_payload = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                             tab._method_kwargs())
+    assert reddyproc_payload[3].mode == "reddyproc"
+    # REddyProc's wider look-up windows move some fills (no gap here is > 60 days).
+    assert reddyproc_payload[2].notna().sum() == oneflux_payload[2].notna().sum()
+    assert (reddyproc_payload[2] - oneflux_payload[2]).abs().max() > 0
+    tab.mode.setCurrentText("ONEFlux (bit for bit)")
+
+    # Save/restore stores the mode value (not the label) and round-trips it.
+    state = tab.save_state()
+    assert state["controls"]["mode"] == "oneflux"
+    tab2 = MdsGapFillingTab(); tab2.widget(); tab2.on_data_loaded(df)
+    assert tab2._method_kwargs()["mode"] == "diive"
+    tab2.restore_state(state)
+    assert tab2._method_kwargs()["mode"] == "oneflux"
+
+    # Old projects: no 'mode', a 'sym_mean' checkbox value instead.
+    old_controls = {k: v for k, v in state["controls"].items() if k != "mode"}
+    tab3 = MdsGapFillingTab(); tab3.widget(); tab3.on_data_loaded(df)
+    tab3.restore_state({"target": target,
+                        "controls": {**old_controls, "sym_mean": False}})
+    assert tab3._method_kwargs()["mode"] == "oneflux"
+    tab3.restore_state({"target": target,
+                        "controls": {**old_controls, "sym_mean": True}})
+    assert tab3._method_kwargs()["mode"] == "diive"
+
+
+_PART_VARIANTS = (("nighttime", "oneflux", "NT_OF"), ("nighttime", "reddyproc", "NT_RP"),
+                  ("daytime", "oneflux", "DT_OF"), ("daytime", "reddyproc", "DT_RP"))
+
+#: The example columns each partitioning input maps to.
+_PART_COLS = {"nee": "NEE_CUT_REF_orig", "nee_f": "NEE_CUT_REF_f", "ta": "Tair_orig",
+              "ta_f": "Tair_f", "sw_in": "Rg_orig", "sw_in_f": "Rg_f", "vpd": "VPD_f"}
+
+
+@pytest.fixture(scope="module")
+def partitioning_frames():
+    # The nighttime methods need a year to constrain E0, the daytime fits run on
+    # one summer month (as in tests/test_partitioning_nee.py).
+    df = dv.load_exampledata_parquet()
+    year = df.loc[df.index.year == 2017].copy()
+    return {"nighttime": year, "daytime": year.loc["2017-06-01":"2017-06-30"].copy()}
+
+
+def _partitioning_tab(method, mode, df):
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    tab = PartitioningNEETab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    set_combo_value(tab.method_combo, method)
+    set_combo_value(tab.mode_combo, mode)
+    for key, col in _PART_COLS.items():
+        tab.picker.combos()[key].setCurrentText(col)
+    return tab
+
+
+def _captured_run(tab):
+    """The arguments `_run` hands the worker (the runner is not started)."""
+    calls = []
+    tab._runner.run = lambda fn, *args: calls.append(args)
+    tab._run()
+    assert len(calls) == 1, tab.status.text()
+    return calls[0]
+
+
+def test_partitioning_tab_matches_library_for_all_variants(app, partitioning_frames):
+    # One tab, two switches: every method/mode gives exactly the library's
+    # PartitioningNEE result, shows only the inputs that variant needs, and its
+    # Copy Python snippet names method= and mode=, compiles and reproduces it.
+    from diive.core.metadata import ATTRS_KEY
+    from diive.flux.partitioning import (
+        PartitioningNEE,
+        partitioning_inputs,
+        partitioning_optional_inputs,
+    )
+    from diive.gui import site
+
+    snap = site.manager.as_dict()
+    try:
+        site.manager.update(name="CH-DAV", latitude=46.815, longitude=9.855,
+                            elevation=1639.0, utc_offset=1)
+        columns = {}
+        for method, mode, suffix in _PART_VARIANTS:
+            df = partitioning_frames[method]
+            tab = _partitioning_tab(method, mode, df)
+            assert (tab.method, tab.mode) == (method, mode)
+            assert tab.hero._chip.text() == suffix
+
+            # Pickers: NEE plus the variant's series inputs and its optional
+            # ones (DT_OF's gap-filled NEE, DT_RP's NEE SD).
+            needed = partitioning_inputs(method, mode)
+            optional = partitioning_optional_inputs(method, mode)
+            expected = {"nee", *optional,
+                        *(n for n in needed if n not in ("lat", "lon", "utc_offset"))}
+            shown = {k for k, row in tab.picker._rows.items()
+                     if tab.picker._form.isRowVisible(row)}
+            assert shown == expected, suffix
+            assert tab._site_form.isRowVisible(tab.lat) == ("lat" in needed)
+            assert tab._site_form.isRowVisible(tab.lon) == ("lon" in needed)
+            assert tab._site_form.isRowVisible(tab.utc) == ("utc_offset" in needed)
+            assert tab._site_box.isHidden() == (suffix == "DT_OF")
+            assert tab._opt_box.isHidden() == (method == "nighttime")
+
+            args = _captured_run(tab)
+            assert args[4] == {"method": method, "mode": mode, "suffix": suffix,
+                               "operation": f"NEE partitioning ({suffix})"}
+            payload = tab._compute_payload(*args)
+
+            lib_inputs = {n: df[_PART_COLS[n]] for n in (*needed, *optional)
+                          if n in _PART_COLS}
+            lib_coords = {k: v for k, v in dict(lat=46.815, lon=9.855,
+                                                utc_offset=1).items() if k in needed}
+            expected_df = PartitioningNEE(df["NEE_CUT_REF_orig"], method=method,
+                                          mode=mode, verbose=0, **lib_inputs,
+                                          **lib_coords).run().results
+            gpp, reco = f"GPP_{suffix}", f"RECO_{suffix}"
+            assert gpp in payload and reco in payload
+            assert payload[gpp].notna().sum() > 0
+            pd.testing.assert_series_equal(payload[gpp], expected_df[gpp], check_exact=True)
+            pd.testing.assert_frame_equal(payload, expected_df, check_exact=True)
+            prov = payload.attrs[ATTRS_KEY][gpp]
+            assert prov["parent"] == "NEE_CUT_REF_orig"
+            assert prov["tags"] == ["partitioning", suffix.lower()]
+            columns[suffix] = set(payload.columns)
+
+            # Copy Python: method= and mode=, compiles, runs to the same result.
+            code = tab._python_code()
+            assert f"method={method!r}," in code and f"mode={mode!r}," in code
+            assert "dv.flux.partition_nee(" in code
+            ns = {"df": df}
+            exec(compile(code, "<partitioning snippet>", "exec"), ns)
+            pd.testing.assert_frame_equal(ns["results"], expected_df, check_exact=True)
+
+            # The done handler reports this variant's columns.
+            tab._on_done(payload)
+            assert f"{suffix} columns" in tab.status.text()
+            assert tab.add_btn.isEnabled()
+
+        # Switching the mode switches the result columns.
+        assert "GPP_NT_RP" not in columns["NT_OF"] and "GPP_NT_OF" not in columns["NT_RP"]
+        assert "GPP_DT_RP" not in columns["DT_OF"] and "GPP_DT_OF" not in columns["DT_RP"]
+    finally:
+        site.manager.load_dict(snap)
+
+
+def test_partitioning_tab_gapfilled_nee_is_optional_for_daytime_oneflux(app, partitioning_frames):
+    # Daytime ONEFlux takes the gap-filled NEE only when given (L215): its
+    # picker offers "(none)" and says optional, a "(none)" pick runs and copies
+    # without nee_f, and the nighttime method needs the column again.
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.column_picker import NONE_ITEM
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+
+    df = partitioning_frames["daytime"]
+    tab = _partitioning_tab("daytime", "oneflux", df)
+    combo = tab.picker.combos()["nee_f"]
+    label = tab.picker._form.labelForField(tab.picker._rows["nee_f"])
+    assert combo.findText(NONE_ITEM) == 0
+    assert "optional" in label.text()
+    assert combo.currentText() == "NEE_CUT_REF_f"  # the pick stays
+
+    combo.setCurrentText(NONE_ITEM)
+    series_map = _captured_run(tab)[0]
+    assert "nee_f" not in series_map and "nee" in series_map
+    assert "nee_f=" not in tab._python_code()
+    combo.setCurrentText("NEE_CUT_REF_f")
+    assert _captured_run(tab)[0]["nee_f"].name == "NEE_CUT_REF_f"
+    assert "nee_f=df['NEE_CUT_REF_f']," in tab._python_code()
+
+    # Nighttime needs it: "(none)" goes away and the column a fresh nighttime
+    # tab picks is picked again.
+    fresh = PartitioningNEETab()
+    fresh.widget()
+    fresh.on_data_loaded(df)  # nighttime by default: no "(none)" entry
+    fresh_pick = fresh.picker.combos()["nee_f"].currentText()
+    assert fresh.picker.combos()["nee_f"].findText(NONE_ITEM) == -1
+    assert fresh_pick in df.columns
+    combo.setCurrentText(NONE_ITEM)
+    set_combo_value(tab.method_combo, "nighttime")
+    assert combo.findText(NONE_ITEM) == -1
+    assert combo.currentText() == fresh_pick
+    assert "optional" not in label.text()
+
+
+def test_partitioning_tab_switch_keeps_picks_and_defaults_to_oneflux(app, partitioning_frames):
+    # ONEFlux (the ICOS processing) is the default mode, nighttime the default
+    # method. A pick made for one variant survives a switch away and back, and
+    # a result on screen keeps its own columns when the variant changes.
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+
+    df = partitioning_frames["daytime"]
+    tab = PartitioningNEETab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    assert (tab.method, tab.mode) == ("nighttime", "oneflux")
+    assert tab.mode_combo.currentText() == "ONEFlux (ICOS, default)"
+
+    set_combo_value(tab.method_combo, "daytime")
+    tab.picker.combos()["vpd"].setCurrentText("VPD_f")
+    set_combo_value(tab.method_combo, "nighttime")
+    assert not tab.picker._form.isRowVisible(tab.picker._rows["vpd"])
+    set_combo_value(tab.method_combo, "daytime")
+    assert tab.picker.picks()["vpd"] == "VPD_f"
+
+    # Round trip: a saved state stores the values, not the labels.
+    set_combo_value(tab.mode_combo, "reddyproc")
+    state = tab.save_state()
+    assert (state["method"], state["mode"]) == ("daytime", "reddyproc")
+    tab2 = PartitioningNEETab()
+    tab2.widget()
+    tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert (tab2.method, tab2.mode) == ("daytime", "reddyproc")
+    assert tab2.picker.picks()["vpd"] == "VPD_f"
+
+
+@pytest.mark.parametrize("old_label, method, mode, controls, expected_picks", [
+    ("Nighttime partitioning (ONEFlux)", "nighttime", "oneflux",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_orig", "sw_in": "Rg_orig",
+      "nee_f": "NEE_CUT_REF_f", "ta_f": "Tair_f", "lat": 46.5},
+     {"nee": "NEE_CUT_REF_orig", "nee_f": "NEE_CUT_REF_f", "ta_f": "Tair_f"}),
+    ("Nighttime partitioning (REddyProc)", "nighttime", "reddyproc",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_orig", "sw_in": "Rg_orig",
+      "nee_f": "NEE_CUT_REF_f", "ta_f": "Tair_f", "lat": 46.5, "lon": 9.5},
+     {"nee": "NEE_CUT_REF_orig", "nee_f": "NEE_CUT_REF_f"}),
+    ("Daytime partitioning (ONEFlux)", "daytime", "oneflux",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_orig", "sw_in": "Rg_orig",
+      "ta_f": "Tair_f", "sw_in_f": "Rg_f", "vpd": "VPD_f", "vpd_kpa": False},
+     # The old tab had no gap-filled NEE: it stays unset, not guessed (L325).
+     {"nee": "NEE_CUT_REF_orig", "sw_in_f": "Rg_f", "vpd": "VPD_f",
+      "nee_f": "(none)"}),
+    # The old daytime REddyProc tab stored its gap-filled drivers as ta / sw_in.
+    ("Daytime partitioning (REddyProc)", "daytime", "reddyproc",
+     {"nee": "NEE_CUT_REF_orig", "ta": "Tair_f", "vpd": "VPD_f", "sw_in": "Rg_f",
+      "nee_sd": "(none)", "lat": 46.5, "lon": 9.5, "vpd_kpa": False},
+     {"nee": "NEE_CUT_REF_orig", "ta_f": "Tair_f", "sw_in_f": "Rg_f",
+      "vpd": "VPD_f", "nee_sd": "(none)"}),
+])
+def test_project_restores_old_partitioning_tab_as_nee_partitioning(
+        window, old_label, method, mode, controls, expected_picks):
+    # Projects saved with one of the four old partitioning tabs reopen as the
+    # one NEE partitioning tab, preset to the old variant, with its settings.
+    from diive.gui import site
+    snap = site.manager.as_dict()
+    try:
+        site.manager.configured = False   # lat/lon must come from the project
+        window._close_all_menu_tabs()
+        window._restore_tabs([{"label": old_label, "title": f"{old_label} 1",
+                               "pinned": False, "state": {"controls": controls}}])
+        assert [t._menu_label for t in window._menu_tab_list] == ["NEE partitioning"]
+        tab = window._menu_tab_list[0]
+        assert _tabs(window)[-1] == "NEE partitioning 1"
+        assert (tab.method, tab.mode) == (method, mode)
+        picks = tab.picker.picks()
+        for key, col in expected_picks.items():
+            assert picks[key] == col, key
+        if "lat" in controls:
+            assert tab.lat.value() == controls["lat"]
+        if "lon" in controls:
+            assert tab.lon.value() == controls["lon"]
+        if "vpd_kpa" in controls:
+            assert tab.vpd_kpa_cb.isChecked() is controls["vpd_kpa"]
+        # No "saved selection no longer available" warning for hidden inputs.
+        assert "no longer available" not in tab.status.text()
+        if (method, mode) == ("daytime", "oneflux"):
+            # Neither the run nor Copy Python passes a gap-filled NEE.
+            code = tab._python_code()
+            assert code is not None and "nee_f" not in code
+            calls = []
+            tab._runner.run = lambda fn, *args: calls.append(args)
+            tab._run()
+            assert len(calls) == 1
+            series_map = calls[0][0]
+            assert "nee_f" not in series_map
+            assert series_map["nee"].name == "NEE_CUT_REF_orig"
+            tab._set_running(False)
+    finally:
+        site.manager.load_dict(snap)
+
+
+@pytest.mark.parametrize("nee_f", ["NEE_CUT_REF_f", "(none)"])
+def test_project_keeps_saved_gapfilled_nee_of_nee_partitioning_tab(window, nee_f):
+    # A tab saved by the NEE partitioning tab itself keeps its gap-filled NEE
+    # pick (or its "(none)"): only old daytime ONEFlux tabs get "(none)".
+    window._close_all_menu_tabs()
+    window._restore_tabs([{
+        "label": "NEE partitioning", "title": "NEE partitioning 1",
+        "pinned": False,
+        "state": {"method": "daytime", "mode": "oneflux",
+                  "controls": {"nee": "NEE_CUT_REF_orig", "nee_f": nee_f,
+                               "sw_in_f": "Rg_f", "vpd": "VPD_f"}}}])
+    tab = window._menu_tab_list[0]
+    assert (tab.method, tab.mode) == ("daytime", "oneflux")
+    assert tab.picker.picks()["nee_f"] == nee_f
+    code = tab._python_code()
+    assert code is not None
+    assert ("nee_f" in code) is (nee_f != "(none)")
+
+
+def test_old_partitioning_menu_labels_are_gone(app):
+    # The menu has one partitioning entry; the old labels only migrate projects.
+    from diive.gui.app import _MERGED_MENU_TABS
+    from diive.gui.registry import MENU_TAB_CLASSES, MENU_TABS
+    assert "NEE partitioning" in MENU_TABS["Flux"]
+    for old in _MERGED_MENU_TABS:
+        assert old not in MENU_TAB_CLASSES
+        assert _MERGED_MENU_TABS[old][0] == "NEE partitioning"
+
+
 def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
     # The lat/lon/UTC spin boxes default to 0/0/0 and _seed_site leaves them there
     # when the site is unset, so an unguarded run would partition at (0, 0) on UTC
-    # and return plausible-looking GPP/RECO. Every coordinate-consuming tab must
-    # refuse, the way the outlier and correction tabs already do.
+    # and return plausible-looking GPP/RECO. Every coordinate-consuming variant
+    # must refuse, the way the outlier and correction tabs already do.
     from diive.gui import site
-    from diive.gui.tabs.partitioning_daytime_oneflux import DaytimePartitioningOneFluxTab
-    from diive.gui.tabs.partitioning_daytime_reddyproc import DaytimePartitioningReddyProcTab
-    from diive.gui.tabs.partitioning_nighttime_oneflux import NighttimePartitioningOneFluxTab
-    from diive.gui.tabs.partitioning_nighttime_reddyproc import NighttimePartitioningReddyProcTab
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
 
     # Set the flag directly (as the meteo-screening test above does): load_dict({})
     # early-returns on an empty dict, so it would silently leave a site configured
@@ -5623,28 +7278,195 @@ def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
         site.manager.configured = False
         assert not site.manager.configured
 
-        needs = (NighttimePartitioningOneFluxTab, NighttimePartitioningReddyProcTab,
-                 DaytimePartitioningReddyProcTab)
-        for cls in needs:
-            tab = cls()
-            tab.widget()
-            tab.on_data_loaded(example_year)
-            assert tab.needs_coords, f"{cls.__name__} should declare a coordinate need"
+        tab = PartitioningNEETab()
+        tab.widget()
+        tab.on_data_loaded(example_year)
+        for method, mode, suffix in _PART_VARIANTS:
+            set_combo_value(tab.method_combo, method)
+            set_combo_value(tab.mode_combo, mode)
+            tab.status.setText("")
+            if suffix == "DT_OF":
+                # Daytime ONEFlux splits on measured Rg, not solar geometry: no
+                # coords, no guard.
+                assert not tab.needs_coords
+                assert not tab._coords_missing()
+                continue
+            assert tab.needs_coords, f"{suffix} should declare a coordinate need"
             tab._run()
             QApplication.processEvents()
-            assert not tab._runner.is_running, f"{cls.__name__} started a run"
+            assert not tab._runner.is_running, f"{suffix} started a run"
             assert "Project settings" in tab.status.text()
             # The snippet would otherwise carry lat=0.0, lon=0.0.
             assert tab._python_code() is None
-
-        # Daytime ONEFlux splits on measured Rg, not solar geometry: no coords, no guard.
-        tab = DaytimePartitioningOneFluxTab()
-        tab.widget()
-        tab.on_data_loaded(example_year)
-        assert not tab.needs_coords
-        assert not tab._coords_missing()
     finally:
         site.manager.configured = saved
+
+
+def test_partitioning_tab_uses_project_utc_offset(app):
+    # The offset is read-only and comes from Project settings: the tab shows it
+    # (or a warning when unset), runs and generates code with it, ignores an
+    # offset saved by an older project, and blocks adding a result computed
+    # before the settings changed.
+    import numpy as np
+    from diive.gui import site
+    from diive.gui.tabs.partitioning import PartitioningNEETab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    from diive.gui.widgets.project_offset import ProjectUtcOffset
+
+    idx = pd.date_range("2024-06-01", periods=48 * 5, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    cols = {"nee": "NEE_orig", "ta": "TA_orig", "sw_in": "SW_IN_orig",
+            "nee_f": "NEE_f", "ta_f": "TA_f"}
+    df = pd.DataFrame({c: np.arange(len(idx), dtype=float) for c in cols.values()},
+                      index=idx)
+    snap = site.manager.as_dict()
+    try:
+        site.manager.configured = False
+        tab = PartitioningNEETab()
+        tab.widget()
+        set_combo_value(tab.mode_combo, "reddyproc")   # nighttime REddyProc
+        assert isinstance(tab.utc, ProjectUtcOffset)
+        assert tab.utc.text() == "not set" and not tab.utc.warning_mark.isHidden()
+
+        site.manager.update(name="X", latitude=46.8, longitude=9.8, elevation=0.0,
+                            utc_offset=2)
+        assert tab.utc.text() == "UTC+02:00" and tab.utc.warning_mark.isHidden()
+        tab.on_data_loaded(df)
+        for key, col in cols.items():
+            tab.picker.combos()[key].setCurrentText(col)
+        args = _captured_run(tab)
+        assert args[1]["utc_offset"] == 2                  # coords -> library class
+        assert "utc_offset=2," in tab._python_code()
+
+        state = tab.save_state()
+        assert "utc" not in state["controls"]
+        state["controls"]["utc"] = 5                      # an older project's offset
+        tab.restore_state(state)
+        assert tab.utc.value() == 2
+
+        tab._results = pd.DataFrame({"RECO_NT_RP": [1.0]})
+        tab.add_btn.setEnabled(True)
+        site.manager.update(name="X", latitude=46.8, longitude=9.8, elevation=0.0,
+                            utc_offset=1)
+        assert not tab.add_btn.isEnabled()
+        assert "Project settings changed" in tab.status.text()
+    finally:
+        site.manager.load_dict(snap)
+
+
+def test_potrad_tab_uses_project_utc_offset(app):
+    # SW_IN_POT uses the project offset; changing it stales the result.
+    from diive.gui import site
+    from diive.gui.tabs.derived_potrad import PotradTab
+
+    idx = pd.date_range("2024-06-01", periods=48 * 3, freq="30min",
+                        name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame({"TA": 15.0}, index=idx)
+    snap = site.manager.as_dict()
+    try:
+        site.manager.update(name="X", latitude=46.8, longitude=9.8559, elevation=0.0,
+                            utc_offset=2)
+        tab = PotradTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        assert tab.utc.text() == "UTC+02:00"
+        tab._calculate()
+        expected = dv.variables.potrad(df.index, lat=46.8, lon=9.8559, utc_offset=2)
+        pd.testing.assert_series_equal(tab._result, expected)
+        assert "utc_offset=2" in tab._python_code()
+
+        site.manager.update(name="X", latitude=46.8, longitude=9.8559, elevation=0.0,
+                            utc_offset=1)
+        assert tab._result is None and not tab.add_btn.isEnabled()
+    finally:
+        site.manager.load_dict(snap)
+
+
+def test_flux_chain_tab_uses_project_settings(app):
+    # The site coordinates and the UTC offset come from Project settings (L318):
+    # init_flux_data and the generated script get the project's values, values
+    # saved by an older project are ignored, a settings change after a run
+    # blocks adding its results, and an unset site refuses to run or copy.
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    from diive.gui import site
+    from diive.gui.tabs.fluxchain import FluxChainTab
+
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07-01":"2024-07-03"]
+    snap = site.manager.as_dict()
+    try:
+        site.manager.update(name="FI-Hyy", latitude=61.85, longitude=24.29,
+                            elevation=181.0, utc_offset=2)
+        tab = FluxChainTab()
+        tab.widget()
+        tab.on_data_loaded(df)
+        # Read-only mirrors showing the project's site.
+        assert tab.site_lat.value() == 61.85 and not tab.site_lat.isEnabled()
+        assert tab.site_lon.value() == 24.29 and not tab.site_lon.isEnabled()
+        assert tab.utc_offset.text() == "UTC+02:00"
+        ik = tab._init_kwargs()
+        assert (ik["site_lat"], ik["site_lon"], ik["utc_offset"]) == (61.85, 24.29, 2)
+        code = tab._code()
+        assert "site_lat=61.85," in code and "site_lon=24.29," in code
+        assert "utc_offset=2," in code
+        assert "47.42" not in code and "8.49" not in code
+
+        # A project saved before the fix carries its own coordinates and offset:
+        # it opens, and Project settings win.
+        state = tab.save_state()
+        assert not {"site_lat", "site_lon", "utc_offset"} & set(state["controls"])
+        state["controls"].update(site_lat=47.42, site_lon=8.49, utc_offset=5)
+        tab.restore_state(state)
+        ik = tab._init_kwargs()
+        assert (ik["site_lat"], ik["site_lon"], ik["utc_offset"]) == (61.85, 24.29, 2)
+        assert tab.site_lat.value() == 61.85
+
+        def run(idx):
+            plan = tab._level_plan(idx)
+            assert plan is not None
+            tab._level_worker(plan, tab._data, tab._df)
+            QApplication.processEvents()
+
+        run(0)
+        run(1)
+        meta = tab._data.meta
+        assert (meta.site_lat, meta.site_lon, meta.utc_offset) == (61.85, 24.29, 2)
+        assert tab._level_add_btns[1].isEnabled()
+
+        # Coordinates edited in Project settings: L2 was initialized with the old
+        # ones, so it can no longer be added.
+        site.manager.update(name="FI-Hyy", latitude=61.8475, longitude=24.29,
+                            elevation=181.0, utc_offset=2)
+        assert tab.site_lat.value() == 61.8475
+        assert not tab._level_add_btns[1].isEnabled()
+        assert "Project settings changed" in tab.summary.toPlainText()
+        # Back to the values the chain ran with: adding is allowed again.
+        site.manager.update(name="FI-Hyy", latitude=61.85, longitude=24.29,
+                            elevation=181.0, utc_offset=2)
+        assert tab._level_add_btns[1].isEnabled()
+        # Only the offset changes: adding is blocked too.
+        site.manager.update(name="FI-Hyy", latitude=61.85, longitude=24.29,
+                            elevation=181.0, utc_offset=3)
+        assert not tab._level_add_btns[1].isEnabled()
+        assert "Project settings changed" in tab.summary.toPlainText()
+        emitted = []
+        tab.featuresCreated.connect(emitted.append)
+        tab._add_level(1)
+        assert emitted == []
+
+        # No site configured: no initialization, no run-all, no script.
+        site.manager.configured = False
+        site.manager.changed.emit()
+        assert "No site configured" in tab.site_note.text()
+        started = []
+        tab._level_worker = lambda plan, base, df: started.append(plan)  # no real run
+        tab._worker = lambda *args: started.append(args)
+        for attempt in (lambda: tab._run_level(0), tab._run, tab._code):
+            tab.summary.clear()
+            assert attempt() is None
+            assert "no coordinates are configured" in tab.summary.toPlainText()
+        assert started == [] and not tab._running
+    finally:
+        site.manager.load_dict(snap)
 
 
 def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):
@@ -6215,3 +8037,281 @@ def test_glyphs_unchanged_at_device_pixel_ratio_one(app, monkeypatch):
         icon = fn()
         assert icon.availableSizes() == [QSize(16, 16)], name
         assert _opaque_ink(_icon_image(icon))[0] > 0, name   # it really drew ink
+
+
+# --- unsaved changes (L324) and rename after delete (L337) -------------------
+
+def _answer_save_prompt(monkeypatch, answer):
+    """Answer the "Save changes?" question with `answer`; returns the list of
+    questions asked."""
+    from diive.gui import app as appmod
+    asked = []
+
+    def _ask(parent, question):
+        asked.append(question)
+        return answer
+
+    monkeypatch.setattr(appmod, "ask_save_changes", _ask)
+    return asked
+
+
+def _make_change(window):
+    """A change a project save keeps: a user tag on the first variable."""
+    from diive.gui import metadata_store
+    metadata_store.manager.add_user_tag(str(window._data.columns[0]), "keep")
+
+
+def test_no_save_question_when_nothing_changed(window, monkeypatch):
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    QApplication.processEvents()  # deferred first renders must not count
+    assert not window._has_unsaved_changes()
+    assert not window.windowTitle().startswith("*")
+    window._load_example()
+    assert window.close()
+    assert asked == []
+
+
+def test_change_marks_title_and_save_clears_it(window, tmp_path):
+    _make_change(window)
+    assert window._has_unsaved_changes()
+    assert window.windowTitle().startswith("*")
+    assert window._write_project(tmp_path / "P.diive", "P")
+    assert not window._has_unsaved_changes()
+    assert not window.windowTitle().startswith("*")
+
+
+def test_saved_note_counts_as_a_change(window):
+    """The explorer saves a note without a signal: still an unsaved change."""
+    from diive.gui import metadata_store
+    metadata_store.manager.store.set_description(str(window._data.columns[0]), "n")
+    assert window._has_unsaved_changes()
+
+
+def test_close_with_unsaved_changes_cancel_keeps_window_open(window, monkeypatch):
+    from diive.gui import app as appmod
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    assert not window.close()
+    assert window.isVisible()
+    assert len(asked) == 1 and "closing" in asked[0]
+    # The window still reacts to edits: its subscriptions were kept.
+    window._modified = False
+    _make_change(window)
+    assert window._modified
+    monkeypatch.setattr(appmod, "ask_save_changes", lambda *a: "discard")
+
+
+def test_close_with_unsaved_changes_dont_save_closes(window, tmp_path, monkeypatch):
+    from diive.core.io import project as projmod
+    folder = tmp_path / "P.diive"
+    window._project_dir, window._project_name = folder, "P"
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "discard")
+    assert window.close()
+    assert len(asked) == 1
+    assert not projmod.is_project(folder)  # nothing written
+
+
+def test_close_with_save_writes_the_project_then_closes(window, tmp_path, monkeypatch):
+    from diive.core.io import project as projmod
+    from diive.core.io.project import load_project
+    folder = tmp_path / "P.diive"
+    window._project_dir, window._project_name = folder, "P"
+    _make_change(window)
+    var = str(window._data.columns[0])
+    _answer_save_prompt(monkeypatch, "save")
+    assert window.close()
+    assert projmod.is_project(folder)
+    assert "keep" in load_project(folder).metadata.get(var).tags
+    assert not window._has_unsaved_changes()
+
+
+def test_close_with_save_aborts_when_save_as_is_cancelled(window, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+    from diive.gui import app as appmod
+    from diive.gui.widgets import save_project_dialog
+
+    class _Dialog:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def exec(self):
+            return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(save_project_dialog, "SaveProjectDialog", _Dialog)
+    assert window._project_dir is None  # the example data: Save goes to Save as
+    _make_change(window)
+    _answer_save_prompt(monkeypatch, "save")
+    assert not window.close()
+    assert window.isVisible()
+    monkeypatch.setattr(appmod, "ask_save_changes", lambda *a: "discard")
+
+
+def test_close_with_save_aborts_when_the_save_fails(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    from diive.core.io import project as projmod
+    from diive.gui import app as appmod
+
+    def _fail(folder, project):
+        raise OSError("disk full")
+
+    errors = []
+    monkeypatch.setattr(projmod, "save_project", _fail)
+    monkeypatch.setattr(QMessageBox, "critical",
+                        staticmethod(lambda *a, **k: errors.append(a[1])))
+    window._project_dir, window._project_name = tmp_path / "P.diive", "P"
+    _make_change(window)
+    _answer_save_prompt(monkeypatch, "save")
+    assert not window.close()
+    assert errors == ["Save failed"]
+    assert window._has_unsaved_changes()
+    monkeypatch.setattr(appmod, "ask_save_changes", lambda *a: "discard")
+
+
+def test_edit_during_a_save_keeps_the_window_modified(window, tmp_path, monkeypatch):
+    from diive.core.io import project as projmod
+    gate = threading.Event()
+    real_save = projmod.save_project
+
+    def gated_save(folder, project):
+        gate.wait(10)
+        return real_save(folder, project)
+
+    monkeypatch.setattr(projmod, "save_project", gated_save)
+    window._project_dir, window._project_name = tmp_path / "P.diive", "P"
+    window._save_project()
+    try:
+        _make_change(window)  # after the snapshot, before the write is done
+    finally:
+        gate.set()
+    window._wait_for_io()
+    assert window._has_unsaved_changes()
+
+
+def test_load_example_asks_before_discarding_changes(window, monkeypatch):
+    before = window._full_data
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    window._load_example()
+    assert window._full_data is before
+    assert len(asked) == 1 and "example" in asked[0]
+    _answer_save_prompt(monkeypatch, "discard")
+    window._load_example()
+    assert window._full_data is not before
+    assert not window._has_unsaved_changes()
+
+
+def test_open_project_asks_before_discarding_changes(window, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    folder = tmp_path / "Other.diive"
+    assert window._write_project(folder, "Other")
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory",
+                        staticmethod(lambda *a, **k: str(folder)))
+    before = window._full_data
+    _make_change(window)
+
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    window._open_project()
+    assert not window._io.is_running  # nothing started
+    assert window._full_data is before and window._project_dir is None
+    assert len(asked) == 1 and "project" in asked[0]
+
+    _answer_save_prompt(monkeypatch, "discard")
+    window._open_project()
+    window._wait_for_io()
+    QApplication.processEvents()
+    assert window._project_dir == folder
+    assert not window._has_unsaved_changes()
+    assert not window.windowTitle().startswith("*")
+
+
+def test_open_data_file_asks_only_when_replacing(window, monkeypatch, example_year):
+    from PySide6.QtWidgets import QDialog
+    from diive.gui import app as appmod
+
+    class _Dialog:
+        load_mode = "replace"
+
+        def __init__(self, *args, **kwargs):
+            self.dataframe = example_year.copy()
+            self.source_name = "other.parquet"
+            self.load_mode = _Dialog.load_mode
+
+        def exec(self):
+            return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(appmod, "OpenDataDialog", _Dialog)
+    before = window._full_data
+    _make_change(window)
+    asked = _answer_save_prompt(monkeypatch, "cancel")
+    window._open_file()
+    assert window._full_data is before and len(asked) == 1
+
+    _Dialog.load_mode = "add"  # merging keeps the current work: no question
+    window._open_file()
+    assert len(asked) == 1
+
+    _Dialog.load_mode = "replace"
+    _answer_save_prompt(monkeypatch, "discard")
+    window._open_file()
+    assert window._source == "other.parquet"
+    assert not window._has_unsaved_changes()
+
+
+def test_rename_to_the_name_of_a_deleted_variable(window, monkeypatch):
+    """L337: the Metadata explorer must not bring a deleted variable's record
+    back, and a rename onto that name must reach the data and every tab."""
+    from PySide6.QtWidgets import QInputDialog, QMessageBox
+    from diive.gui import metadata_store
+    store = metadata_store.manager.store
+
+    x, y = str(window._data.columns[0]), str(window._data.columns[1])
+    window._open_menu_tab("Heatmap date/time")
+    window._open_menu_tab("Metadata explorer")
+    explorer = window._menu_tab_list[-1]
+    explorer.select_variable(x)
+    explorer._desc_edit.setPlainText("a note on x")  # typed, as the user would
+    explorer._save_description()
+    assert store.peek(x).description == "a note on x"
+
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a, **k: QMessageBox.StandardButton.Yes)
+    window._delete_variable(x)
+    QApplication.processEvents()
+    assert x not in window._full_data.columns
+    assert store.peek(x) is None  # the explorer rebuild did not re-create it
+
+    monkeypatch.setattr(QInputDialog, "getText",
+                        staticmethod(lambda *a, **k: (x, True)))
+    window._rename_one_variable(y)
+    QApplication.processEvents()
+    assert x in window._full_data.columns and y not in window._full_data.columns
+    assert store.peek(x) is not None and store.peek(y) is None
+    assert store.peek(x).description == ""  # not the deleted variable's note
+    for tab in window._tabs:
+        if not hasattr(tab, "varpanel"):
+            continue
+        window._tabwidget.setCurrentWidget(tab.widget())  # catch up if stale
+        QApplication.processEvents()
+        names = tab.varpanel.names()
+        assert x in names and y not in names, tab.title
+
+
+def test_rename_refused_by_the_store_leaves_the_data_unchanged(window, monkeypatch):
+    """If the metadata store refuses a rename, the data keep their names too,
+    and the user is told."""
+    from PySide6.QtWidgets import QMessageBox
+    from diive.gui import metadata_store
+    x = str(window._data.columns[0])
+
+    def _refuse(mapping):
+        raise ValueError("refused")
+
+    warnings = []
+    monkeypatch.setattr(metadata_store.manager.store, "rename", _refuse)
+    monkeypatch.setattr(QMessageBox, "warning",
+                        staticmethod(lambda *a, **k: warnings.append(a[2])))
+    before = window._full_data
+    window._rename_variables({x: "NEW_NAME"})
+    assert window._full_data is before
+    assert len(warnings) == 1 and "refused" in warnings[0]

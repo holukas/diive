@@ -17,7 +17,7 @@ class TestTimeLagAnalysis(unittest.TestCase):
     def test_few_distinct_lags_survive_default_fringe_trimming(self):
         """Default fringe trimming must not empty the histogram.
 
-        Six distinct lag values give five bins, far fewer than the 15 bins the
+        Six distinct lag values give six bins, far fewer than the 15 bins the
         default ignore_fringe_bins=[5, 10] removes.
         """
         from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
@@ -26,25 +26,44 @@ class TestTimeLagAnalysis(unittest.TestCase):
 
         analysis = TimeLagAnalysis(df=df)
         res = analysis.analyze_gas('CO2')
-        self.assertEqual(len(res['histogram_results']), 5)
-        self.assertIn(res['peak'], [0.30, 0.35, 0.40, 0.45, 0.50])
+        self.assertEqual(len(res['histogram_results']), 6)
+        self.assertIn(res['peak'], [0.30, 0.35, 0.40, 0.45, 0.50, 0.55])
         self.assertLessEqual(res['peak_min'], res['peak_max'])
 
         # The batch helper returns the gas instead of aborting
         batch = TimeLagAnalysis(df=df).analyze_all_gases()
         self.assertEqual(list(batch.keys()), ['CO2'])
 
-    def test_single_distinct_lag_is_reported_not_a_bare_indexerror(self):
-        """Fewer than two distinct lags cannot form a bin.
+    def test_fringe_trimming_keeps_at_least_two_bins(self):
+        """Trimming down to one bin would break the gradient-based peak range.
 
-        That must be a ValueError with an explanation, so the batch helpers can
-        warn and continue as their docstrings promise.
+        Seven distinct lags give seven bins: [2, 3] leaves two and trims, [2, 4]
+        would leave one and keeps all bins instead.
+        """
+        from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
+
+        lags = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60]
+        df = self._tlag_df(lags)
+
+        res = TimeLagAnalysis(df=df, ignore_fringe_bins=[2, 3]).analyze_gas('CO2')
+        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.40, 0.45])
+
+        res = TimeLagAnalysis(df=df, ignore_fringe_bins=[2, 4]).analyze_gas('CO2')
+        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), lags)
+
+    def test_single_distinct_lag_is_reported_not_a_bare_indexerror(self):
+        """Fewer than two distinct lags give too few bins for the peak range.
+
+        That must be a ValueError with an explanation, not numpy's gradient
+        error, so the batch helpers can warn and continue as their docstrings
+        promise.
         """
         from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
 
         df = self._tlag_df([0.30])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as ctx:
             TimeLagAnalysis(df=df).analyze_gas('CO2')
+        self.assertIn('1 distinct lag value(s), at least 2 are needed', str(ctx.exception))
         self.assertEqual(TimeLagAnalysis(df=df).analyze_all_gases(), {})
 
     def test_bin_range_excluding_every_lag_keeps_all_bins(self):
@@ -61,12 +80,37 @@ class TestTimeLagAnalysis(unittest.TestCase):
 
         kwargs = dict(histogram_start_seconds=5, histogram_end_seconds=10)
         res = TimeLagAnalysis(df=df, **kwargs).analyze_gas('CO2')
-        self.assertEqual(len(res['histogram_results']), 5)
+        self.assertEqual(len(res['histogram_results']), 6)
         self.assertIn(res['peak'], lags)
 
         # The batch helper returns the gas instead of dropping it
         batch = TimeLagAnalysis(df=df, **kwargs).analyze_all_gases()
         self.assertEqual(list(batch.keys()), ['CO2'])
+
+    def test_bin_range_keeping_one_bin_keeps_all_bins(self):
+        """A lag range holding a single bin must not reach numpy's gradient error.
+
+        The peak range needs at least two bins, so the range is skipped with a
+        warning, as for zero bins and for the fringe trimming. Before, the error
+        surfaced from np.gradient and analyze_all_gases dropped the gas.
+        """
+        from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
+
+        lags = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55]
+        df = self._tlag_df(lags)
+
+        kwargs = dict(histogram_start_seconds=0.55, histogram_end_seconds=10)
+        res = TimeLagAnalysis(df=df, **kwargs).analyze_gas('CO2')
+        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), lags)
+        self.assertIn(res['peak'], lags)
+
+        batch = TimeLagAnalysis(df=df, **kwargs).analyze_all_gases()
+        self.assertEqual(list(batch.keys()), ['CO2'])
+
+        # Two bins in range are enough, so the range applies
+        res = TimeLagAnalysis(df=df, histogram_start_seconds=0.50,
+                              histogram_end_seconds=10).analyze_gas('CO2')
+        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.50, 0.55])
 
     def test_bin_range_keeping_some_bins_still_trims(self):
         """The range must keep doing its job when bins do fall inside."""
@@ -78,7 +122,7 @@ class TestTimeLagAnalysis(unittest.TestCase):
                                    histogram_start_seconds=0.40,
                                    histogram_end_seconds=10)
         res = analysis.analyze_gas('CO2')
-        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.40, 0.45, 0.50])
+        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.40, 0.45, 0.50, 0.55])
 
     def test_renamed_histogram_range_params_are_rejected_by_name(self):
         """The old bin-index names must say what replaced them.
@@ -106,7 +150,7 @@ class TestTimeLagAnalysis(unittest.TestCase):
         res = TimeLagAnalysis(df=df,
                               histogram_start_seconds=0.40,
                               histogram_end_seconds=10).analyze_gas('CO2')
-        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.40, 0.45, 0.50])
+        self.assertEqual(list(res['histogram_results']['BIN_START_INCL']), [0.40, 0.45, 0.50, 0.55])
 
 
 if __name__ == '__main__':

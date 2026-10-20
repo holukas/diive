@@ -26,9 +26,10 @@ class VariableClass(NamedTuple):
     """Result of :func:`classify_variable`.
 
     Attributes:
-        kind: Canonical short variable label, e.g. ``'NEE'``, ``'GPP'``,
+        kind: Canonical short variable label, e.g. ``'NEE'``, ``'FC'``, ``'GPP'``,
             ``'Reco'``, ``'FCH4'``, ``'FN2O'``, ``'FH2O'``, ``'LE'``, ``'ET'``,
-            ``'Rg'``, ``'SW_IN'``, ``'PPFD'``, ``'PAR'``, ``'LW'``.
+            ``'Rg'``, ``'SW_IN'``, ``'PPFD'``, ``'PAR'``, ``'LW'``, ``'TA'``,
+            ``'VPD'``, ``'SWC'``.
         category: One of ``'carbon'``, ``'water'``, ``'radiation'``,
             ``'meteo'``, ``'soil'``, ``'nitrogen'``.
     """
@@ -121,3 +122,27 @@ def auto_pick_column(columns, needle: str, *, prefer: str | None = None,
         if needle in u and (avoid is None or avoid not in u):
             return c
     return ""
+
+
+def driver_flag_columns(columns, driver: str) -> list[str]:
+    """Quality-flag columns that belong to the column ``driver``, in input order.
+
+    Matches the flag naming of diive (``FLAG_<driver>_..._ISFILLED``) and of
+    FLUXNET (``<driver>_QC``): a column qualifies when its upper-cased name
+    contains the upper-cased driver name and ends in ``_ISFILLED`` or ``_QC``.
+    The driver column itself is never returned. Used to suggest the driver QC
+    columns for MDS gap-filling (``FluxMDS(swin_qc=, ta_qc=, vpd_qc=)``).
+
+    Args:
+        columns: Candidate column names.
+        driver: Name of the driver column, e.g. ``'TA_F'``.
+
+    Returns:
+        Matching column names; empty when ``driver`` is empty or nothing matches.
+    """
+    if not driver:
+        return []
+    d = driver.upper()
+    return [c for c in columns
+            if c != driver and d in c.upper()
+            and (c.upper().endswith("_ISFILLED") or c.upper().endswith("_QC"))]

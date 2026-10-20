@@ -2,10 +2,9 @@
 GUI: DESKTOP APPLICATION
 ========================
 
-PySide6 (Qt) desktop GUI for diive. Provides a multi-tab window for
-interactive plotting today, with a registry-based tab system designed so
-later additions (e.g. the flux processing chain) slot in as new tabs without
-touching the main window.
+PySide6 (Qt) desktop GUI for diive. Provides a multi-tab window for plotting,
+cleaning, gap-filling, flux processing and analysis, with a registry-based tab
+system so new tabs slot in without touching the main window.
 
 PySide6 is an OPTIONAL dependency. Install the GUI extra::
 

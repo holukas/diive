@@ -2,24 +2,30 @@
 GUI.TABS.PLOTTING: INTERACTIVE PLOTTING TAB
 ===========================================
 
-Three-column plotting tab: a list of variables on the left, a live plot-settings
-panel in the middle, the plot area on the right. On startup the bundled example
-dataset is loaded, the variable list is populated from its columns, and NEE is
-selected and rendered as a date x time-of-day heatmap. Editing a setting does
-not re-render on its own; the user clicks the **Update plot** button to apply all
-pending parameter changes at once (see `plot_settings.py`). Selecting a variable
-in the list still re-renders immediately.
+Three-column plotting tab, one closable tab per plot method (`PlottingTab(plot_type,
+title)`, opened from the Plot menu): a list of variables on the left, a live
+plot-settings panel in the middle, the plot area on the right. When data arrive,
+the variable list is populated from its columns. The selected variables and
+their settings are kept for every column still in the data. Only when none is
+left (or on the first load) is a default variable (`_DEFAULT_VAR`, or seeded
+roles for the role-picked types) rendered. Editing
+a setting does not re-render on its own. The user clicks the **Update plot**
+button to apply all pending parameter changes at once (see `plot_settings.py`).
+Selecting a variable in the list still re-renders immediately.
 
-Selection model:
+Selection model (heatmaps, time series, diel cycle, cumulative types):
 - Plain click  -> reset to a single panel showing the clicked variable.
-- Ctrl + click -> append another panel to the right (up to `_MAX_PANELS`),
-  for side-by-side comparison.
+- Ctrl + click -> add or remove a panel (up to `_MAX_PANELS`). Heatmaps go
+  side by side with shared axes, the other types stack with a shared x-axis.
+  With more than one panel, a row of pills picks which panel's settings the
+  controls edit.
 
-Selected variables are highlighted in the list and numbered with their panel
-position (left to right). All panels share one date y-axis.
+Single-variable types (ridgeline, histogram, tree ring, shifted distribution,
+waterfall) show only the clicked variable. Role-picked types
+(`_ROLE_DROPDOWN_TYPES`) assign X/Y/Z through dropdowns instead of the list.
 
 diive's plot classes use the two-phase `__init__(data)` / `plot(ax=...)`
-pattern, so each panel is just `HeatmapDateTime(series).plot(ax=..., fig=...)`.
+pattern, so each panel is one library plot call into its own axes.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -382,18 +388,32 @@ class PlottingTab(DiiveTab):
             return
         self._capture_active()
         self._active_panel = self._panels[idx]
-        self.settings.apply_state(self._panel_settings.get(self._active_panel))
+        self._load_panel_state(self._panel_settings.get(self._active_panel))
+
+    def _load_panel_state(self, snapshot) -> None:
+        """Load a saved panel snapshot into the controls without marking the plot dirty.
+
+        ``apply_state`` sets the controls with their signals live, so a snapshot
+        that differs from what they showed fires ``settings.changed`` and
+        ``_mark_dirty`` would enable Update plot although nothing is pending (L152).
+        """
+        blocked = self.settings.blockSignals(True)
+        try:
+            self.settings.apply_state(snapshot)
+        finally:
+            self.settings.blockSignals(blocked)
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
         """Populate the variable list from the dataset and render.
 
         `created` marks user-engineered columns so they get the "NEW" pill.
+        The current panels, roles and per-panel settings are kept for every
+        variable still in `df` (L338), so adding a column elsewhere does not
+        discard the plot setup. Only when none of the selected variables is
+        left (or on the first load) does the tab fall back to its defaults.
         """
         self._df = df
-        self._panels = []
-        self._xyz = []
-        self._panel_settings = {}
-        self._active_panel = None
+        cols = [str(c) for c in df.columns]
         self.varpanel.set_variables(df.columns, created)
         if self._plot_type == CUMULATIVE_YEAR:
             # Offer the data's years in the highlight-year dropdown.
@@ -408,36 +428,94 @@ class PlottingTab(DiiveTab):
             # Offer every column in the role dropdowns (scatter X/Y/Colour,
             # wind-rose value/wind-direction/colour).
             self.settings.set_xyz_options(df.columns)
-        self._select_default()
+        if self._keep_selection(cols):
+            self._render()
+        else:
+            self._select_default()
 
-    def _select_default(self) -> None:
-        """Highlight and render the startup variable(s)."""
-        cols = [str(c) for c in self._df.columns]
+    def _keep_selection(self, cols: list[str]) -> bool:
+        """Keep the current selection for the variables still in `cols`.
+
+        Panels whose variable is gone are dropped with their settings. A role
+        (X/Y/Z) whose variable is gone takes the tab's default for that role,
+        or is left empty when it is optional or has no default. Returns False
+        when nothing of the selection is left, so the caller seeds the defaults.
+        """
+        names = set(cols)
+        if self._plot_type in _XYZ_TYPES:
+            if not any(n in names for n in self._xyz):
+                self._xyz = []
+                return False
+            seed = self._default_xyz(cols)
+            # The colour role of scatter and wind rose is optional.
+            optional = {2} if self._plot_type in (SCATTER, WINDROSE) else set()
+            roles = []
+            for i, n in enumerate(self._xyz):
+                if n not in names:
+                    n = seed[i] if i < len(seed) and i not in optional else None
+                if n is None:
+                    break  # later roles cannot sit behind an empty one
+                roles.append(n)
+            self._xyz = roles
+            self.settings.set_xyz(*(roles + [None, None, None])[:3])
+            return True
+
+        self._capture_active()  # pending edits of the active panel count too
+        panels = [n for n in self._panels if n in names]
+        if not panels:
+            self._panels = []
+            self._panel_settings = {}
+            self._active_panel = None
+            return False
+        # Load each kept snapshot once so data-dependent dropdowns (colour-by
+        # variable, highlight year) fall back to their first entry when the
+        # saved pick is gone, instead of keeping the previous panel's pick.
+        kept = {}
+        for n in panels:
+            snap = self._panel_settings.get(n)
+            if snap is None:
+                continue
+            for combo in (getattr(self.settings, "color_by", None),
+                          getattr(self.settings, "cy_highlight", None)):
+                if combo is not None:
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(0)
+                    combo.blockSignals(False)
+            self._load_panel_state(snap)
+            kept[n] = self.settings.state()
+        active = self._active_panel if self._active_panel in panels else panels[0]
+        self._panels = panels
+        self._panel_settings = kept
+        self._active_panel = None  # the controls hold the last loaded snapshot
+        self._sync_panel_settings(active=active)
+        return True
+
+    def _default_xyz(self, cols: list[str]) -> list[str]:
+        """Default roles of the role-picked types for the columns `cols`."""
         if self._plot_type in (HEXBIN, HEATMAP_XYZ):
             # Both need three variables; seed a sensible driver/driver/flux
             # triple so the tab shows something on open.
             preferred = ["Tair_f", "VPD_f", "NEE_CUT_REF_f"]
-            self._xyz = preferred if all(c in cols for c in preferred) else cols[:3]
-            self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
-            self._render()
-            return
+            return preferred if all(c in cols for c in preferred) else cols[:3]
         if self._plot_type == SCATTER:
             # Scatter needs X and Y (Z optional for colour); seed a driver/flux pair.
             preferred = ["Tair_f", "NEE_CUT_REF_f"]
-            self._xyz = preferred if all(c in cols for c in preferred) else cols[:2]
-            self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
-            self._render()
-            return
-        if self._plot_type == WINDROSE:
-            # Needs a value + a wind-direction column. Seed the value with a flux
-            # (or the first column) and the direction with the first wind-direction
-            # -named column, if any (the bundled CH-DAV example has none, so the
-            # tab then shows a prompt to pick variables).
-            wd = next((c for c in cols if any(t in c.lower()
-                       for t in ("wind_dir", "winddir", "wd", "_dir"))), None)
-            val = next((c for c in ("NEE_CUT_REF_f", "Tair_f") if c in cols),
-                       cols[0] if cols else None)
-            self._xyz = [c for c in (val, wd) if c]
+            return preferred if all(c in cols for c in preferred) else cols[:2]
+        # Wind rose: needs a value + a wind-direction column. Seed the value with
+        # a flux (or the first column) and the direction with the first
+        # wind-direction-named column, if any (the bundled CH-DAV example has
+        # none, so the tab then shows a prompt to pick variables).
+        wd = next((c for c in cols if any(t in c.lower()
+                   for t in ("wind_dir", "winddir", "wd", "_dir"))), None)
+        val = next((c for c in ("NEE_CUT_REF_f", "Tair_f") if c in cols),
+                   cols[0] if cols else None)
+        return [c for c in (val, wd) if c]
+
+    def _select_default(self) -> None:
+        """Highlight and render the startup variable(s)."""
+        cols = [str(c) for c in self._df.columns]
+        if self._plot_type in _XYZ_TYPES:
+            self._xyz = self._default_xyz(cols)
             self.settings.set_xyz(*(self._xyz + [None, None, None])[:3])
             self._render()
             return
@@ -682,7 +760,7 @@ class PlottingTab(DiiveTab):
         explicit: list[tuple[bool, bool]] = []
         for i, (ax, name) in enumerate(zip(axes, self._panels, strict=False)):
             if self._panel_settings.get(name) is not None:
-                self.settings.apply_state(self._panel_settings[name])
+                self._load_panel_state(self._panel_settings[name])
             self._draw_one(ax, name, i)
             self._apply_axes([ax])
             axo = self.settings.values().get("_axes") or {}
@@ -690,7 +768,7 @@ class PlottingTab(DiiveTab):
                 axo.get("xmin") is not None or axo.get("xmax") is not None,
                 axo.get("ymin") is not None or axo.get("ymax") is not None))
         if self._active_panel is not None and self._panel_settings.get(self._active_panel):
-            self.settings.apply_state(self._panel_settings[self._active_panel])
+            self._load_panel_state(self._panel_settings[self._active_panel])
 
         if self._plot_type in _HEATMAP_TYPES:
             # y axis only on the leftmost panel.

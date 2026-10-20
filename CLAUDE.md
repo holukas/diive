@@ -20,17 +20,17 @@ Python 3.12-3.13, `uv`. Minimum pins in `pyproject.toml`.
 
 ```bash
 uv sync                              # core + dev
-uv sync --all-extras --all-groups    # everything (extras gui/gui3d/db + groups dev/db/build)
+uv sync --all-extras --all-groups    # everything (extras gui/db/all + groups dev/build)
 uv run pytest tests/test_gapfilling.py -v
 ```
 
-`--all-extras` alone is not everything: `db` (`influxdb-client`) is **both** an extra and a group, on purpose. Working on diive, use `uv sync --group db`. The extra exists for projects that depend on diive, because a dependency group never reaches published metadata. The group is `db = ["diive[db]"]`, so the pin lives only in the extra. `influxdb-client` is imported lazily.
+Optional parts are extras: `gui` (PySide6 plus PyVista/VTK for the 3-D tabs), `db` (`influxdb-client`, imported lazily) and `all` (= `diive[gui,db]` plus JupyterLab for the working group's database notebooks; JupyterLab deliberately has no public extra, users bring their own notebook setup). `dev` and `build` are dependency groups. `--all-extras` leaves out only `build`. pip users get the dev tools with `python -m pip install -e ".[all]" --group dev` (pip 25.1+). The `db` group was removed on 2026-10-20 (it duplicated the extra), so `uv sync --group db` now fails: use `--extra db`. The `gui3d` extra was folded into `gui` the same day. The database tabs are internal for now: without `influxdb-client` the GUI hides **File ▸ Database**, and the public exe leaves it out even if installed (internal build: `build_gui.ps1 -WithDb`, which sets `DIIVE_BUILD_DB=1` for the spec).
 
 ## Repository rules
 
-**`devnotes/`** holds internal working documents (excluded from the sdist, outside `docs/`): `CODE_REVIEW_FINDINGS.md` (entries `L1`…, `S1`–`S5`), `COVERAGE_GAPS.md`, `GUI_PERFORMANCE.md` (re-measure with `devnotes/gui_timing_pass.py`). Items carry a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with reason), a file anchor and evidence. Update the matching entry when you fix something it lists; add new findings there, not in the repo root.
+**`devnotes/`** holds internal working documents (excluded from the sdist, outside `docs/`): `CODE_REVIEW_FINDINGS.md` (entries `L1`… and `G1`–`G9`, severity classes `S1`–`S5`), `COVERAGE_GAPS.md`, `GUI_PERFORMANCE.md` (re-measure with `devnotes/gui_timing_pass.py`), `TODO.md` (planned features, e.g. monthly records). Items carry a status box (`[ ]` open, `[x]` fixed with its commit, `[-]` won't fix, with reason), a file anchor and evidence. Update the matching entry when you fix something it lists; add new findings there, not in the repo root.
 
-**[CRITICAL] Keep `diive/__init__.py` lazy.** Namespaces (and `diive.io`'s `binary`/`formats`) resolve via PEP 562 `__getattr__`. A plain `from diive import <namespace>` re-imports sklearn/xgboost/shap/statsmodels on `import diive` (~1.4 s). New namespaces go in `_LAZY_SUBMODULES`, the `TYPE_CHECKING` block, **and** `packaging/diive_gui.spec`'s `hiddenimports` (PyInstaller cannot follow `__getattr__`).
+**[CRITICAL] Keep `diive/__init__.py` lazy.** Namespaces (and `diive.io`'s `binary`/`formats`) resolve via PEP 562 `__getattr__`. A plain `from diive import <namespace>` re-imports sklearn/xgboost/shap/statsmodels on `import diive` (~1.4 s). New namespaces go in `_LAZY_SUBMODULES`, the `TYPE_CHECKING` block, `diive.__all__` **and** `packaging/diive_gui.spec`'s `hiddenimports` (PyInstaller cannot follow `__getattr__`). `tests/test_imports.py` checks all four.
 
 **[CRITICAL] `core/` must not import from `gapfilling/`, `flux/` or `preprocessing/`.** Their `__init__`s pull in the ML stack, and it caused a real import cycle (why `prediction_scores` lives in `core/ml/scores.py`). If one leaf function is genuinely needed, import it inside the function (see `aggregated_as_hires` in `core/dfun/frames.py`).
 
@@ -38,18 +38,26 @@ Raw 10/20 Hz tooling moved to [dyco](https://github.com/holukas/dyco); diive sta
 
 ## Flux partitioning and uncertainty (faithful ports — do not "fix")
 
-Four NEE partitioning ports coexist via suffixes `*_NT_OF`, `*_NT_RP`, `*_DT_RP`, `*_DT_OF` (ONEFlux / REddyProc, nighttime / daytime), wired into the chain as Level 4.2. Parity numbers and implementation detail are in each module's docstring.
+Four NEE partitioning ports coexist, with column suffixes `*_NT_OF`, `*_NT_RP`, `*_DT_OF`, `*_DT_RP` (nighttime / daytime, ONEFlux / REddyProc). They are Level 4.2 of the chain. Users pick one like an MDS mode: `PartitioningNEE(method='nighttime'|'daytime', mode='oneflux'|'reddyproc')` (`partitioning/nee.py`), `run_level42_partitioning`, `FluxConfig.partition_method`/`partition_mode`, one GUI tab. `mode='oneflux'` (ICOS) is the default. The four classes are the backends, and the switch must stay bit-identical to calling them directly. Parity numbers and implementation detail are in each module's docstring.
 
-- **`*_DT_OF` reproduces a real ONEFlux 1.3.7 bug by default** (alpha-at-starting-guess guard never fires under float32). `reject_alpha_at_start=True` applies the intended check; the L4.2 chain and GUI use the default.
-- **The remaining `*_DT_OF` vs ONEFlux residual is ONEFlux's own non-reproducibility**: where `k` ≈ 0 its sign is decided by rounding, and ONEFlux under two NumPy/SciPy versions differs by more than diive differs from either. Don't chase it further.
+- **`*_DT_OF` reproduces a real ONEFlux 1.3.7 bug by default:** the alpha-at-starting-guess guard never fires under float32. `reject_alpha_at_start=True` applies the intended check. The L4.2 chain and the GUI use the default.
+- **`*_DT_OF` at L4.2 removes the days around a broken fit from all USTAR scenarios of a year** (`partition_nee_daytime_oneflux_scenarios`), because ONEFlux keeps one error file per year and product, not per u\* percentile. The scenario order decides which fits break (L211).
+- **Both ONEFlux ports reproduce ONEFlux run under NumPy 1:** nighttime bitwise, every daytime fit bitwise, in 36 harness runs (CH-DAV 2016/2019, CH-LAE 2017-2019, FLUXNET v1.3 FI-Hyy, FI-Var, IL-Yat, AU-GWW, GF-Guy 2023/2024, DE-Hai 2020/2024, and hourly US-Ha1 2023/2024, US-MMS 2022/2023 and CH-DAV 2016 averaged to hourly). ONEFlux itself run under NumPy 2 gives different results (e.g. its alpha check starts firing) and is not a target.
+  - Hourly data (L218): the daytime port copies ONEFlux's half-hourly grid (`library.create_data_structures`: every record twice, the first copy 30 min earlier) and keeps the first copies (`check_cleanup_dt`, `[::2]`). The nighttime port partitions hourly records as they are, as ONEFlux does.
+  - Three ONEFlux behaviours found at the FLUXNET sites: no night at polar day/night (L214). A daytime window without measured night records falls back to record 0 and needs the gap-filled NEE (`nee_f`, optional, L4.2 passes the L4.1 fill, L215). After a rejected window, E0 is the leftover LloydTemp value (L216).
+  - Parity depends on reproducing NumPy-1 value-based casting explicitly (NumPy 2 / NEP 50 promotes differently): float32 residuals in `leastsq` (its step size follows the residual dtype), the daytime look-up SD via `_tstd_oneflux` (passed to the MDS cascade as `sd_func`), and the best beta start chosen on float32 RMSE (ties).
 - The float32/float64 choices in the ONEFlux ports are deliberate parity decisions, documented at each site. Don't normalise dtypes.
-- REddyProc ports and ONEFlux nighttime `sunrise_sunset` keep their own potential-radiation routines for parity; everything else uses `dv.variables.potrad` (ONEFlux `get_rpot` port, period mean).
+- **Both REddyProc ports reproduce native REddyProc 1.3.4:** nighttime ~1e-15, daytime mostly <1e-4, up to 0.02 in single half-hours of ill-conditioned windows, annual sums 0.001 % (CH-DAV 2016/2019, CH-LAE 2017-2019, the six FLUXNET sites above). In windows with only 10-17 records the x87/GP last-bit difference can flip a window (accept vs reject, or the alpha-fixed refit): up to ~3 umol m-2 s-1 in single half-hours and ~2 % in annual RECO (FI-Hyy 2023, AU-GWW 2023, L217, won't fix). The ports copy R's own numerics (`nls`, LINPACK QR, `optim` vmmin, mlegp's SFMT-seeded simplex + lbfgs, R's `exp` double rounding), so replacing any of them with a scipy/numpy call breaks parity. What remains is R-on-Windows x87 `exp()` and 80-bit `sum()`. Don't chase it. E0 is capped at 450, not 350: `sMRFluxPartition` passes the temperature as `FP_Temp_NEW`, so REddyProc's `Tair` branch never runs (L201).
+- **Parity harnesses** (outside the repo): `diive-data/references/oneflux_parity/` and `reddyproc_parity/`. Re-run the matching one after any change to a port.
+- REddyProc ports and ONEFlux nighttime `sunrise_sunset` keep their own potential-radiation routines for parity. Everything else uses `dv.variables.potrad` (ONEFlux `get_rpot` port, period mean).
 
-**MDS cascade** (`gapfilling/similarity.py::mds_gapfill_cascade`) has exactly two callers: `FluxMDS` and the `*_DT_OF` NEE uncertainty. **Edge handling differs on purpose**: `FluxMDS` uses `edge='trim'` (C `gf_mds` reference), the daytime uncertainty `edge='clip'` (ONEFlux Python reference, which produced FLUXNET2015). Don't unify them. The cascade is dtype-preserving.
+**`FluxMDS` modes.** `mode='diive'` (default) is ONEFlux's rules plus the Vekuri et al. (2023) symmetric mean in methods 1/2. The symmetric mean applies to daytime only (SWIN >= 20 W m-2, the paper's day definition, where REddyProc's `Vekuri23` uses 10) and counts ties in both halves (ONEFlux `gf_mds`). Measured records are left out of their own prediction (leave-one-out), because with the symmetric mean a record would echo itself in the scores. The paper recommends the symmetric mean at least above 60 N. Making it the default rests on our own validation at 8 forest sites (68 N to 30 S, `diive-data/references/mds_vekuri_validation/`): lower annual balance error at 6 sites (strongest in the north and the tropics), neutral at two drylands, slightly worse at deciduous DE-Hai (daytime error already negative, likely leaf-out/leaf-fall days mixed in the 14/28-day windows, untested). Don't change the default on a single-site result. `mode='oneflux'` is the bitwise ONEFlux reference: every parity harness or test against ONEFlux must pass it. `mode='reddyproc'` switches the cascade to `rules='reddyproc'` (REddyProc 1.3.4 `sMDSGapFill`: inclusive look-up window ends, look-ups to +/-70 d, diurnal cycle +/-7..210 d, every gap > 60 d unfilled, L210). Neither reference mode uses leave-one-out.
+
+**MDS cascade** (`gapfilling/similarity.py::mds_gapfill_cascade`) has exactly two callers: `FluxMDS` and the `*_DT_OF` NEE uncertainty. **Edge handling differs on purpose**: `FluxMDS` uses `edge='trim'` (C `gf_mds` reference), the daytime uncertainty `edge='clip'` (ONEFlux Python reference, which produced FLUXNET2015). Don't unify them. `edge='trim'` also selects gf_mds's diurnal-cycle sampling (by record position, windows 13, 19, ... days) and its time-order summation; with those, `FluxMDS(mode='oneflux')` reproduces compiled `gf_mds` bitwise (65 runs, CH-DAV + CH-LAE; harness `diive-data/references/mds_parity_oneflux/`). ONEFlux `nee_proc` gives the gap record its gap-filled driver but samples only measured drivers: opt-in via `swin_qc`/`ta_qc`/`vpd_qc` (0 = measured, NaN = no info; also on `run_level41_mds` and `FluxConfig.mds_*_qc`), bitwise to `nee_proc` (L209). Re-run that harness after any change to the `'trim'` path. `mode='reddyproc'` is checked against native REddyProc in `mds_parity_reddyproc/` (L210). The cascade is dtype-preserving.
 
 **`RandomUncertaintyPAS20` is not an MDS caller.** It shares only the similarity tolerances, with its own window loop, so cascade changes don't reach it. Its cumulative is NaN-safe quadrature, not an object-dtype `ufloat` cumsum (one NaN must not poison the tail).
 
-**Units for these ports are stated in docstrings, not validated** (VPD in kPa by default via `vpd_in_kpa=True`). Don't add unit-guessing warnings or EddyPro-specific hints; the caller owns units.
+**Units for these ports are stated in docstrings, not validated** (VPD in kPa by default via `vpd_in_kpa=True`). Don't add unit-guessing warnings or EddyPro-specific hints; the caller owns units. This covers the library. The GUI's MDS tab may keep its warning when the VPD column name (`hPa`/`kPa`) contradicts the "VPD in kPa" box.
 
 ## Gap-filling
 
@@ -59,11 +67,15 @@ Four NEE partitioning ports coexist via suffixes `*_NT_OF`, `*_NT_RP`, `*_DT_RP`
 
 **`FeatureEngineer`** names features `.{col}_TYPE{detail}` (e.g. `.Tair_f_POL2`); all per-column stages skip `.`-prefixed columns. Guard that filter with `str(c)` (unnamed Series give non-string labels). New stage: param in `__init__`, `_stagename_features()`, call from `_create_features()`.
 
+**One dataset, one UTC offset.** Timestamps are used as they are, with the UTC offset from Project settings (or `utc_offset`). Which offset does not matter, but every timestamp of a dataset must use it. Data whose offset changes within the dataset (a `Europe/Zurich` index, a logger clock switching to summer time) are not supported, so don't report or fix those cases (L329 daily part, L344).
+
 **`DetectFrequency`** runs at the front of nearly every workflow. Verify any change leaves the *detected frequency* unmoved on the bundled datasets, not just the reported percentage.
 
-## Flux Processing Chain
+## Flux Post-Processing Chain
 
-L2 → L3.1 → L3.2 → L3.3 → L4.1 → L4.2 (optional). `run_chain(data, FluxConfig)` for the standard pipeline; composable `run_level*` for custom ones (`FluxConfig` is only for `run_chain`). Per-level signatures intentionally differ. Example: `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py`.
+`diive.flux.postprocessingchain`. "Post-processing" on purpose: raw data -> fluxes happens earlier (EddyPro, dyco). The old path `diive.flux.fluxprocessingchain` is a deprecated alias module (FutureWarning) that maps every submodule onto the new one; new code uses the new path.
+
+L2 → L3.1 → L3.2 → L3.3 → L4.1 → L4.2 (optional). `run_chain(data, FluxConfig)` for the standard pipeline; composable `run_level*` for custom ones (`FluxConfig` is only for `run_chain`). Per-level signatures intentionally differ. Example: `examples/flux/postprocessingchain/postprocessingchain_composable.py`.
 
 - Each level is a pure function; never mutate input. Treat `LevelResults` as immutable (rebuilt via `dataclasses.replace`).
 - Re-running level N drops N and every later level (`levels/_rerun.py`); L4.1 is per-method and additive.
@@ -110,20 +122,29 @@ PySide6, optional `gui` extra, launch `diive-gui`. **File map and per-tab detail
 
 1. The switch is always `separate_day_night` (default `True` only for `Hampel`).
 2. One global knob (`n_sigma`, `n_sd`, …) is the source of truth. Per-period overrides are `{knob}_daytime`/`{knob}_nighttime`, **default `None`** (never a literal, which shadows the global), falling back to the global. No lists or packed pairs.
-3. Separation is not a no-op with equal thresholds, except for pointwise `AbsoluteLimits`: subset-derived methods (`zScore`, `LocalSD`, `LOF`, `Hampel`) compute their statistic per period.
+3. Separation is not a no-op with equal thresholds for subset-derived methods (`zScore`, `LocalSD`, `LOF`, `Hampel`), which compute their statistic per period. `Hampel` rolls the same window span and blanks the other period's records, and its double differences use records of one period only, as ONEFlux `qc_auto` does (L239, L255). Unlike ONEFlux it does not count transition records in both periods (that rejected the whole light ramp of radiation). Every non-central difference carries the curvature sign of the central one, or the per-period median shifts the band (L255). It is a no-op only for pointwise `AbsoluteLimits`.
 4. A GUI exposing it should expose per-period thresholds (reference: Hampel tab).
 5. A removed parameter must say what replaced it: take `**legacy` and call `reject_legacy_params`.
 
-Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to trim; `LocalOutlierFactor` has no per-period knobs. `*DaytimeNighttime` names are wrappers (not subclasses — `@ConsoleOutputDecorator` returns a function) or plain aliases.
+Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to trim; `LocalOutlierFactor` has no per-period knobs. `*DaytimeNighttime` names are wrappers or plain aliases.
+
+**[DESIGN — do not revert] Mixed time resolutions in `StepwiseMeteoScreeningDb`** (e.g. 10-min then 1-min records in one download). Findings L153–L198 in `devnotes/CODE_REVIEW_FINDINGS.md` (L192–L198: the GUI tab), and L226–L254 from the notebook production checks.
+- The grid is the common divisor of all resolutions and END offsets. Each record sits **only at its own END slot**; the slots in between are empty ("not a record") and must stay NaN through every step, including corrections (`_set_corrected` re-applies the mask). Never back-fill coarse records onto the fine grid: that made removals miss copies, sums count copies, and difference tests reject valid data.
+- Rolling-window and difference tests (Hampel, Local SD, rolling z-score, increments z-score) run **per resolution period** on the period's own grid (`_run_per_period` → `StepwiseOutlierDetection.set_pending_flag`), so `'7D'` is converted at each period's own resolution. The window still stretches across missing records (L236). Global tests (z-score, LOF, absolute limits, trim low) run on all records at once.
+- `resample()` weights each record by the time it covers (overlap-capped); `mean` is time-weighted, `sum` counts each record once. Coverage is the time the kept records cover, not grid slots, so other resolutions in the download don't change which periods are kept. For single-resolution data every path is bit-identical to the plain implementation, except `sum`, which drops the one-record minimum on purpose (L235). Check that against HEAD after any change here.
+- `FlagQCF` treats a row as "not a record" only when the missing-values flag **and** the value are NaN. Plots use display-only copies (`_display_lines`, `_display_heatmap`).
+- Dates for manual removal and `correction_setto_value` are END timestamps in the data's own time zone, as users see them after download (the download already applied the UTC offset).
 
 ## Coding Standards
 
 - Validate input only at system boundaries. Let exceptions propagate unless you can recover. Comments explain WHY, not WHAT.
-- **Console output:** use the Rich helpers from `diive/core/utils/console.py` (`rule`/`info`/`success` at PROGRESS, `warn`/`error` at ERROR, `detail` at DEBUG, `_console.print` for reports). **No `print()` in production code** (allowed in examples, docstrings, `__main__`, `_cli_main()`), no separate `Console`, no `logging` for general output.
+- **Console output:** use the Rich helpers from `diive/core/utils/console.py` (`rule`/`info`/`success` at PROGRESS, `warn`/`error` at ERROR, `detail` at DEBUG, `_console.print` for reports). **No `print()` in production code** (allowed in examples, docstrings, `__main__`), no separate `Console`, no `logging` for general output.
+- **Import shap with `diive.core.ml.shap_import.import_shap()`, not `import shap`.** shap stores failed optional imports (`cv2`) with their traceback, which keeps the frames of the first importer alive. In the GUI that kept the first ML tab in memory (L313).
 - **[CRITICAL] Always pass `verbose=` when the caller has one**, even inside an `if self.verbose >= N:` guard. A bare `detail(msg)` resolves to the module default (PROGRESS), below `detail`'s own DEBUG level, so it never prints.
 - **Module docstring:** `MODULE_NAME: DESCRIPTIVE_TITLE`, `===` underline, one-line scope, then `Part of the diive library: https://github.com/holukas/diive`.
 - **Written text** (docs, comments, commit messages, examples): use the `/llm-detox` skill.
-- **Examples** (Sphinx Gallery): `# %%` cells, no file I/O, one year of data, no `showplot=True`. New example: register in `examples/run_all_examples.py` + `examples/CATALOG.md`, category README, source docstring "Example" section, `examples/README.md` count, CHANGELOG, verify it runs.
+- **CHANGELOG** follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/): headings `## [x.y.z] - YYYY-MM-DD`, sections Added, Changed, Deprecated, Removed, Fixed (Fixed last), a 2-3 sentence summary on top of each release, short user-level entries (one sentence, no internals or file paths), and "(changes results)" on entries that change results.
+- **Examples** (Sphinx Gallery): `# %%` cells, no file I/O, one year of data. `showplot=True` is fine: the gallery captures those figures (run examples unattended with `MPLBACKEND=Agg`). New example: register in `examples/run_all_examples.py` + `examples/CATALOG.md`, category README, source docstring "Example" section, `examples/README.md` count, CHANGELOG, verify it runs.
 
 ## Plotting
 
@@ -133,7 +154,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 - **Colours:** Material Design; 500-level lines/bars (`#2196F3`, `#F44336`, `#FFC107`), `#455A64` ink. The 300-bar/500-background split applies only to a bar panel sharing a figure with a shaded panel (`analysis/optimumrange.py`). Don't "correct" 400/500 bar fills to 300 (L145).
 - Bar labels `va='center_baseline'`; label contrast `'white' if 0.299*r + 0.587*g + 0.114*b < 0.5 else 'black'`; multi-year panel height `max(1.5, n_years * 0.38)`.
 - **Use internal column keys** (`_x`/`_y`/`_z`, `_values`) when building a frame from caller-supplied Series; a shared name silently swaps one role's data for another's.
-- Don't replace `_ArrayOffsetsLegend` (fast `loc='best'` on large collections) with a subsample or fixed `loc`. Find scatter collections with `isinstance(c, PathCollection)`, never by class name.
+- Don't replace `_ArrayOffsetsLegend` (fast `loc='best'` on large collections and long lines with non-decreasing x, pixel-identical to matplotlib) with a subsample or fixed `loc`. Find scatter collections with `isinstance(c, PathCollection)`, never by class name.
 - `RidgeLinePlot` must set gridspec `hspace` at creation; a later `gs.update()` is a no-op for embedded figures.
 
 ## Development Workflow
@@ -156,7 +177,7 @@ MPLBACKEND=Agg uv run python examples/gapfilling/gapfill_randomforest.py
 
 ```bash
 pytest tests/test_gapfilling.py -v
-pytest tests/test_fluxprocessingchain.py -v
+pytest tests/test_postprocessingchain.py -v
 pytest tests/test_gui.py -v        # offscreen, needs 'gui' extra
 pytest tests/ -v
 ```
@@ -167,4 +188,4 @@ pytest tests/ -v
 
 ---
 
-**Last Updated:** 2026-09-24 | **Version:** v0.91.2
+**Last Updated:** 2026-10-20 | **Version:** v0.92.0

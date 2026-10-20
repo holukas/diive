@@ -4,12 +4,13 @@ GUI.TABS.VARIABLE_SELECTOR: PICK A SUBSET OF VARIABLES
 
 A dual-list picker: click a variable in the left ("Available") list to move it
 to the right ("Selected") list; click one on the right to put it back. Confirm
-to update the Overview tab's variable list to the chosen subset.
+to narrow the working dataset to the chosen subset, app-wide (every tab that is
+not pinned). **Data > Reset to all variables** undoes it.
 
 The two-list move logic is the shared :class:`DualVariablePicker` (also used by
 the gap-filling feature picker); the subset operation itself is the library's
-``dv.keep_vars`` (applied by the Overview). This tab only collects the selection
-and emits it. GUI-only presentation.
+``dv.keep_vars`` (applied by ``MainWindow._apply_var_subset``). This tab only
+collects the selection and emits it. GUI-only presentation.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -37,7 +38,7 @@ class _SelectorSignals(QObject):
 
 
 class VariableSelectorTab(DiiveTab):
-    """Dual-list picker for a subset of variables; updates the Overview list."""
+    """Dual-list picker for an app-wide subset of variables."""
 
     title = "Select variables"
 
@@ -66,7 +67,9 @@ class VariableSelectorTab(DiiveTab):
 
         intro = QLabel(
             "Click a variable on the left to add it to your selection; click one "
-            "on the right to remove it. Confirm to show only those in the Overview.")
+            "on the right to remove it. Confirm to show only those in all tabs "
+            "(pinned tabs keep their data). Data > Reset to all variables brings "
+            "the rest back.")
         intro.setWordWrap(True)
         intro.setStyleSheet("color: #6B7780;")
         body_lay.addWidget(intro)
@@ -113,8 +116,11 @@ class VariableSelectorTab(DiiveTab):
         sel = [n for n in (state.get("selected") or []) if n in self._all]
         if not sel:
             return
+        # Show the picks only. The project's own saved subset decides what is
+        # active: applying the picks here brought back a subset the user had
+        # reset before saving.
         self.picker.set_selected(sel)
-        self._confirm()  # re-apply the subset to the Overview
+        self._on_changed()
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
         self._all = [str(c) for c in df.columns]
@@ -148,4 +154,4 @@ class VariableSelectorTab(DiiveTab):
         sel = self.picker.selected_names()
         if sel:
             self.subsetSelected.emit(list(sel))
-            self.status.setText(f"Applied {len(sel)} variables to the Overview.")
+            self.status.setText(f"Applied {len(sel)} variables to all tabs.")

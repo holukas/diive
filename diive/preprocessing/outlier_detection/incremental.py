@@ -3,14 +3,8 @@ Z-SCORE INCREMENTS: ABRUPT CHANGE DETECTION
 =============================================
 
 Detect outliers based on z-scores of consecutive value changes (forward, backward, combined).
-
-Part of the diive library: https://github.com/holukas/diive
-
-Record increment z-score:
-
-This module provides outlier detection based on abrupt changes between consecutive values.
-The method calculates z-scores for three types of increments (forward, backward, combined)
-and flags values where all three exceed the threshold.
+The method calculates z-scores for the three types of increments and flags values
+where all three exceed the threshold.
 
 Quality flags:
   - flag=0: Value within acceptable range (valid)
@@ -19,19 +13,16 @@ Quality flags:
 
 See examples/preprocessing/outlier_detection/outlier_incremental.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 from pandas import Series, DatetimeIndex
 
 from diive.core.dfun.stats import double_diff_absolute
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.preprocessing.outlier_detection.zscore import zScore
 
 
-@ConsoleOutputDecorator()
 class zScoreIncrements(FlagBase):
     """Identify outliers based on z-score of record increments.
 
@@ -43,10 +34,16 @@ class zScoreIncrements(FlagBase):
     3. **Combined increment:** sum of forward and backward increments
 
     Z-scores are calculated for each increment type, and values are flagged as outliers
-    only when ALL THREE increments exceed the z-score threshold. This approach is robust
-    to isolated spikes while allowing gradual changes.
+    only when ALL THREE increments exceed the z-score threshold. An isolated spike has
+    large increments on both sides and is flagged. A step change or a gradual change
+    does not have both and is kept.
 
     Example:
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> zi = dv.outliers.zScoreIncrements(series=s, thres_zscore=4).run()
+        >>> cleaned = zi.filteredseries
+
         See `examples/preprocessing/outlier_detection/outlier_incremental.py` for complete examples.
     """
 
@@ -68,9 +65,6 @@ class zScoreIncrements(FlagBase):
                 Default 4 is conservative; lower values detect more outliers.
             showplot: If True, displays visualization of detected outliers.
             verbose: If True, prints iteration statistics to console.
-
-        Returns:
-            Flag series that combines flags from all iterations in one single flag.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.verbose = False
@@ -152,7 +146,7 @@ class zScoreIncrements(FlagBase):
         n_outliers = len(rejected)
 
         if self.verbose:
-            detail(f"ITERATION#{iteration}: Total found outliers: {n_outliers} values (daytime+nighttime)",
+            detail(f"ITERATION#{iteration}: Total found outliers: {n_outliers} values",
                    verbose=self.verbose)
 
         return ok, rejected, n_outliers

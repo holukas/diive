@@ -1,5 +1,6 @@
 """
-QCF - OVERALL QUALITY CONTROL FLAG
+QCF: OVERALL QUALITY CONTROL FLAG
+=================================
 
 Calculate overall quality flag (QCF) by combining multiple individual test flags
 into a single quality indicator. Supports daytime/nighttime separation and USTAR
@@ -15,7 +16,8 @@ Typical workflow:
     1. Create FlagQCF instance with DataFrame containing individual test flags
     2. Call calculate() to compute QCF from flag combinations
     3. Access results via properties: flagqcf, filteredseries, filteredseries_hq
-    4. Use reporting methods for diagnostics: report_qcf_flags(), report_qcf_evolution()
+    4. Use reporting methods for diagnostics: report_qcf_series(), report_qcf_flags(),
+       report_qcf_evolution()
 
 Example:
     >>> import diive as dv, pandas as pd
@@ -23,6 +25,8 @@ Example:
     ...                   index=pd.date_range('2024-06-01', periods=2, freq='30min'))
     >>> qcf = dv.qaqc.FlagQCF(df=df, target_col='NEE', idstr='_L41')
     >>> qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import matplotlib.gridspec as gridspec
@@ -30,12 +34,68 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, Series
+from rich import box
+from rich.console import Group
+from rich.table import Table
+from rich.text import Text
 
+from diive.core.base.flagbase import sum_flag_value
 from diive.core.base.identify import identify_flagcols
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+from diive.core.times.times import describe_time_resolution
 from diive.core.utils.console import console as _console, detail
+from diive.preprocessing.qaqc.flags import MissingValues
 from diive.variables import daytime_nighttime_flag_from_swinpot
+
+
+def _fmt_n(n) -> str:
+    """Count with thousands separators."""
+    return f"{int(n):,}"
+
+
+def _fmt_pct(n, total) -> str:
+    """*n* as percentage of *total* with two decimals.
+
+    Shares that would round to 0.00 or 100.00 without being 0 or all show as
+    '<0.01' and '>99.99', so a single rejected record does not read as none.
+    """
+    if not total:
+        return "-"
+    p = 100 * n / total
+    if 0 < p < 0.01:
+        return "<0.01"
+    if 99.99 < p < 100:
+        return ">99.99"
+    return f"{p:.2f}"
+
+
+def _fmt_duration(index: pd.DatetimeIndex) -> str:
+    """Time covered by the records in *index*: first to last plus one time step."""
+    if len(index) < 2:
+        return f"{len(index)} record"
+    step = pd.Series(index[1:] - index[:-1]).mode().iloc[0]
+    days = (index[-1] - index[0] + step) / pd.Timedelta('1D')
+    return f"{days:,.1f} days" if days >= 1 else f"{days * 24:,.1f} hours"
+
+
+def _test_label(col, series_name: str) -> str:
+    """Short test name: without FLAG_, _TEST and a leading variable name."""
+    name = str(col).removeprefix('FLAG_').removesuffix('_TEST')
+    return name.removeprefix(f"{series_name}_")
+
+
+def _report_table() -> Table:
+    """Table in the style of the QCF reports. Rich falls back to ASCII lines on a cp1252 stdout."""
+    return Table(box=box.SIMPLE_HEAD, show_edge=False, pad_edge=False, header_style="bold")
+
+
+def _print_report(title: str, lines: list, table: Table = None) -> None:
+    """Print a report as one block: bold title, info lines, then the table."""
+    parts = [Text(title, style="bold")] + [Text(line) for line in lines]
+    if table is not None:
+        parts.append(table)
+    _console.print(Group(*parts, Text("")))
 
 
 class FlagQCF:
@@ -59,6 +119,12 @@ class FlagQCF:
         2: >3 soft flags OR >=1 hard flag OR rejected by day/night logic
            (code tests sumhardflags >= 2, i.e. 2 x count, so one hard flag suffices)
 
+    Rows that are not records: where a missing-values flag (``MissingValues``,
+    ``FLAG_*_MISSING_TEST``) is NaN and the target value is NaN, the row is an
+    empty slot rather than a record (mixed-resolution meteo screening puts
+    coarse records on a finer grid). A measured value is always a record. Such rows get QCF and flag sums NaN and are left out of every count
+    in the reports. Without such NaN nothing changes.
+
     Data Access:
         - flagqcf: Overall QCF flag for each record
         - filteredseries: Data with QCF=2 records set to NaN (general use)
@@ -78,16 +144,18 @@ class FlagQCF:
         """Initialize QCF calculator.
 
         Args:
-            df: DataFrame containing individual test flag columns following pattern
-                FLAG_*_{idstr}_{target_col}_TEST (e.g., FLAG_TEST1_L41_NEE_TEST). Values must be 0/1/2.
+            df: DataFrame containing individual test flag columns (e.g.
+                FLAG_TEST1_L41_NEE_TEST). Values must be 0/1/2. Every column that
+                starts with FLAG_, ends with _TEST or _QCF and contains the target
+                name (for fluxes also related names, e.g. FC for NEE; see
+                ``identify_flagcols``) is used, whatever its idstr.
             target_col: Column name of the target variable to calculate QCF for (e.g., 'NEE' or 'FC').
                 This name must appear in flag column names for proper identification.
             outname: Output name for QCF flag columns. If None, uses target_col name.
-            idstr: ID string identifier that appears in flag column names. This string
-                is used to identify which flags belong together and to name output
-                columns. Examples: '_L41', '_L41_FC', '_L4.1'. If None, auto-detected
-                from flag columns. All FLAG_*_{idstr}_{target_col}_TEST columns are identified
-                and used for QCF calculation.
+            idstr: ID string for the output column names, e.g. '_L41' gives
+                FLAG_L41_NEE_QCF. It does not select the flag columns. With
+                ``ustar_scenarios`` it also names the current USTAR scenario.
+                If None, the output names carry no ID string.
             swinpot_col: Column name of solar potential radiation for daytime/nighttime
                 separation. If provided, enables separate acceptance thresholds for day/night.
             nighttime_threshold: Solar radiation threshold (W/m²) below which records
@@ -96,7 +164,8 @@ class FlagQCF:
                 If provided, automatically excludes irrelevant USTAR flags for current scenario.
 
         Raises:
-            ValueError: If multiple USTAR scenarios are detected in idstr.
+            ValueError: If ``ustar_scenarios`` is given and idstr does not name
+                exactly one of them.
             KeyError: If target_col or swinpot_col column not found in DataFrame.
 
         Example:
@@ -133,8 +202,11 @@ class FlagQCF:
             if len(current_ustar_scenario) == 1:
                 current_ustar_scenario = str(current_ustar_scenario[0])
             else:
-                raise ValueError(f"(!)More than one USTAR scenario detected: "
-                                 f"current_ustar_scenario={current_ustar_scenario}.")
+                found = "No" if not current_ustar_scenario else "More than one"
+                raise ValueError(f"(!){found} USTAR scenario detected in idstr={self.idstr!r}: "
+                                 f"ustar_scenarios={self.ustar_scenarios}, "
+                                 f"matched={current_ustar_scenario}. "
+                                 f"idstr must contain exactly one scenario name.")
             exclude_ustar_ids = self.ustar_scenarios.copy()
             exclude_ustar_ids.remove(current_ustar_scenario)
         else:
@@ -143,6 +215,17 @@ class FlagQCF:
 
         flagcols = identify_flagcols(df=df, seriescol=target_col, exclude_ustar_ids=exclude_ustar_ids)
         self._flags_df = df[flagcols].copy()
+
+        # MissingValues flags every row 0 or 2, so a NaN there together with a
+        # missing value marks a row that was never a record (an empty slot between
+        # coarse records on a finer grid). Such rows must not be counted or rated
+        # as good. A measured value is always a record, whatever its missing flag,
+        # so its hard flags still apply.
+        missingcols = [c for c in flagcols if str(c).endswith(f"_{MissingValues.flagid}_TEST")]
+        if missingcols:
+            self._is_record = df[missingcols].notna().any(axis=1) | df[target_col].notna()
+        else:
+            self._is_record = pd.Series(True, index=df.index)
 
         # Detect daytime and nighttime
         if self.swinpot_data is not None:
@@ -214,9 +297,10 @@ class FlagQCF:
             2 = Poor quality (critical issues or too many soft flags)
 
         Returns:
-            Series with QCF values (0, 1 or 2). Never NaN: a record for which no test
-            raised a flag - including one where every test flag is NaN - has flag sums
-            of zero and therefore QCF=0.
+            Series with QCF values (0, 1 or 2). A record for which no test raised a
+            flag - including one where every test flag is NaN - has flag sums of zero
+            and therefore QCF=0. NaN only for rows that are not records (missing-values
+            flag and value NaN, see the class docstring).
         """
         return self.flags[self.flagqcfcol]
 
@@ -261,6 +345,10 @@ class FlagQCF:
         self.nighttime_accept_qcf_below = nighttime_accept_qcf_below
         self._flags_df = self._calculate_flagsums(df=self._flags_df)
         self._flags_df = self._calculate_flag_qcf(df=self._flags_df)
+        # Guarded: pandas upcasts on an assignment even when the mask selects nothing.
+        if not self._is_record.all():
+            self._flags_df.loc[~self._is_record, [self.flagqcfcol, self.sumflagscol,
+                                                  self.sumhardflagscol, self.sumsoftflagscol]] = np.nan
         self._add_series()
         self._calculate_series_qcf()
 
@@ -280,141 +368,185 @@ class FlagQCF:
         ix = self._flags_df[self.flagqcfcol] > 0
         self._flags_df.loc[ix, self.filteredseriescol_hq] = np.nan
 
-    def report_qcf_flags(self):
-        """Print detailed statistics for each test flag.
+    def _test_flagcols(self) -> list:
+        """Names of the individual test flags (FLAG_*_TEST) in ``flags``, in chain order."""
+        return [c for c in identify_flagcols(df=self.flags, seriescol=self.series_name)
+                if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
 
-        Generates comprehensive breakdown of each test flag:
-        - Individual test statistics (pass/warn/fail counts)
-        - Two reports: WITH and FOR available records
-        - Optional daytime/nighttime separation
+    def _measured_flags(self, test_cols: list) -> DataFrame:
+        """Flags *test_cols* of the measured records (a record with a target value)."""
+        ix_measured = self.df[self.series_name].notna() & self._is_record
+        return self.flags[test_cols][ix_measured].copy()
 
-        Shows which tests are raising flags and their impact.
+    def _progressive_qcf(self, flags: DataFrame, test_cols: list) -> list:
+        """QCF after each test, with all tests up to it applied, one Series per test.
+
+        The day/night accept thresholds apply as in the final QCF.
         """
-        _console.print(f"\n\n{'=' * 100}")
-        _console.print(f"  INDIVIDUAL TEST FLAG STATISTICS: {self.series_name}")
-        _console.print(f"{'=' * 100}")
+        qcf = []
+        for k in range(1, len(test_cols) + 1):
+            prog = flags[test_cols[:k]].copy()
+            prog = self._calculate_flagsums(df=prog)
+            prog = self._calculate_flag_qcf(df=prog)
+            qcf.append(prog[self.flagqcfcol])
+        return qcf
 
-        flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
+    def _record_periods(self, records: DataFrame) -> list:
+        """(label, rows) of *records* for all records, then daytime and nighttime if known."""
+        periods = [("all", records)]
+        if isinstance(self.daytime, Series):
+            periods.append(("day", records.loc[self.daytime.reindex(records.index) == 1]))
+        if isinstance(self.nighttime, Series):
+            periods.append(("night", records.loc[self.nighttime.reindex(records.index) == 1]))
+        return periods
 
-        # Filter to only test flags (exclude QCF)
-        test_flagcols = [c for c in flagcols if str(c).endswith('_TEST')]
+    def _accept_rule(self) -> str:
+        """Which QCF values are accepted, at daytime and nighttime if they differ."""
+        def accepted(below):
+            return "QCF 0 and 1" if below is None or below >= 2 else "QCF 0" if below == 1 else "none"
+        if self.daytime is None and self.nighttime is None:
+            return accepted(2)
+        day, night = accepted(self.daytime_accept_qcf_below), accepted(self.nighttime_accept_qcf_below)
+        return f"{day}, day and night" if day == night else f"daytime {day}, nighttime {night}"
 
-        if not test_flagcols:
-            _console.print("No test flags found.")
+    def _missing_test_cols(self, test_cols: list) -> list:
+        """The missing-values tests among *test_cols* (``MissingValues``)."""
+        return [c for c in test_cols if str(c).endswith(f"_{MissingValues.flagid}_TEST")]
+
+    def report_qcf_flags(self):
+        """Print how many measured records each test passed, warned and failed.
+
+        One table with a block per test (in chain order): all records, then
+        daytime and nighttime if potential radiation was given. Counts are
+        measured records (a value exists). *Not tested* counts measured records
+        without a flag from that test, e.g. records a rolling test could not
+        reach. The missing-values test flags only missing records, so it is
+        listed above the table instead.
+        """
+        test_cols = self._test_flagcols()
+        records = self.flags[self._is_record]
+        measured = records[records[self.series_name].notna()]
+        missing_cols = self._missing_test_cols(test_cols)
+        tests = [c for c in test_cols if c not in missing_cols]
+
+        lines = [f"Measured records: {_fmt_n(len(measured))} of {_fmt_n(len(records))}"]
+        if missing_cols:
+            n_missing = len(records) - len(measured)
+            lines.append(f"Missing records: {_fmt_n(n_missing)} "
+                         f"({_fmt_pct(n_missing, len(records))} %), flagged by the missing-values test")
+        if not tests:
+            _print_report(f"Test flags: {self.series_name}", lines + ["No outlier tests applied."])
             return
 
-        _console.print(f"\n  Total test flags: {len(test_flagcols)}")
-
-        # === REPORT 1: FLAGS WITH MISSING VALUES ===
-        _console.print(f"\n\n  +- REPORT 1A: ALL RECORDS (INCLUDING MISSING VALUES)")
-        _console.print(f"  |")
-        for col in test_flagcols:
-            self._flagstats_dt_nt(col=col, df=self.flags)
-
-        # === REPORT 2: FLAGS FOR AVAILABLE RECORDS ===
-        _console.print(f"\n  +- REPORT 1B: AVAILABLE RECORDS ONLY (EXCLUDING MISSING VALUES)")
-        _console.print(f"  |")
-        _df = self.flags.copy()
-        ix_missing_vals = _df[self.series_name].isnull()
-        _df = _df[~ix_missing_vals].copy()
-        for col in test_flagcols:
-            self._flagstats_dt_nt(col=col, df=_df)
-
-        # === SUMMARY ===
-        _console.print(f"\n{'=' * 100}\n")
-
-    def _flagstats_dt_nt(self, col: str, df: DataFrame):
-        """Print flag statistics overall, daytime, and nighttime (if available)."""
-        # Extract test name from column
-        test_name = col.replace('FLAG_', '').replace('_TEST', '')
-        _console.print(f"\n  +- {test_name}")
-        _console.print(f"  |  {'Period':<15} | {'Pass (0)':<15} | {'Warn (1)':<15} | {'Fail (2)':<15} | {'Missing':<12}")
-        _console.print(f"  |  {'-' * 85}")
-
-        flag = df[col]
-        self._flagstats(flag=flag, prefix="OVERALL", indent="  |  ")
-
-        if isinstance(self.daytime, Series):
-            flag = df[col].loc[self.daytime == 1]
-            if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="DAYTIME", indent="  |  ")
-
-        if isinstance(self.nighttime, Series):
-            flag = df[col].loc[self.nighttime == 1]
-            if len(flag) > 0:
-                self._flagstats(flag=flag, prefix="NIGHTTIME", indent="  |  ")
+        periods = self._record_periods(measured)
+        split = len(periods) > 1  # day and night known
+        table = _report_table()
+        table.add_column("Test", overflow="fold")
+        if split:
+            table.add_column("Period", no_wrap=True)
+        for name in ("Tested", "Pass\n(0)", "Warn\n(1)", "Fail\n(2)", "Fail\n%", "Not\ntested"):
+            table.add_column(name, justify="right", no_wrap=True)
+        for col in tests:
+            label = _test_label(col, self.series_name)
+            shown = [(name, rows) for name, rows in periods if name == "all" or len(rows)]
+            for k, (name, rows) in enumerate(shown):
+                flag = rows[col]
+                n_tested = int(flag.notna().sum())
+                n_fail = int((flag == 2).sum())
+                cells = [_fmt_n(n_tested), _fmt_n(int((flag == 0).sum())), _fmt_n(int((flag == 1).sum())),
+                         _fmt_n(n_fail), _fmt_pct(n_fail, n_tested), _fmt_n(len(flag) - n_tested)]
+                table.add_row(label if k == 0 else "", *([name] if split else []), *cells,
+                              end_section=split and k == len(shown) - 1)
+        _print_report(f"Test flags: {self.series_name}", lines, table)
 
     def report_qcf_evolution(self):
-        """Print how QCF evolves as tests are applied sequentially.
+        """Print how the QCF changes as the tests are applied one after the other.
 
-        Shows cumulative impact of each test flag: how many additional records get
-        flagged as you add each test. Helps identify which tests are most impactful
-        on data rejection and understand QC filtering progression.
-
-        Output:
-            - Sequential table: for each test, available vs rejected records with percentages
-            - Impact summary: tests ranked by number of records they newly reject
-            - Impact levels: HIGH (>=5 records), MODERATE (>=2), LOW (<2)
+        One row per test in chain order, each with all tests up to it applied
+        and the day/night accept rule of the final QCF: the records the test
+        itself failed (2) and warned (1), the records it newly rejected
+        (failed records already rejected by an earlier test are not new), and
+        the QCF distribution after it. Counts are measured records. The
+        missing-values test is left out, it flags only missing records.
         """
-        _console.print(f"\n\n{'=' * 120}")
-        _console.print(f"QCF EVOLUTION: SEQUENTIAL TEST APPLICATION")
-        _console.print(f"{'=' * 120}")
-        _console.print(f"Shows how QCF flag distribution changes as tests are applied sequentially")
-        _console.print(f"Target variable: {self.series_name}\n")
+        test_cols = self._test_flagcols()
+        flags = self._measured_flags(test_cols)
+        n_measured = len(flags)
+        tests = [c for c in test_cols if c not in self._missing_test_cols(test_cols)]
+        lines = [f"Measured records: {_fmt_n(n_measured)}",
+                 f"Accepted: {self._accept_rule()}",
+                 "Each row applies all tests up to it."]
+        day_night = self.daytime is not None or self.nighttime is not None
+        if day_night and min(self.daytime_accept_qcf_below, self.nighttime_accept_qcf_below) < 2:
+            lines.append("Newly rejected includes soft flags where only QCF 0 is accepted.")
+        if not tests:
+            _print_report(f"QCF evolution: {self.series_name}", lines[:1] + ["No outlier tests applied."])
+            return
 
-        flagcols = identify_flagcols(df=self.flags, seriescol=self.series_name)
-        flagcols = [c for c in flagcols if str(c).startswith('FLAG_') and (str(c).endswith('_TEST'))]
-        allflags_df = self.flags[flagcols].copy()
+        table = _report_table()
+        table.add_column("#", justify="right", no_wrap=True)
+        table.add_column("Test", overflow="fold")
+        for name in ("Fail\n(2)", "Warn\n(1)", "Newly\nrejected", "QCF 0", "QCF 1", "QCF 2", "Rejected\n%"):
+            table.add_column(name, justify="right", no_wrap=True)
+        n_rejected_before = 0
+        for k, (col, qcf) in enumerate(zip(tests, self._progressive_qcf(flags, tests), strict=True), 1):
+            n0, n1, n2 = (int((qcf == v).sum()) for v in (0, 1, 2))
+            table.add_row(str(k), _test_label(col, self.series_name),
+                          _fmt_n(int((flags[col] == 2).sum())), _fmt_n(int((flags[col] == 1).sum())),
+                          _fmt_n(n2 - n_rejected_before), _fmt_n(n0), _fmt_n(n1), _fmt_n(n2),
+                          _fmt_pct(n2, n_measured))
+            n_rejected_before = n2
+        _print_report(f"QCF evolution: {self.series_name}", lines, table)
 
-        ix_missing_vals = self.df[self.series_name].isnull()
-        allflags_df = allflags_df[~ix_missing_vals].copy()  # Ignore missing values
+    def report_qcf_series(self):
+        """Print the summary of the QCF: period, records, QCF distribution and accepted records.
 
-        n_vals = len(allflags_df)
-        _console.print(f"Measured records (excluding missing): {n_vals}\n")
+        Records are the expected records (measured or missing) of the period.
+        The QCF counts are measured records. Accepted records (QCF below the
+        accept threshold) make up the quality-controlled series. With potential
+        radiation, daytime and nighttime counts are shown too.
+        """
+        records = self.flags[self._is_record]
+        values = records[self.series_name]
+        qcf = records[self.flagqcfcol]
+        measured = values.notna()
+        accepted = records[self.filteredseriescol].notna()
+        n_records, n_measured = len(records), int(measured.sum())
 
-        # Track cumulative rejections
-        n_flag2_prev = 0
+        lines = []
+        if n_records:
+            ix = records.index
+            seconds = (ix.second != 0).any() or (ix.microsecond != 0).any()
+            stamp = '%Y-%m-%d %H:%M:%S' if seconds else '%Y-%m-%d %H:%M'
+            name = f" ({ix.name})" if ix.name else ""
+            lines.append(f"Period: {ix[0].strftime(stamp)} to {ix[-1].strftime(stamp)}{name}, "
+                         f"{_fmt_duration(ix)}")
+            lines.append(f"Time resolution: {describe_time_resolution(ix)}")
+        lines.append(f"Accepted: {self._accept_rule()} (the quality-controlled series)")
+        lines.append("QCF counts are measured records. All records include the missing ones.")
 
-        # Header for combined results table
-        _console.print(
-            f"{'Step':<5} {'Test Name':<38} {'New Rej':<8} {'Available':<12} {'Rejected':<12} {'Avail %':<9} {'Rej %':<9} {'QCF Distribution':<15}")
-        _console.print(f"{'':5} {'':38} {'':8} {'(count)':<12} {'(count)':<12} {'':9} {'':9} {'0/1/2':<15}")
-        _console.print(f"{'-' * 120}")
+        periods = self._record_periods(records)
+        table = _report_table()
+        table.add_column("", overflow="fold")
+        for name in ["Records", "% of all", "% measured"] + [name.capitalize() for name, _ in periods[1:]]:
+            table.add_column(name, justify="right", no_wrap=True)
 
-        for ix_test, test_col in enumerate(flagcols, 1):
-            prog_testcols = flagcols[:ix_test]
-            prog_df = allflags_df[prog_testcols].copy()
+        def row(label, mask, of_records=True, of_measured=True, end_section=False):
+            n = int(mask.sum())
+            by_period = [_fmt_n(int(mask.reindex(rows.index).sum())) for _, rows in periods[1:]]
+            table.add_row(label, _fmt_n(n), _fmt_pct(n, n_records) if of_records else "",
+                          _fmt_pct(n, n_measured) if of_measured else "", *by_period,
+                          end_section=end_section)
 
-            # Calculate QCF with tests so far
-            prog_df = self._calculate_flagsums(df=prog_df)
-            prog_df = self._calculate_flag_qcf(df=prog_df)
-
-            # Count QCF distribution
-            n_flag0 = (prog_df[self.flagqcfcol] == 0).sum()
-            n_flag1 = (prog_df[self.flagqcfcol] == 1).sum()
-            n_flag2 = (prog_df[self.flagqcfcol] == 2).sum()
-
-            # Available (pass) vs Rejected records
-            n_available = n_flag0 + n_flag1
-            n_rejected = n_flag2
-            perc_available = (n_available / n_vals) * 100 if n_vals > 0 else 0
-            perc_rejected = (n_rejected / n_vals) * 100 if n_vals > 0 else 0
-
-            # New rejections from this test
-            n_new_rejected = n_flag2 - n_flag2_prev
-
-            # Extract test name (remove FLAG_, _TEST)
-            test_name = test_col.replace('FLAG_', '').replace('_TEST', '')
-            if len(test_name) > 35:
-                test_name = test_name[:32] + "..."
-
-            qcf_dist = f"{n_flag0}/{n_flag1}/{n_flag2}"
-            _console.print(
-                f"{ix_test:<5} {test_name:<38} {n_new_rejected:<8} {n_available:<12} {n_rejected:<12} {perc_available:<9.2f} {perc_rejected:<9.2f} {qcf_dist:<15}")
-
-            n_flag2_prev = n_flag2
-
-        _console.print(f"\n{'=' * 120}\n")
+        everything = pd.Series(True, index=records.index)
+        row("All records", everything, of_measured=False)
+        row("Missing", ~measured, of_measured=False)
+        row("Measured", measured, end_section=True)
+        row("QCF 0, no flag", measured & (qcf == 0), of_records=False)
+        row("QCF 1, soft flags only", measured & (qcf == 1), of_records=False)
+        row("QCF 2, rejected", measured & (qcf == 2), of_records=False, end_section=True)
+        row("Accepted", accepted)
+        _print_report(f"QCF summary: {self.series_name}", lines, table)
 
     def screening_report(self) -> tuple[DataFrame, str]:
         """Build a per-step data-availability report as a table + formatted text.
@@ -433,27 +565,15 @@ class FlagQCF:
               - text: the same numbers formatted as fixed-width tables (one
                 section per period), ready to drop into a report.
         """
-        test_cols = [c for c in identify_flagcols(df=self.flags, seriescol=self.series_name)
-                     if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
-        target = self.df[self.series_name]
-        ix_measured = target.notna()
+        test_cols = self._test_flagcols()
 
-        periods = [("OVERALL", pd.Series(True, index=self.df.index))]
+        periods = [("OVERALL", self._is_record)]
         if isinstance(self.daytime, Series):
-            periods.append(("DAYTIME", self.daytime == 1))
+            periods.append(("DAYTIME", (self.daytime == 1) & self._is_record))
         if isinstance(self.nighttime, Series):
-            periods.append(("NIGHTTIME", self.nighttime == 1))
+            periods.append(("NIGHTTIME", (self.nighttime == 1) & self._is_record))
 
-        # Cumulative QCF after each test prefix (measured records only), mirroring
-        # report_qcf_evolution so day/night accept thresholds are honoured.
-        prog_qcf = []
-        if test_cols:
-            allflags = self.flags[test_cols][ix_measured].copy()
-            for k in range(1, len(test_cols) + 1):
-                prog = allflags[test_cols[:k]].copy()
-                prog = self._calculate_flagsums(df=prog)
-                prog = self._calculate_flag_qcf(df=prog)
-                prog_qcf.append(prog[self.flagqcfcol])
+        prog_qcf = self._progressive_qcf(self._measured_flags(test_cols), test_cols)
 
         rows = []
         for period_name, mask in periods:
@@ -532,110 +652,6 @@ class FlagQCF:
         lines.append("=" * 92)
         return "\n".join(lines) + "\n"
 
-    def _flagstats(self, flag: Series, prefix: str, indent: str = "  "):
-        """Print flag value counts in table format (0=pass, 1=warn, 2=fail)."""
-        n_values = len(flag)
-        flagcounts = flag.value_counts().to_dict()
-        flagmissing = flag.isnull().sum()
-
-        # Count each flag value
-        n_pass = flagcounts.get(0, 0)
-        n_warn = flagcounts.get(1, 0)
-        n_fail = flagcounts.get(2, 0)
-
-        # Calculate percentages
-        perc_pass = (n_pass / n_values) * 100 if n_values > 0 else 0
-        perc_warn = (n_warn / n_values) * 100 if n_values > 0 else 0
-        perc_fail = (n_fail / n_values) * 100 if n_values > 0 else 0
-        perc_miss = (flagmissing / n_values) * 100 if n_values > 0 else 0
-
-        # Format as table row with better spacing
-        pass_str = f"{n_pass:>5} ({perc_pass:>5.1f}%)"
-        warn_str = f"{n_warn:>5} ({perc_warn:>5.1f}%)"
-        fail_str = f"{n_fail:>5} ({perc_fail:>5.1f}%)"
-        miss_str = f"{flagmissing:>4} ({perc_miss:>5.1f}%)"
-
-        _console.print(f"{indent}{prefix:<15} | {pass_str:<15} | {warn_str:<15} | {fail_str:<15} | {miss_str:<12}")
-
-    def report_qcf_series(self):
-        """Print comprehensive summary statistics for quality-controlled series.
-
-        Shows data availability, QCF distribution, and quality assessment:
-        - Time period coverage
-        - Data availability at each filtering stage
-        - QCF flag distribution (good/marginal/poor)
-        - Data loss breakdown and quality assessment
-        - Useful for overall data quality assessment
-
-        Useful for quickly assessing overall data quality and coverage impact.
-        """
-        _console.print(f"\n\n{'=' * 70}")
-        _console.print(f"QCF QUALITY CONTROL REPORT: {self.series_name}")
-        _console.print(f"{'=' * 70}")
-
-        series = self.flags[self.series_name]
-        seriesqcf = self.flags[self.filteredseriescol]
-        qcf_flags = self.flags[self.flagqcfcol]
-
-        # === TIME PERIOD ===
-        start = series.index[0].strftime('%Y-%m-%d %H:%M')
-        end = series.index[-1].strftime('%Y-%m-%d %H:%M')
-        duration_days = (series.index[-1] - series.index[0]).days
-
-        _console.print(f"\n[1] TIME PERIOD")
-        _console.print(f"    Start:  {start}")
-        _console.print(f"    End:    {end}")
-        _console.print(f"    Duration: {duration_days} days ({len(series)} records)")
-
-        # === DATA AVAILABILITY STAGES ===
-        n_potential = len(series)
-        n_measured = len(series.dropna())
-        n_missed = n_potential - n_measured
-        n_available = len(seriesqcf.dropna())
-        n_rejected = n_measured - n_available
-
-        perc_measured = (n_measured / n_potential) * 100
-        perc_missed = (n_missed / n_potential) * 100
-        perc_available = (n_available / n_measured) * 100 if n_measured > 0 else 0
-        perc_rejected = (n_rejected / n_measured) * 100 if n_measured > 0 else 0
-
-        _console.print(f"\n[2] DATA AVAILABILITY STAGES")
-        _console.print(f"    Potential records (all time slots): {n_potential}")
-        _console.print(f"    Measured records (data exists):     {n_measured:>4} ({perc_measured:>6.2f}% of potential)")
-        _console.print(f"    Missing records (gaps/gaps):        {n_missed:>4} ({perc_missed:>6.2f}% of potential)")
-        _console.print(f"    |__ After QC (QCF < 2):             {n_available:>4} ({perc_available:>6.2f}% of measured)")
-        _console.print(f"    |__ Rejected by QC (QCF >= 2):      {n_rejected:>4} ({perc_rejected:>6.2f}% of measured)")
-
-        # === QCF FLAG DISTRIBUTION ===
-        # Counted on MEASURED records only, which is what the heading below says and what section
-        # [2] reports. Missing records carry QCF=2, so counting them here made QCF=2 the sum of the
-        # gaps and the rejected records - disagreeing with "Rejected by QC" in [2] - while the
-        # percentages divided by n_measured, so the three shares added up to more than 100%.
-        measured_qcf = qcf_flags[series.notna()]
-        n_qcf0 = (measured_qcf == 0).sum()
-        n_qcf1 = (measured_qcf == 1).sum()
-        n_qcf2 = (measured_qcf == 2).sum()
-
-        perc_qcf0 = (n_qcf0 / n_measured * 100) if n_measured > 0 else 0
-        perc_qcf1 = (n_qcf1 / n_measured * 100) if n_measured > 0 else 0
-        perc_qcf2 = (n_qcf2 / n_measured * 100) if n_measured > 0 else 0
-
-        _console.print(f"\n[3] QCF FLAG DISTRIBUTION (for measured records)")
-        _console.print(f"    QCF=0 (Good quality):     {n_qcf0:>4} ({perc_qcf0:>6.2f}%) - All tests pass")
-        _console.print(f"    QCF=1 (Marginal quality): {n_qcf1:>4} ({perc_qcf1:>6.2f}%) - Minor quality issues")
-        _console.print(f"    QCF=2 (Poor quality):     {n_qcf2:>4} ({perc_qcf2:>6.2f}%) - Critical issues or too many warnings")
-
-        # === DATA LOSS ANALYSIS ===
-        data_loss_perc = (n_rejected / n_measured * 100) if n_measured > 0 else 0
-
-        _console.print(f"\n[4] DATA LOSS ANALYSIS")
-        _console.print(f"    Records retained after QC: {n_available}/{n_measured} ({perc_available:.2f}%)")
-        _console.print(f"    Data loss from QC:         {n_rejected}/{n_measured} ({data_loss_perc:.2f}%)")
-        _console.print(
-            f"    Final data coverage:       {n_available}/{n_potential} ({(n_available / n_potential) * 100:.2f}% of potential)")
-
-        _console.print(f"\n{'=' * 70}\n")
-
     def _calculate_flag_qcf(self, df: DataFrame) -> DataFrame:
         """Calculate QCF flag (0/1/2) using hierarchical decision rules and apply day/night thresholds."""
 
@@ -660,14 +676,17 @@ class FlagQCF:
         ix = (df[self.sumsoftflagscol] <= 3) & (df[self.sumsoftflagscol] >= 1) & (df[self.sumhardflagscol] == 0)
         df.loc[ix, self.flagqcfcol] = 1
 
-        # Flag daytime values based on param
+        # Flag daytime values based on param. Reindexed first: report_qcf_evolution
+        # passes a subset of records, and letting `&` align a subset index against
+        # the full one clears the index freq of every frame sharing that index
+        # (pandas 3), which breaks later resampling.
         if isinstance(self.daytime, Series):
-            ix = (df[self.flagqcfcol] >= self.daytime_accept_qcf_below) & (self.daytime == 1)
+            ix = (df[self.flagqcfcol] >= self.daytime_accept_qcf_below) & (self.daytime.reindex(df.index) == 1)
             df.loc[ix, self.flagqcfcol] = 2
 
         # Flag nighttime values based on param
         if isinstance(self.nighttime, Series):
-            ix = (df[self.flagqcfcol] >= self.nighttime_accept_qcf_below) & (self.nighttime == 1)
+            ix = (df[self.flagqcfcol] >= self.nighttime_accept_qcf_below) & (self.nighttime.reindex(df.index) == 1)
             df.loc[ix, self.flagqcfcol] = 2
 
         # Daytime and nighttime flags are only calculated when swinpot is provided.
@@ -685,11 +704,11 @@ class FlagQCF:
 
         # Get variables that contain flag data (individual quality test results)
         onlyflagtests = [c for c in df.columns if str(c).startswith('FLAG_') and str(c).endswith('_TEST')]
-        onlyflagtests_df = df[onlyflagtests].copy()
+        onlyflagtests_df = df[onlyflagtests]
 
         # Build flag sums from flag data
-        sumhardflags = onlyflagtests_df[onlyflagtests_df == 2].sum(axis=1)  # The sum of all flags that show 2
-        sumsoftflags = onlyflagtests_df[onlyflagtests_df == 1].sum(axis=1)  # The sum of all flags that show 1
+        sumhardflags = sum_flag_value(onlyflagtests_df, 2)  # The sum of all flags that show 2
+        sumsoftflags = sum_flag_value(onlyflagtests_df, 1)  # The sum of all flags that show 1
         sumflags = sumhardflags.add(sumsoftflags)  # Sum of all flags
 
         # Add flag sums to overall flag dataframe
@@ -698,13 +717,14 @@ class FlagQCF:
         df[self.sumflagscol] = sumflags
         return df
 
-    def showplot_qcf_heatmaps(self, maxabsval: float = None, figsize: tuple = (18, 8)):
+    def showplot_qcf_heatmaps(self, maxabsval: float = None, figsize: tuple = (18, 8),
+                              flags: DataFrame = None):
         """Display 4-panel heatmap showing data before/after QC and flag distribution.
 
         Panels (left to right):
         1. Original series (before QC)
         2. Quality-controlled series (after QC, NaN where QCF=2)
-        3. Flag sums (total count of raised flags)
+        3. Flag sums (sum of the flag values of all tests)
         4. QCF overall flag (0=good, 1=marginal, 2=poor)
 
         Uses datetime heatmap layout (e.g., day-of-year vs hour-of-day) for visual patterns.
@@ -713,7 +733,10 @@ class FlagQCF:
             maxabsval: Max absolute value for colorbar symmetry. If None, auto-scales.
                 Useful for comparing multiple panels with same scale.
             figsize: Figure dimensions (width, height) in inches. Default (18, 8).
+            flags: Frame to draw instead of ``flags``, with the same index and
+                columns, e.g. a copy prepared for display. Default ``flags``.
         """
+        flags = self.flags if flags is None else flags
         fig = plt.figure(facecolor='white', figsize=figsize)
         gs = gridspec.GridSpec(1, 4)  # rows, cols
         gs.update(wspace=0.4, hspace=0, left=0.03, right=0.97, top=0.9, bottom=0.1)
@@ -725,14 +748,14 @@ class FlagQCF:
         # Heatmaps
         vmin = -maxabsval if maxabsval else None
         vmax = maxabsval if maxabsval else None
-        HeatmapDateTime(series=self.flags[self.series_name]).plot(ax=ax_before, vmin=vmin, vmax=vmax,
-                                                                  cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
-                                                                        cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.sumflagscol]).plot(ax=ax_flagsum,
-                                                                  cb_digits_after_comma=0)
-        HeatmapDateTime(series=self.flags[self.flagqcfcol]).plot(ax=ax_flag,
-                                                                 cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.series_name]).plot(ax=ax_before, vmin=vmin, vmax=vmax,
+                                                             cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
+                                                                   cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.sumflagscol]).plot(ax=ax_flagsum,
+                                                             cb_digits_after_comma=0)
+        HeatmapDateTime(series=flags[self.flagqcfcol]).plot(ax=ax_flag,
+                                                            cb_digits_after_comma=0)
         plt.setp(ax_after.get_yticklabels(), visible=False)
         plt.setp(ax_flagsum.get_yticklabels(), visible=False)
         plt.setp(ax_flag.get_yticklabels(), visible=False)
@@ -742,7 +765,7 @@ class FlagQCF:
 
         fig.show()
 
-    def showplot_qcf_timeseries(self, figsize=(16, 20)):
+    def showplot_qcf_timeseries(self, figsize=(16, 20), flags: DataFrame = None):
         """Display all QCF data columns as individual time series subplots.
 
         Creates subplots for: original series, test flags, flag sums, and QCF flag.
@@ -750,6 +773,9 @@ class FlagQCF:
 
         Args:
             figsize: Figure dimensions (width, height) in inches. Default (16, 20).
+            flags: Frame to draw instead of ``flags``, e.g. a copy prepared for
+                display. Default ``flags``.
         """
-        self.flags.plot(subplots=True, figsize=figsize)
+        flags = self.flags if flags is None else flags
+        flags.plot(subplots=True, figsize=figsize)
         plt.show()

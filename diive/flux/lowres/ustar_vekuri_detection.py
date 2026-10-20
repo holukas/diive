@@ -88,7 +88,7 @@ class UstarVekuriThresholdDetection:
 
     See Also
     --------
-    UstarMovingPointDetection : Full ONEFlux implementation with forward/back modes.
+    UstarMovingPointDetection : Faithful port of the ONEFlux moving point method (forward mode).
     FlagMultipleConstantUstarThresholds : Apply detected USTAR thresholds to filter data.
     """
 
@@ -329,7 +329,7 @@ class UstarVekuriThresholdDetection:
         """
         Detect threshold using ascending search.
 
-        Finds first USTAR class where flux >= 0.95 * mean(flux[i+1:i+WINDOW_SIZE])
+        Finds first USTAR class where flux >= 0.95 * mean(flux[i+1:i+1+WINDOW_SIZE])
         """
         for i in range(len(ustar_means) - 1):
             if np.isnan(flux_means[i]):

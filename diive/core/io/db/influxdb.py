@@ -7,9 +7,8 @@ port. It wraps diive's in-house InfluxDB engine
 (:class:`~diive.core.io.db.influx.influxio.InfluxIO`), adapting it to the generic
 backend contract plus the schema-browsing helpers the GUI explorer needs.
 
-The engine needs the optional ``influxdb-client``, reachable either as the ``db``
-dependency group (``uv sync --group db``) when working on diive, or as the ``db``
-extra (``diive[db]``) when depending on it. The client is imported lazily, so
+The engine needs the optional ``influxdb-client``, installed with the ``db`` extra
+(``pip install "diive[db]"``, or ``uv sync --extra db`` in a clone). The client is imported lazily, so
 importing this module never requires it; :func:`influxdb_available` reports
 whether it can be used.
 
@@ -21,8 +20,8 @@ from diive.core.io.db.base import DatabaseBackend
 
 #: Shown when the optional dependency is missing.
 INSTALL_HINT = ("InfluxDB support needs the optional 'influxdb-client':\n"
-                "    uv sync --group db       (working on diive)\n"
-                "    pip install 'diive[db]'  (depending on diive)")
+                "    pip install \"diive[db]\"\n"
+                "    uv sync --extra db       (in a clone of diive)")
 
 
 def influxdb_available() -> bool:

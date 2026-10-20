@@ -51,8 +51,8 @@ dts = DetectTimestampShifts(
     df=df,
     col_meas='Rg_f',  # measured shortwave radiation column
     col_pot='SW_IN_POT',  # potential radiation column (auto-computed when absent)
-    lat=47.286417,  # site latitude, decimal degrees
-    lon=7.733750,  # site longitude, decimal degrees
+    lat=46.81533,  # site latitude, decimal degrees
+    lon=9.85591,  # site longitude, decimal degrees
     utc_offset=1,  # UTC offset in hours (CET = UTC+1)
 )
 
@@ -71,8 +71,8 @@ from diive.variables.radiation import potrad
 df_with_pot = df.copy()
 df_with_pot['SW_IN_POT'] = potrad(
     timestamp_index=df.index,
-    lat=47.286417,
-    lon=7.733750,
+    lat=46.81533,
+    lon=9.85591,
     utc_offset=1,
 )
 

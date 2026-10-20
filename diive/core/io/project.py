@@ -26,6 +26,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pandas as pd
 from pandas import DataFrame
 
 from diive.core.io.files import load_parquet, save_parquet
@@ -67,7 +68,8 @@ def save_project(folder, project: DiiveProject) -> Path:
     """Write ``project`` into ``folder`` (created if needed). Returns the folder.
 
     The marker, manifest, and ``data.parquet`` are (re)written; an existing diive
-    project at ``folder`` is updated in place.
+    project at ``folder`` is updated in place. The manifest also stores the
+    frequency of the time index (``data_freq``), which parquet does not keep.
     """
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
@@ -87,6 +89,7 @@ def save_project(folder, project: DiiveProject) -> Path:
         "format_version": FORMAT_VERSION,
         "diive_version": diive_version,
         "data_file": DATA_FILE,
+        "data_freq": getattr(project.data.index, "freqstr", None),
         "metadata": project.metadata.to_dict(),
         "extras": project.extras,
     }
@@ -96,14 +99,39 @@ def save_project(folder, project: DiiveProject) -> Path:
 
 
 def load_project(folder) -> DiiveProject:
-    """Read a diive project from ``folder``. Raises if it is not a project."""
+    """Read a diive project from ``folder``. Raises if it is not a project.
+
+    The data come back as they were saved: the timestamps are not regularized
+    and not converted, so data with mixed time resolutions keep all records.
+    The frequency of the time index is restored from the manifest. Projects
+    saved without it get the frequency only if the index is regular.
+    """
     folder = Path(folder)
     if not is_project(folder):
         raise ValueError(f"Not a diive project (no {MARKER_FILE}): {folder}")
     manifest = json.loads((folder / MANIFEST_FILE).read_text(encoding="utf-8"))
-    data = load_parquet(filepath=str(folder / manifest.get("data_file", DATA_FILE)))
+    data = load_parquet(filepath=str(folder / manifest.get("data_file", DATA_FILE)),
+                        output_middle_timestamp=False, sanitize_timestamp=False)
+    data = _restore_freq(data, manifest)
     store = MetadataStore()
     store.load_dict(manifest.get("metadata"))
     return DiiveProject(
         name=manifest.get("name", folder.stem),
         data=data, metadata=store, extras=dict(manifest.get("extras") or {}))
+
+
+def _restore_freq(data: DataFrame, manifest: dict) -> DataFrame:
+    """Set the index frequency that parquet does not store."""
+    if not isinstance(data.index, pd.DatetimeIndex):
+        return data
+    if "data_freq" in manifest:
+        freq = manifest["data_freq"]
+    else:
+        # Older projects: take the frequency only from a fully regular index
+        freq = pd.infer_freq(data.index) if len(data.index) >= 3 else None
+    if freq:
+        try:
+            data.index = pd.DatetimeIndex(data.index, freq=freq)
+        except ValueError:
+            pass  # index does not fit the frequency: keep it as saved
+    return data

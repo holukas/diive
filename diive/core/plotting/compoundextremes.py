@@ -171,7 +171,8 @@ class CompoundExtremesPlot:
             annotate_fontsize: Annotation font size.
             annotate_offset: (dx, dy) point offset for annotation text.
             threshold_color: Colour of the dashed threshold lines.
-            legend: Draw the category legend.
+            legend: Draw the category legend. ``FormatStyle(show_legend=False)``
+                also hides it.
             legend_title: Legend title.
             showplot: Call ``fig.show()`` when a new figure was created.
         """
@@ -211,13 +212,17 @@ class CompoundExtremesPlot:
                                     xytext=annotate_offset, fontsize=annotate_fontsize,
                                     color=st['color'], zorder=4)
 
-        style.apply(ax=ax, default_title="Compound extremes",
-                    default_xlabel=self.xname, default_ylabel=self.yname)
+        # The category legend below replaces the style's generic legend, so the
+        # style must not draw one, or legend=False would still show it.
+        style.merged(show_legend=False).apply(
+            ax=ax, default_title="Compound extremes",
+            default_xlabel=self.xname, default_ylabel=self.yname)
 
-        if legend:
+        if legend and style.show_legend:
             ax.legend(title=legend_title, loc='lower left', frameon=False)
 
-        if standalone:
-            self.fig.tight_layout()
-            if showplot:
-                self.fig.show()
+        # No tight_layout(): pf.create_ax() builds the figure with
+        # layout='constrained', which already spaces it. Switching engines
+        # warned ("The figure layout has changed to tight").
+        if standalone and showplot:
+            self.fig.show()

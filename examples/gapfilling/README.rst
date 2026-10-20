@@ -8,7 +8,7 @@ Examples demonstrating various gap-filling approaches for time series data, from
 Method Overview
 ---------------
 
-Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Meteorological Data Similarity) needs no training — it matches similar conditions across your dataset. SW_IN Physics+XGBoost uses solar geometry to constrain nighttime values to zero and fills daytime gaps with gradient boosting.
+Linear interpolation is fast but works only for small gaps. Random Forest and XGBoost require training data but handle larger gaps and complex patterns. MDS (Marginal Distribution Sampling) needs no training — it matches similar conditions across your dataset. SW_IN Physics+XGBoost uses solar geometry to constrain nighttime values to zero and fills daytime gaps with gradient boosting.
 
 .. list-table::
    :header-rows: 1
@@ -24,7 +24,7 @@ Linear interpolation is fast but works only for small gaps. Random Forest and XG
      - General purpose, handles nonlinear patterns
    * - XGBoost
      - Yes
-     - High accuracy, best for large datasets
+     - Gradient boosting, handles nonlinear patterns
    * - MDS
      - No
      - When you lack training data
@@ -56,17 +56,21 @@ Training-based, interpretable, robust to outliers. Four versions: basic, long-te
 XGBoost
 ~~~~~~~
 
-Gradient boosting. Often more accurate than Random Forest but requires more tuning.
+Gradient boosting. Has more hyperparameters to tune than Random Forest.
 
 - **gapfill_xgboost.py** — Basic XGBoost with default hyperparameters
 - **gapfill_optimize_xgboost.py** — Hyperparameter tuning via grid search
 
-MDS (Meteorological Data Similarity)
+MDS (Marginal Distribution Sampling)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 No training. Fills gaps by finding similar conditions elsewhere in your data.
+``FluxMDS`` has three modes: ``mode='diive'`` (default) uses the symmetric mean of
+Vekuri et al. (2023) in the radiation-matching methods, ``mode='oneflux'``
+reproduces ONEFlux's ``gf_mds`` bit for bit, and ``mode='reddyproc'`` reproduces
+REddyProc's ``sMDSGapFill``.
 
-- **gapfill_mds.py** — Original MDS implementation
+- **gapfill_mds.py** — MDS gap-filling of one month of NEE, with the report, flags and plots, then the modes ``'diive'`` and ``'oneflux'`` on one year
 - **gapfill_mds_comparison.py** — MDS reproducibility / determinism check (two runs are bit-identical)
 
 SW_IN Physics + XGBoost
@@ -92,7 +96,7 @@ When to Use Each Method
 
    filled = dv.gapfilling.linear_interpolation(series=df['NEE'], limit=1)
 
-**Random Forest or XGBoost:** You have training data and want good accuracy without excessive tuning. Start with Random Forest for interpretability; switch to XGBoost if you need better accuracy on a specific dataset.
+**Random Forest or XGBoost:** You have drivers measured during the gaps and enough complete records to train on. Start with Random Forest; try XGBoost and compare the held-out scores on your dataset.
 
 .. code-block:: python
 
@@ -118,8 +122,8 @@ When to Use Each Method
    model.fillgaps()     # predict the missing values
    gapfilled = model.get_gapfilled_target()
 
-Keyword arguments other than ``input_df``, ``target_col``, ``verbose``, ``test_size`` and
-``below_zero`` are passed on to the underlying regressor (e.g. ``n_estimators``,
+Keyword arguments other than ``input_df``, ``target_col``, ``verbose``, ``test_size``,
+``below_zero`` and ``shap_max_rows`` are passed on to the underlying regressor (e.g. ``n_estimators``,
 ``random_state``, ``n_jobs``).
 
 **MDS:** You have no training data, or you want to avoid potential overfitting from learned models.
@@ -188,7 +192,7 @@ Random Forest and XGBoost both use an identical 8-stage feature engineering pipe
 4. **Exponential Moving Average** — EMA decay (e.g., [6, 12, 24])
 5. **Polynomial features** — Squared/cubic terms (e.g., degree=2)
 6. **STL decomposition** — Trend, seasonal, residual (optional)
-7. **Timestamps** — Year, month, hour, season (creates ~19 features for diurnal/seasonal patterns)
+7. **Timestamps** — Year, sine/cosine of season, month, week, day of year and hour, and the combined year-month, year-day-of-year and year-week (14 features)
 8. **Record number** — Continuous ordering to detect long-term drift
 
 See ``diive.core.ml.feature_engineer.FeatureEngineer`` for details.
@@ -201,4 +205,4 @@ See ``dv.gapfilling`` for API documentation:
 - ``RandomForestTS`` — Random Forest time series with 8-stage feature engineering
 - ``XGBoostTS`` — XGBoost gradient boosting with tunable hyperparameters
 - ``linear_interpolation()`` — Simple linear interpolation
-- ``FluxMDS`` — Meteorological Data Similarity
+- ``FluxMDS`` — Marginal Distribution Sampling

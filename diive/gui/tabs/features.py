@@ -381,6 +381,7 @@ class FeatureEngineerTab(DiiveTab):
         # (resetting _created_df), so capture what we need first.
         created = self._created_df
         n = len(created.columns)
-        self.featuresCreated.emit(created)
+        if not self._emit_features(created):
+            return
         self.status.setText(f"Added {n} features to the variable list.")
         self.add_btn.setEnabled(False)

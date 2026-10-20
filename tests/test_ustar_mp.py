@@ -429,6 +429,32 @@ class TestUstarFlagNeedsAMeasuredUstar(unittest.TestCase):
         self.assertEqual(flagger.results[flagcol].tolist()[3], 0)
         self.assertEqual(flagger.results[flagcol].tolist()[0], 2)
 
+    def test_threshold_zero_flags_nothing_not_even_missing_ustar(self):
+        # thresholds=[0] with CUT_NONE is the no-filter setting for H and LE (L347)
+        from diive.flux.lowres.ustarthreshold import FlagSingleConstantUstarThreshold
+        nee, ustar = self._frame()
+        flag = FlagSingleConstantUstarThreshold(series=nee, ustar=ustar, threshold=0).run().get_flag()
+        self.assertEqual(flag.iloc[0], 0)   # flux present, USTAR unknown
+        self.assertEqual(flag.iloc[4], 0)
+        self.assertEqual(flag.iloc[2], 0)
+        self.assertEqual(int((flag == 2).sum()), 0)
+        self.assertTrue(np.isnan(flag.iloc[1]))   # missing flux stays NaN
+
+    def test_threshold_series_with_zeros_keeps_those_records_only(self):
+        import pandas as pd
+        from diive.flux.lowres.ustarthreshold import FlagMultipleVariableUstarThresholds
+        nee, ustar = self._frame()
+        thr = pd.Series([0.0, 0.3, 0.3, 0.3, 0.3, 0.3], index=nee.index)
+        flagger = FlagMultipleVariableUstarThresholds(
+            series=nee, ustar=ustar, threshold_series={'VUT_50': thr},
+            showplot=False, verbose=False)
+        flagger.calc()
+        flagcol = [c for c in flagger.results.columns if c.startswith('FLAG_')][0]
+        flag = flagger.results[flagcol]
+        self.assertEqual(flag.iloc[0], 0)   # threshold 0: kept without USTAR
+        self.assertEqual(flag.iloc[4], 2)   # threshold 0.3: rejected without USTAR
+        self.assertEqual(flag.iloc[2], 2)   # measured USTAR below 0.3
+
 
 class TestScenarioPlotCountsAreAddressedPositionally(unittest.TestCase):
     """The bar annotations index a label-indexed count Series.
@@ -458,6 +484,26 @@ class TestScenarioPlotCountsAreAddressedPositionally(unittest.TestCase):
         self.assertEqual(len(texts), 6)
         # The unfiltered column is the reference, so its bar reads 100%.
         self.assertIn('100%', texts)
+
+
+class TestConstantScenariosRejectMissingUstar(unittest.TestCase):
+    """A record with no USTAR cannot pass a u* threshold, as in the flag and ONEFlux."""
+
+    def test_missing_ustar_is_removed_in_every_scenario(self):
+        import pandas as pd
+        from diive.flux.lowres.ustarthreshold import UstarThresholdConstantScenarios
+        ix = pd.date_range('2023-06-01 00:30', periods=6, freq='30min',
+                           name='TIMESTAMP_MIDDLE')
+        nee = pd.Series(np.arange(1.0, 7.0), index=ix, name='NEE')
+        ustar = pd.Series([0.05, 0.25, np.nan, 0.45, np.nan, 0.6], index=ix, name='USTAR')
+        swinpot = pd.Series(0.0, index=ix, name='SW_IN_POT')
+        scenarios = UstarThresholdConstantScenarios(series=nee, ustar=ustar, swinpot=swinpot)
+        scenarios.calc(ustarthresholds=[0.1, 0.5])
+        df = scenarios.scenariosdf
+        self.assertEqual(df['NEE_CUT0.1'].dropna().tolist(), [2.0, 4.0, 6.0])
+        self.assertEqual(df['NEE_CUT0.5'].dropna().tolist(), [6.0])
+        # The unfiltered column keeps every record.
+        self.assertEqual(df['NEE'].notna().sum(), 6)
 
 
 class TestBootstrapThresholdsAreReproducible(unittest.TestCase):

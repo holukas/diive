@@ -74,8 +74,8 @@ class TestCreateVar(unittest.TestCase):
         dnf = DaytimeNighttimeFlag(
             timestamp_index=df.index,
             nighttime_threshold=1,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         results = dnf.get_results()
@@ -84,12 +84,12 @@ class TestCreateVar(unittest.TestCase):
         nighttime_flag = dnf.get_nighttime_flag()
         # Baselines encode potrad (ONEFlux/FLUXNET parity): solar constant 1376,
         # Spencer 1971 declination/eccentricity, NOAA solar-noon shift, period mean.
-        self.assertAlmostEqual(results.sum().sum(), 52742196.78324184, places=3)
-        self.assertAlmostEqual(swin_pot.sum(), 52566900.78324184, places=3)
-        self.assertEqual(daytime_flag.sum(), 90888)
+        self.assertAlmostEqual(results.sum().sum(), 53121906.35272053, places=3)
+        self.assertAlmostEqual(swin_pot.sum(), 52946610.35272053, places=3)
+        self.assertEqual(daytime_flag.sum(), 90638)
         self.assertEqual(daytime_flag.max(), 1)
         self.assertEqual(daytime_flag.min(), 0)
-        self.assertEqual(nighttime_flag.sum(), 84408)
+        self.assertEqual(nighttime_flag.sum(), 84658)
         self.assertEqual(nighttime_flag.max(), 1)
         self.assertEqual(nighttime_flag.min(), 0)
         self.assertEqual(daytime_flag[nighttime_flag == 0].min(), 1)
@@ -127,7 +127,10 @@ class TestCreateVar(unittest.TestCase):
         self.assertEqual(less_stats['Tair_f']['max'], 4.99)
         self.assertEqual(less_stats['FLAG_IS_OUTSIDE_RANGE']['min'], 0)
         self.assertEqual(less_stats['FLAG_IS_OUTSIDE_RANGE']['max'], 0)
-        self.assertEqual(ts_full_results.sum().sum(), -7223.621999999999)
+        # The missing lower limit is open (L341), so the limit column holds -inf.
+        self.assertTrue((ts_full_results['LOWER_LIMIT'] == -np.inf).all())
+        self.assertAlmostEqual(
+            ts_full_results.drop(columns=['UPPER_LIMIT', 'LOWER_LIMIT']).sum().sum(), 3598.602)
         # from pathlib import Path
         # outpath = Path(r"F:\TMP") / 'ts_full_results.csv'
         # ts_full_results.to_csv(outpath, index=False)
@@ -269,10 +272,6 @@ class TestCreateVar(unittest.TestCase):
         self.assertLess(unevenness, 0.1)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class TestLaggedVariantsSingleColumn(unittest.TestCase):
     """A one-column dataframe used to come back with no lags and no warning."""
 
@@ -371,6 +370,22 @@ class TestClassifyVariable(unittest.TestCase):
         # Usable both by field and by position.
         kind, category = result
         self.assertEqual((kind, category), (result.kind, result.category))
+
+
+class TestDriverFlagColumns(unittest.TestCase):
+    """Suggested QC-flag columns for an MDS driver."""
+
+    def test_diive_and_fluxnet_flags_in_input_order(self):
+        from diive.variables import driver_flag_columns
+        cols = ['TA_F', 'TA_F_QC', 'FLAG_TA_F_gfMDS_ISFILLED', 'TA_F_MDS',
+                'SW_IN_F', 'SW_IN_F_QC']
+        self.assertEqual(driver_flag_columns(cols, 'TA_F'),
+                         ['TA_F_QC', 'FLAG_TA_F_gfMDS_ISFILLED'])
+
+    def test_driver_itself_and_empty_driver_are_not_returned(self):
+        from diive.variables import driver_flag_columns
+        self.assertEqual(driver_flag_columns(['VPD_QC'], 'VPD_QC'), [])
+        self.assertEqual(driver_flag_columns(['VPD_QC'], ''), [])
 
 
 class TestAutoPickColumn(unittest.TestCase):
@@ -531,3 +546,26 @@ class TestDaytimeNighttimeFlagFromSwinpot(unittest.TestCase):
         self.assertEqual(daytime.name, 'IS_DAY')
         self.assertEqual(nighttime.name, 'IS_NIGHT')
         self.assertTrue(daytime.index.equals(self.swinpot.index))
+
+
+class TestTimeSinceOpenLimits(unittest.TestCase):
+    """L341: a missing limit leaves that side open, also with include_lim=False."""
+
+    def _prec(self):
+        import pandas as pd
+        idx = pd.date_range('2024-01-01', periods=8, freq='D')
+        return pd.Series([0, 0, 1.2, 0, 0, 0.3, 0, 0.], index=idx, name='PREC')
+
+    def test_largest_event_resets_the_count(self):
+        ts = TimeSince(self._prec(), lower_lim=0, include_lim=False)
+        ts.calc()
+        self.assertEqual(ts.get_timesince().tolist(), [1, 2, 0, 1, 2, 0, 1, 2])
+
+    def test_smallest_value_counts_without_lower_limit(self):
+        ts = TimeSince(-self._prec(), upper_lim=0, include_lim=False)
+        ts.calc()
+        self.assertEqual(ts.get_timesince().tolist(), [1, 2, 0, 1, 2, 0, 1, 2])
+
+
+if __name__ == '__main__':
+    unittest.main()

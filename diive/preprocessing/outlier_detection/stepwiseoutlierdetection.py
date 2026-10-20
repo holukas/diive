@@ -3,7 +3,8 @@ OUTLIER DETECTION: STEP-WISE OUTLIER DETECTION
 ==============================================
 
 Chain multiple detection methods sequentially for progressive outlier filtering.
-Includes Hampel, z-score, LOF, absolute limits, local SD, and manual removal.
+Includes Hampel, z-score (global, rolling and increments), LOF, absolute limits,
+local SD, trim low, missing values and manual removal.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -13,7 +14,7 @@ from pandas import Series, DataFrame
 
 from diive.core.funcs.funcs import validate_id_string
 from diive.core.plotting.timeseries import TimeSeries
-from diive.core.utils.console import info
+from diive.core.utils.console import info, warn
 from diive.core.times.times import TimestampSanitizer
 from diive.preprocessing.outlier_detection.absolutelimits import AbsoluteLimits
 from diive.preprocessing.outlier_detection.hampel import Hampel
@@ -28,8 +29,6 @@ from diive.preprocessing.outlier_detection.zscore import zScore, zScoreRolling
 class StepwiseOutlierDetection:
     """
     Step-wise outlier detection in time series data
-
-    The class is optimized to work in Jupyter notebooks.
 
     Quality flags that can be directly created via this class:
     - `.flag_missingvals_test()`: Generate flag that indicates missing records in data
@@ -53,8 +52,8 @@ class StepwiseOutlierDetection:
     used to filter the time series.
 
     **Screening**
-    The stepwise meteoscreening allows to perform **step-by-step** outlier removal tests
-    on time series data. A preview plot after running a test is shown and the user can
+    The stepwise outlier detection runs **step-by-step** outlier tests on time
+    series data. A preview plot after running a test is shown and the user can
     decide if results are satisfactory or if the same test with different parameters
     should be re-run. Once results are satisfactory, the respective test flag is added
     to the data with `.addflag()`.
@@ -78,7 +77,6 @@ class StepwiseOutlierDetection:
         """Set up stepwise outlier detection. See the class docstring."""
         self.dfin = dfin.copy()
         self.col = col
-        self._series = self.dfin[self.col].copy()
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.utc_offset = utc_offset
@@ -97,6 +95,10 @@ class StepwiseOutlierDetection:
 
         # Returned variables
         self._last_flag = pd.DataFrame()  # Flag of most recent QC test
+        # Guards against adding the same flag twice. _last_flag itself is kept
+        # after addflag(), because run_level32 reads it to detect a test whose
+        # flag was never added.
+        self._last_flag_added = False
         # Data-unit detection band of the most recent test, as (lower, upper)
         # Series (or (None, None) for tests with no single envelope). Lets a
         # caller (e.g. the GUI) overlay the band that produced a step's removals.
@@ -110,29 +112,45 @@ class StepwiseOutlierDetection:
         return self._last_flag
 
     @property
+    def flag_pending(self) -> bool:
+        """True when the most recent test ran but its flag was not added with `.addflag()`."""
+        return (isinstance(self._last_flag, Series) and not self._last_flag.empty
+                and not self._last_flag_added)
+
+    @property
     def last_bounds(self) -> tuple:
         """``(lower, upper)`` data-unit Series for the most recent test's final
         detection band, or ``(None, None)`` for tests without a single envelope
-        (z-score increments, LOF, manual removal, missing values)."""
+        (z-score increments, LOF, trim low, manual removal, missing values)."""
         return self._last_bounds
 
     def _record_last(self, flagtest) -> None:
         """Capture the most recent test's flag and (when it exposes one) its
         final data-unit detection band, for caller-side limit-line overlays."""
         self._last_flag = flagtest.get_flag()
+        self._last_flag_added = False
         self._last_bounds = (getattr(flagtest, "last_lower_bound", None),
                              getattr(flagtest, "last_upper_bound", None))
 
+    def _run_test(self, cls, calc_kwargs: dict, **kwargs) -> None:
+        """Run test *cls* on a copy of the cleaned series and record its flag.
+
+        *kwargs* go to the constructor, *calc_kwargs* to ``calc()``.
+        """
+        flagtest = cls(series=self._series_hires_cleaned.copy(), **kwargs)
+        flagtest.calc(**calc_kwargs)
+        self._record_last(flagtest)
+
     @property
     def series_hires_cleaned(self) -> Series:
-        """Return cleaned time series of field(s) as dict of Series"""
+        """Return the cleaned time series as a Series."""
         if not isinstance(self._series_hires_cleaned, Series):
             raise Exception(f"No hires quality-controlled data available.")
         return self._series_hires_cleaned
 
     @property
     def series_hires_orig(self) -> Series:
-        """Return original time series of field(s) as dict of Series"""
+        """Return the original time series as a Series."""
         if not isinstance(self._series_hires_orig, Series):
             raise Exception(f"No hires original data available.")
         return self._series_hires_orig
@@ -144,67 +162,65 @@ class StepwiseOutlierDetection:
             raise Exception(f"No hires flags available.")
         return self._flags
 
+    @staticmethod
+    def _showplot(series: Series, interactive: bool):
+        p = TimeSeries(series=series)
+        p.plot() if not interactive else p.plot_interactive()
+
     def showplot_orig(self, interactive: bool = False):
         """Show original high-resolution data used as input"""
-        p = TimeSeries(series=self._series_hires_orig)
-        p.plot() if not interactive else p.plot_interactive()
+        self._showplot(self._series_hires_orig, interactive)
 
     def showplot_cleaned(self, interactive: bool = False):
         """Show *current* cleaned high-resolution data"""
-        p = TimeSeries(series=self._series_hires_cleaned)
-        p.plot() if not interactive else p.plot_interactive()
+        self._showplot(self._series_hires_cleaned, interactive)
 
     def flag_missingvals_test(self, verbose: bool = False):
         """Flag missing records in the data (flag 2 where the value is missing)."""
         # Lazy import: a top-level import would create a circular import via the
         # qaqc package __init__ (qaqc -> meteoscreening -> outlier_detection -> here).
         from diive.preprocessing.qaqc.flags import MissingValues
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = MissingValues(series=series_cleaned, idstr=self.idstr, verbose=verbose)
-        flagtest.calc(repeat=False)
-        self._record_last(flagtest)
+        self._run_test(MissingValues, dict(repeat=False), idstr=self.idstr, verbose=verbose)
 
     def flag_manualremoval_test(self, remove_dates: list, showplot: bool = False, verbose: bool = False):
         """Flag specified records for removal"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = ManualRemoval(series=series_cleaned, idstr=self.idstr, remove_dates=remove_dates,
-                                 showplot=showplot, verbose=verbose)
-        flagtest.calc()
-        self._record_last(flagtest)
+        self._run_test(ManualRemoval, {}, idstr=self.idstr, remove_dates=remove_dates,
+                       showplot=showplot, verbose=verbose)
 
-    def flag_outliers_localsd_test(self, n_sd: float | list = 7, winsize: int | list = None, showplot: bool = False,
+    def flag_outliers_localsd_test(self, n_sd: float = 7, winsize: int | str = None, showplot: bool = False,
                                    constant_sd: bool = False, separate_day_night: bool = False,
-                                   verbose: bool = False, repeat: bool = True):
-        """Identify outliers based on standard deviation in a rolling window"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = LocalSD(series=series_cleaned, idstr=self.idstr, n_sd=n_sd, winsize=winsize,
-                           separate_day_night=separate_day_night, lat=self.site_lat, lon=self.site_lon,
-                           utc_offset=self.utc_offset, constant_sd=constant_sd, showplot=showplot, verbose=verbose)
-        flagtest.calc(repeat=repeat)
-        self._record_last(flagtest)
+                                   verbose: bool = False, repeat: bool = True,
+                                   n_sd_daytime: float = None, n_sd_nighttime: float = None,
+                                   winsize_daytime: int | str = None, winsize_nighttime: int | str = None):
+        """Identify outliers based on standard deviation in a rolling window.
+
+        The window sizes are record counts or time spans such as ``'7D'``.
+        With ``separate_day_night=True``, ``n_sd_daytime``/``n_sd_nighttime`` and
+        ``winsize_daytime``/``winsize_nighttime`` override ``n_sd`` and ``winsize``
+        for one period; ``None`` uses the global value. See ``LocalSD``.
+        """
+        self._run_test(LocalSD, dict(repeat=repeat), idstr=self.idstr, n_sd=n_sd, winsize=winsize,
+                       n_sd_daytime=n_sd_daytime, n_sd_nighttime=n_sd_nighttime,
+                       winsize_daytime=winsize_daytime, winsize_nighttime=winsize_nighttime,
+                       separate_day_night=separate_day_night, lat=self.site_lat, lon=self.site_lon,
+                       utc_offset=self.utc_offset, constant_sd=constant_sd, showplot=showplot, verbose=verbose)
 
     def flag_outliers_increments_zcore_test(self, thres_zscore: int = 30, showplot: bool = False,
                                             verbose: bool = False, repeat: bool = True):
         """Identify outliers based on the z-score of record increments"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = zScoreIncrements(series=series_cleaned, idstr=self.idstr, thres_zscore=thres_zscore,
-                                    showplot=showplot, verbose=verbose)
-        flagtest.calc(repeat=repeat)
-        self._record_last(flagtest)
+        self._run_test(zScoreIncrements, dict(repeat=repeat), idstr=self.idstr, thres_zscore=thres_zscore,
+                       showplot=showplot, verbose=verbose)
 
     def flag_outliers_trim_low_test(self, trim_daytime: bool = False, trim_nighttime: bool = False,
                                     lower_limit: float = None, showplot: bool = False, verbose: bool = False):
         """Flag values below a given absolute limit as outliers, then flag an
         equal number of datapoints at the high end as outliers."""
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = TrimLow(series=series_cleaned, idstr=self.idstr,
-                           trim_daytime=trim_daytime, trim_nighttime=trim_nighttime,
-                           lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
-                           lower_limit=lower_limit, showplot=showplot, verbose=verbose)
-        flagtest.calc()
-        self._record_last(flagtest)
+        self._run_test(TrimLow, {}, idstr=self.idstr,
+                       trim_daytime=trim_daytime, trim_nighttime=trim_nighttime,
+                       lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
+                       lower_limit=lower_limit, showplot=showplot, verbose=verbose)
 
-    def flag_outliers_hampel_test(self, window_length: int = 48 * 13, n_sigma: float = 5.5,
+    def flag_outliers_hampel_test(self, window_length: int | str = 48 * 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
                                   separate_day_night: bool = True, showplot: bool = False,
@@ -213,24 +229,32 @@ class StepwiseOutlierDetection:
 
         Parameters
         ----------
-        window_length : int, default 48*13 (=624)
-            Size of the sliding window for median/MAD calculation, in record
-            counts (not a duration). The default ``48 * 13 = 624`` corresponds
-            to 13 days of half-hourly data — matching Papale et al. 2006.
-            Scale for other sampling rates (e.g. ``24 * 13`` for hourly).
+        window_length : int or str, default 48*13 (=624)
+            Size of the sliding window for median/MAD calculation, as a record
+            count or a time span such as ``'13D'`` (converted to records at the
+            data frequency, of which it must be a whole multiple). The default
+            ``48 * 13 = 624`` corresponds to 13 days of half-hourly data —
+            matching Papale et al. 2006. For other sampling rates pass
+            ``'13D'`` or scale the count (e.g. ``24 * 13`` for hourly).
         n_sigma : float, default 5.5
-            Threshold multiplier for global mode (number of MADs above median)
+            Threshold multiplier (number of scaled MADs from the median). Used
+            for both periods unless overridden.
         n_sigma_daytime : float, optional
-            Threshold for daytime data (when separate_day_night=True)
+            Override ``n_sigma`` for daytime data (when separate_day_night=True).
+            If None, uses ``n_sigma``.
         n_sigma_nighttime : float, optional
-            Threshold for nighttime data (when separate_day_night=True)
+            Override ``n_sigma`` for nighttime data (when separate_day_night=True).
+            If None, uses ``n_sigma``.
         k : float, default 1.4826
             Scaling factor for MAD (median absolute deviation)
         use_differencing : bool, default True
-            If True, apply Hampel filter to differenced series (rate of change)
-        separate_day_night : bool, default False
-            If False, apply single threshold globally across all records.
-            If True, apply separate thresholds for daytime and nighttime data.
+            If True, apply the filter to the double-differenced series
+            (Papale et al. 2006), which removes trends. If False, to the values.
+        separate_day_night : bool, default True
+            If False, one median, MAD and threshold for all records.
+            If True, daytime and nighttime records each get the median and MAD
+            of the records of their own period in the window, and their own
+            threshold. See ``Hampel``.
         showplot : bool, default False
             If True, display visualization of flagged outliers
         verbose : bool, default False
@@ -238,9 +262,8 @@ class StepwiseOutlierDetection:
         repeat : bool, default True
             If True, iteratively repeat detection until convergence
         """
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = Hampel(
-            series=series_cleaned, idstr=self.idstr,
+        self._run_test(
+            Hampel, dict(repeat=repeat), idstr=self.idstr,
             lat=self.site_lat if separate_day_night else None,
             lon=self.site_lon if separate_day_night else None,
             utc_offset=self.utc_offset if separate_day_night else None,
@@ -248,12 +271,12 @@ class StepwiseOutlierDetection:
             window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime,
             n_sigma_nighttime=n_sigma_nighttime,
             k=k, showplot=showplot, verbose=verbose)
-        flagtest.calc(repeat=repeat)
-        self._record_last(flagtest)
 
     def flag_outliers_zscore_test(self,
                                   thres_zscore: float = 4,
                                   separate_day_night: bool = False,
+                                  thres_zscore_daytime: float = None,
+                                  thres_zscore_nighttime: float = None,
                                   lat: float = None,
                                   lon: float = None,
                                   utc_offset: int = None,
@@ -276,13 +299,19 @@ class StepwiseOutlierDetection:
         separate_day_night : bool, default False
             If False, apply single threshold across all records (global mode).
             If True, apply separate thresholds to daytime and nighttime records.
-            Requires lat, lon, utc_offset when True.
+            Day/night follows from lat, lon and utc_offset.
+        thres_zscore_daytime : float, default None
+            Override ``thres_zscore`` for daytime records (separate_day_night=True).
+            If None, uses ``thres_zscore``.
+        thres_zscore_nighttime : float, default None
+            Override ``thres_zscore`` for nighttime records (separate_day_night=True).
+            If None, uses ``thres_zscore``.
         lat : float, default None
-            Site latitude in decimal degrees. Required when separate_day_night=True.
+            Site latitude in decimal degrees. If None, uses the instance's ``site_lat``.
         lon : float, default None
-            Site longitude in decimal degrees. Required when separate_day_night=True.
+            Site longitude in decimal degrees. If None, uses the instance's ``site_lon``.
         utc_offset : int, default None
-            UTC offset in hours. Required when separate_day_night=True.
+            UTC offset in hours. If None, uses the instance's ``utc_offset``.
         showplot : bool, default False
             If True, display outlier visualization.
         plottitle : str, default None
@@ -292,7 +321,8 @@ class StepwiseOutlierDetection:
         repeat : bool, default True
             If True, iteratively repeat detection until convergence.
         idstr : str, default None
-            Optional identifier string for labeling output.
+            Optional ID string added to the name of the flag. If None, uses the
+            ``idstr`` given when the class was initialized.
         """
         # Use provided parameters or class defaults
         lat = lat if lat is not None else self.site_lat
@@ -300,10 +330,11 @@ class StepwiseOutlierDetection:
         utc_offset = utc_offset if utc_offset is not None else self.utc_offset
         idstr = idstr if idstr is not None else self.idstr
 
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = zScore(
-            series=series_cleaned,
+        self._run_test(
+            zScore, dict(repeat=repeat),
             thres_zscore=thres_zscore,
+            thres_zscore_daytime=thres_zscore_daytime,
+            thres_zscore_nighttime=thres_zscore_nighttime,
             separate_day_night=separate_day_night,
             lat=lat,
             lon=lon,
@@ -313,22 +344,20 @@ class StepwiseOutlierDetection:
             plottitle=plottitle,
             verbose=verbose
         )
-        flagtest.calc(repeat=repeat)
-        self._record_last(flagtest)
 
     def flag_outliers_zscore_rolling_test(self, thres_zscore: float = 4, showplot: bool = False, verbose: bool = False,
-                                          plottitle: str = None, repeat: bool = True, winsize: int = None):
-        """Identify outliers based on the z-score of records"""
-        series_cleaned = self._series_hires_cleaned.copy()
-        flagtest = zScoreRolling(series=series_cleaned, idstr=self.idstr, thres_zscore=thres_zscore,
-                                 showplot=showplot, verbose=verbose, plottitle=plottitle,
-                                 winsize=winsize)
-        flagtest.calc(repeat=repeat)
-        self._record_last(flagtest)
+                                          plottitle: str = None, repeat: bool = True, winsize: int | str = None):
+        """Identify outliers based on the rolling z-score of records.
+
+        ``winsize`` is a record count or a time span such as ``'1D'``. See ``zScoreRolling``.
+        """
+        self._run_test(zScoreRolling, dict(repeat=repeat), idstr=self.idstr, thres_zscore=thres_zscore,
+                       showplot=showplot, verbose=verbose, plottitle=plottitle,
+                       winsize=winsize)
 
     def flag_outliers_lof_test(self, n_neighbors: int = None, contamination: float = None,
                                separate_day_night: bool = False,
-                               showplot: bool = False, verbose: bool = False, repeat: bool = True, n_jobs: int = 1):
+                               showplot: bool = False, verbose: bool = False, repeat: bool = False, n_jobs: int = 1):
         """Local outlier factor detection (global or separate day/night).
 
         Identifies density-based outliers using k-nearest neighbors. Can operate globally
@@ -337,7 +366,8 @@ class StepwiseOutlierDetection:
         Parameters
         ----------
         n_neighbors : int, optional
-            Number of neighbors for LOF calculation; auto-calculated if None (1/200 of non-NaN records).
+            Number of neighbors for LOF calculation; auto-calculated if None (1/200 of non-NaN records,
+            at least 1).
         contamination : float or 'auto', default None
             Expected fraction of outliers (float 0-1) or 'auto' for automatic detection.
         separate_day_night : bool, default False
@@ -347,14 +377,16 @@ class StepwiseOutlierDetection:
             If True, display visualization of detected outliers.
         verbose : bool, default False
             If True, print detection statistics.
-        repeat : bool, default True
-            If True, iteratively repeat detection until convergence.
+        repeat : bool, default False
+            If True, repeat detection until no new outliers are found.
+            Each pass flags the ``contamination`` fraction of the remaining records
+            again, so repeating keeps removing valid data.
         n_jobs : int, default 1
             Number of parallel jobs (-1 uses all cores).
         """
-        series_cleaned = self._series_hires_cleaned.copy()
         # Number of neighbors is automatically calculated if not provided
-        n_neighbors = int(len(series_cleaned.dropna()) / 200) if not n_neighbors else n_neighbors
+        # (at least 1: LOF rejects 0, which the ratio gives below 200 records)
+        n_neighbors = max(1, int(self._series_hires_cleaned.count() / 200)) if not n_neighbors else n_neighbors
         # Contamination is set automatically unless float is given
         contamination = contamination if isinstance(contamination, float) else 'auto'
 
@@ -362,13 +394,11 @@ class StepwiseOutlierDetection:
         lon = self.site_lon if separate_day_night else None
         utc_offset = self.utc_offset if separate_day_night else None
 
-        flagtest = LocalOutlierFactor(series=series_cleaned, lat=lat, lon=lon, utc_offset=utc_offset,
-                                      idstr=self.idstr,
-                                      n_neighbors=n_neighbors, contamination=contamination,
-                                      separate_day_night=separate_day_night,
-                                      showplot=showplot, verbose=verbose, n_jobs=n_jobs)
-        flagtest.calc(repeat=repeat)
-        self._record_last(flagtest)
+        self._run_test(LocalOutlierFactor, dict(repeat=repeat), lat=lat, lon=lon, utc_offset=utc_offset,
+                       idstr=self.idstr,
+                       n_neighbors=n_neighbors, contamination=contamination,
+                       separate_day_night=separate_day_night,
+                       showplot=showplot, verbose=verbose, n_jobs=n_jobs)
 
     def flag_outliers_abslim_test(self, minval: float = None, maxval: float = None,
                                   separate_day_night: bool = False,
@@ -398,15 +428,14 @@ class StepwiseOutlierDetection:
         verbose : bool, default False
             If True, print flagging statistics
         """
-        series_cleaned = self._series_hires_cleaned.copy()
         # Any per-period override turns the split on inside AbsoluteLimits, so the
         # coords below must follow the same rule or they would be withheld.
         separate_day_night = separate_day_night or any(
             v is not None for v in (minval_daytime, maxval_daytime,
                                     minval_nighttime, maxval_nighttime))
         # For setting absolute limits no iteration is necessary, therefore always repeat=False
-        flagtest = AbsoluteLimits(
-            series=series_cleaned,
+        self._run_test(
+            AbsoluteLimits, dict(repeat=False),
             minval=minval,
             maxval=maxval,
             separate_day_night=separate_day_night,
@@ -421,42 +450,93 @@ class StepwiseOutlierDetection:
             showplot=showplot,
             verbose=verbose
         )
-        flagtest.calc(repeat=False)
-        self._record_last(flagtest)
+
+    def set_pending_flag(self, flag: Series) -> None:
+        """Make a flag computed outside this instance the most recent test.
+
+        `.addflag()` then adds it like the flag of any ``flag_*`` test. For a test
+        that has to run on another arrangement of the same records, e.g. per time
+        resolution in the meteo screening. `last_bounds` becomes ``(None, None)``.
+
+        Args:
+            flag: Test flag (0 ok, 2 rejected, NaN untested) on the index of
+                `series_hires_cleaned`, named like a test flag (``FLAG_..._TEST``).
+
+        Example:
+            >>> import numpy as np, pandas as pd
+            >>> from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+            >>> idx = pd.date_range('2024-07-01 00:15', periods=48, freq='30min', name='TIMESTAMP_MIDDLE')
+            >>> sod = StepwiseOutlierDetection(dfin=pd.DataFrame({'TA': np.arange(48.0)}, index=idx),
+            ...                                col='TA', site_lat=47.29, site_lon=7.73, utc_offset=1)
+            >>> flag = pd.Series(0.0, index=sod.series_hires_cleaned.index, name='FLAG_TA_OWN_TEST')
+            >>> flag.iloc[5] = 2
+            >>> sod.set_pending_flag(flag)
+            >>> sod.addflag()
+            >>> int(sod.series_hires_cleaned.isna().sum())
+            1
+        """
+        if not flag.index.equals(self._series_hires_cleaned.index):
+            raise ValueError("set_pending_flag: flag must have the same timestamp index "
+                             "as the series under outlier detection.")
+        self._last_flag = flag
+        self._last_flag_added = False
+        self._last_bounds = (None, None)
 
     def addflag(self):
         """Add flag of most recent test to data and update filtered series
-        that will be used to continue with the next test."""
+        that will be used to continue with the next test.
+
+        Calling it again without running a new test does nothing (with a warning)."""
         flag = self.last_flag.copy()
+        if self._last_flag_added:
+            warn(f"Flag {flag.name} was already added; run a new test before calling addflag() again.")
+            return
+        self._last_flag_added = True
 
         # Filter original time series with quality flag from last test
         rejected = flag == 2
-        # self._series_hires_cleaned = self.series_hires_orig.copy()
         self._series_hires_cleaned.loc[rejected] = np.nan
 
         # Add flag column to results data
         if flag.name not in self.flags.columns:
-            self._flags[flag.name] = flag.copy()
+            self._flags[flag.name] = flag
             info(f"++Added flag column {flag.name} to flag data")
         else:
             # It is possible to re-run an outlier method, which produces a flag
             # with the same name as for the first (original) run. In this case
-            # an integer is added to the flag name. For example, if the test
-            # z-score daytime/nighttime is run the first time, it produces the flag with the name
-            # FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_TEST. When the test is run again
+            # an integer is added to the flag name. For example, if the z-score
+            # test is run the first time, it produces the flag with the name
+            # FLAG_TA_T1_2_1_OUTLIER_ZSCORE_TEST. When the test is run again
             # (e.g. with different settings) then the name of the flag of this second
-            # run is FLAG_TA_T1_2_1_OUTLIER_ZSCOREDTNT_2_TEST, etc ...
+            # run is FLAG_TA_T1_2_1_OUTLIER_ZSCORE_2_TEST, etc ...
             new_flagname = flag.name
             rerun = 1
             while new_flagname in self.flags.columns:
                 rerun += 1
                 new_flagname = flag.name.replace('_TEST', f'_{rerun}_TEST')
-            self._flags[new_flagname] = flag.copy()
+            self._flags[new_flagname] = flag
             info(f"++Added flag column {new_flagname} to flag data")
+
+    def rebase_series(self, series: Series):
+        """Replace the series the next tests run on, e.g. with a corrected version.
+
+        Records rejected by flags already added with `.addflag()` stay removed.
+        `series_hires_orig` is not changed.
+
+        Args:
+            series: New values on the same timestamp index as the current series.
+        """
+        if not series.index.equals(self._series_hires_cleaned.index):
+            raise ValueError("rebase_series: series must have the same timestamp index "
+                             "as the series under outlier detection.")
+        # Keep the original name: flag column names are built from it.
+        rebased = series.rename(self._series_hires_cleaned.name)
+        rejected = (self._flags == 2).any(axis=1)
+        self._series_hires_cleaned = rebased.mask(rejected)
 
     def _setup(self) -> tuple[DataFrame, Series, Series]:
         """Setup data for outlier detection"""
-        _series = self._series.copy()  # Data for this field
+        _series = self.dfin[self.col].copy()  # Data for this field
 
         # Sanitize timestamp
         _series = TimestampSanitizer(data=_series, output_middle_timestamp=self.output_middle_timestamp).get()

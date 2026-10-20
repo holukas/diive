@@ -1,6 +1,6 @@
 """
 ANALYSIS: SEASONAL-TREND DECOMPOSITION
-=======================================
+======================================
 
 Decompose time series into trend, seasonal, and residual components.
 Supports STL, classical, and harmonic methods.
@@ -32,9 +32,6 @@ class SeasonalTrendDecomposition:
 
     Example:
         See `examples/analysis/analysis_seasonaltrend.py` for complete examples.
-
-    See Also:
-        SeasonalTrendDecomposition : This class.
     """
 
     def __init__(
@@ -59,15 +56,17 @@ class SeasonalTrendDecomposition:
         Args:
             series (pd.Series): Time series to decompose (may contain NaN).
             timestamp (pd.DatetimeIndex, optional): DateTime index. Inferred from series.index if None.
+                Stored as ``.timestamp``, not used by the decomposition.
             method (str): Decomposition method:
                          'stl' (default) — Seasonal-Trend Loess (robust, gap-tolerant)
                          'classical' — Moving-average (simple, stationary-only)
-                         'harmonic' — Fourier-based (frequency analysis)
+                         'harmonic' — Fourier-based (frequency analysis). The trend
+                         component is zero for this method.
             seasonal_period (int, optional): Seasonal period in observations.
                                             Auto-detected if None via periodogram.
                                             Example: 365 for daily data (annual cycle)
-            trend_window (int, optional): Trend smoothing window length.
-                                         Default: 2 * seasonal_period
+            trend_window (int, optional): Trend smoothing window length (STL only).
+                                         Default: 2 * seasonal_period + 1
             robust (bool): Use robust fitting (less sensitive to outliers). Default True.
                           Only applies to STL method.
             seasonal_deg (int): Loess polynomial degree for seasonal (0 or 1). Default 1.

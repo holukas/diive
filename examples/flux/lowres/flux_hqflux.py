@@ -46,8 +46,8 @@ print(f"Missing: {flux_fc.isnull().sum()} ({flux_fc.isnull().sum() / len(flux_fc
 
 results = analyze_highest_quality_flux(
     flux=flux_fc,
-    lat=47.286417,  # Swiss FluxNet site (CH-DAV)
-    lon=8.010325,
+    lat=47.210222,  # CH-CHA tower (Swiss FluxNet site page, WGS84)
+    lon=8.410444,
     utc_offset=1,  # CET
     window_length=48 * 13,  # 13 days at 30-min frequency
     n_sigma_daytime=5.5,

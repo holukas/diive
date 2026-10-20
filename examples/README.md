@@ -63,11 +63,11 @@ examples/
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
 ├── flux/                  # Eddy covariance flux processing (18 examples)
-│   ├── fluxprocessingchain/
-│   │   ├── fluxprocessingchain_level2.py
-│   │   ├── fluxprocessingchain_runchain.py
-│   │   ├── fluxprocessingchain_composable.py
-│   │   └── fluxprocessingchain_partitioning.py
+│   ├── postprocessingchain/
+│   │   ├── postprocessingchain_level2.py
+│   │   ├── postprocessingchain_runchain.py
+│   │   ├── postprocessingchain_composable.py
+│   │   └── postprocessingchain_partitioning.py
 │   ├── partitioning/      # NEE partitioning into GPP/RECO (5 examples)
 │   │   ├── partitioning_nighttime_oneflux.py
 │   │   ├── partitioning_nighttime_reddyproc.py
@@ -139,11 +139,11 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs the headless-safe suite (113 scripts) in parallel with up to 12 workers, reporting execution time and any errors. Every example in `examples/` is registered; the database-backed meteoscreening workflows and the interactive TUI demo that used to be excluded no longer exist as example scripts.
+This runs all 113 examples in parallel with up to 12 workers and reports run times and errors.
 
 ## Finding Examples
 
-Each category folder has a **README.md** with:
+Each category folder has a **README.rst** with:
 - Brief description of examples in that folder
 - List of files with what each demonstrates
 - Links to relevant documentation
@@ -151,18 +151,18 @@ Each category folder has a **README.md** with:
 
 Browse by topic:
 
-- **visualization/README.md** — Heatmaps, scatter, timeseries, wind rose, tree-ring, and more
-- **times/README.md** — Timestamp validation and regularization
-- **analysis/README.md** — Correlation, decomposition, gap detection, spectral analysis
-- **events/README.md** — Marking and overlaying time-stamped events
-- **features/README.md** — Variable creation, unit conversions, derived properties
-- **fits/README.md** — Binned curve fitting with confidence and prediction bands
-- **flux/README.md** — Multi-level flux processing (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
-- **gapfilling/README.md** — Linear, Random Forest, XGBoost, MDS methods
-- **io/README.md** — Parquet file I/O, EddyPro CSV reading, binary value extraction
-- **preprocessing/corrections/README.md** — Offset corrections, value clipping
-- **preprocessing/outlier_detection/README.md** — 9 outlier detection methods
-- **preprocessing/qaqc/README.md** — Quality flags, EddyPro integration
+- **[visualization/README.rst](visualization/README.rst)** — Heatmaps, scatter, timeseries, wind rose, tree-ring, and more
+- **[times/README.rst](times/README.rst)** — Timestamp validation and regularization
+- **[analysis/README.rst](analysis/README.rst)** — Correlation, decomposition, gap detection, spectral analysis
+- **[events/README.rst](events/README.rst)** — Marking and overlaying time-stamped events
+- **[features/README.rst](features/README.rst)** — Variable creation, unit conversions, derived properties
+- **[fits/README.rst](fits/README.rst)** — Binned curve fitting with confidence and prediction bands
+- **[flux/README.rst](flux/README.rst)** — Flux post-processing chain (L2-L4.2), NEE partitioning, quality filtering, USTAR detection
+- **[gapfilling/README.rst](gapfilling/README.rst)** — Linear, Random Forest, XGBoost, MDS methods
+- **[io/README.rst](io/README.rst)** — Parquet file I/O, EddyPro CSV reading, binary value extraction
+- **[preprocessing/corrections/README.rst](preprocessing/corrections/README.rst)** — Offset corrections, value clipping
+- **[preprocessing/outlier_detection/README.rst](preprocessing/outlier_detection/README.rst)** — 9 outlier detection methods
+- **[preprocessing/qaqc/README.rst](preprocessing/qaqc/README.rst)** — Quality flags, EddyPro integration
 
 ## Example Coverage
 
@@ -174,7 +174,7 @@ Browse by topic:
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 18 | Time lag analysis, processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty |
+| **Flux** | 18 | Time lag analysis, post-processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty |
 | **Gapfilling** | 12 | Linear interpolation (2), Random Forest (4 variants), XGBoost (2 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 19 | Corrections (7), outlier detection (9), QA/QC (3) |
@@ -188,14 +188,11 @@ uv run python examples/analysis/analysis_daily_correlation.py
 
 # Run all examples in parallel
 uv run python examples/run_all_examples.py
-
-# Run examples by category
-uv run python examples/visualization/plot_heatmap_datetime_basic.py
 ```
 
 ## Documentation & Guides
 
-- **[COOKBOOK.md](COOKBOOK.md)** — Start here: 6 minimal working workflows (load data, clean timestamps, remove outliers, gap-fill, flux chain, visualize)
+- **[COOKBOOK.md](COOKBOOK.md)** — Start here: 6 minimal working workflows (load data, clean timestamps, remove outliers, gap-fill, flux post-processing chain, visualize)
 - **[CATALOG.md](CATALOG.md)** — Find examples by use case (workflows, analysis types, methods)
 - **[EXAMPLE_DATASET.md](EXAMPLE_DATASET.md)** — Complete documentation of the example dataset (columns, availability, quality)
 
@@ -203,7 +200,7 @@ uv run python examples/visualization/plot_heatmap_datetime_basic.py
 
 When adding new examples:
 1. Place in the appropriate functional domain folder (`visualization/`, `analysis/`, `gapfilling/`, etc.)
-2. Add file reference to the category's **README.md**
+2. Add file reference to the category's **README.rst**
 3. Add file path to `run_all_examples.py` in the correct section
-4. Update **CATALOG.md** if introducing a new use case
+4. Add a row to **CATALOG.md** and update the counts in this README
 5. Ensure example runs in <60 seconds

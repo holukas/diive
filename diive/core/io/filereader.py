@@ -1,8 +1,10 @@
 """
-FILEREADER
-==========
-This package is part of the diive library.
+IO: FILEREADER
+==============
 
+Read data files with a built-in filetype configuration (YAML) or with explicit settings.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 import datetime
 import fnmatch
@@ -23,7 +25,7 @@ from diive.core.utils.console import info, warn
 
 
 def search_folders(searchdirs: str or list) -> list:
-    """ Search files and store their filename and the path to the file in dictionary. """
+    """Return the paths of the given folders and of all their subfolders."""
     foundfolders = []
     if isinstance(searchdirs, str):
         searchdirs = [searchdirs]  # Use str as list
@@ -40,7 +42,15 @@ def search_folders(searchdirs: str or list) -> list:
 
 
 def search_files(searchdirs: str or list, pattern: str) -> list:
-    """ Search files and store their filename and the path to the file in dictionary. """
+    """Search folders and their subfolders for files matching a pattern.
+
+    Args:
+        searchdirs: Folder or list of folders to search.
+        pattern: Filename pattern in ``fnmatch`` syntax, e.g. ``'*.csv'``.
+
+    Returns:
+        Sorted list of ``Path`` objects of the matching files.
+    """
     # found_files_dict = {}
     foundfiles = []
     if isinstance(searchdirs, str):
@@ -340,7 +350,7 @@ class MultiDataFileReader:
 
 
 class ReadFileType:
-    """Read single data file using settings from dictionary for specified filetype"""
+    """Read a single data file using the settings of a filetype configuration."""
 
     def __init__(self,
                  filepath: str or Path,
@@ -348,12 +358,22 @@ class ReadFileType:
                  filetype: str = None,
                  data_nrows: int = None,
                  output_middle_timestamp: bool = True):
-        """
+        """Read the file. Get the result with :meth:`get_filedata`.
 
         Args:
-            filepath:
-            filetypeconfig:
-            filetype:
+            filepath: Path to the data file.
+            filetypeconfig: Filetype settings as dict, as read from a filetype
+                YAML file. Used only if *filetype* is not given.
+            filetype: Name of a built-in filetype configuration (a key from
+                :func:`diive.configs.filetypes.get_filetypes`), e.g.
+                ``'EDDYPRO-FLUXNET-CSV-30MIN'``. Takes precedence over
+                *filetypeconfig*.
+            data_nrows: Number of data rows to read. None reads all rows.
+            output_middle_timestamp: If True, the output timestamp index marks
+                the middle of each averaging interval.
+
+        Example:
+            See ``examples/io/io_read_single_file_with_readfiletype.py``.
         """
         self.filepath = Path(filepath)
         self.data_nrows = data_nrows
@@ -398,7 +418,15 @@ class ReadFileType:
 
 
 class DataFileReader:
-    """Read single data file with *provided settings*"""
+    """Read a single data file with explicitly provided settings.
+
+    Use this for files without a built-in filetype configuration. With a
+    configuration, :class:`ReadFileType` passes its settings here.
+    Get the result with :meth:`get_data`.
+
+    Example:
+        See ``examples/io/io_read_single_file_with_datafilereader.py``.
+    """
 
     def __init__(
             self,
@@ -418,7 +446,38 @@ class DataFileReader:
             output_middle_timestamp: bool = True,
             compression: str = None
     ):
-        """Configure how to read a single data file (header layout, NA values, timestamp convention, ...)."""
+        """Read the file.
+
+        Args:
+            filepath: Path to the data file.
+            data_header_section_rows: Rows at the start of the file that come
+                before the data (the whole header section), skipped when the
+                data are parsed.
+            data_skip_rows: Rows ignored when the header is parsed, e.g.
+                ``[0, 1, 2]`` ignores the first three rows of the file.
+            data_header_rows: Header rows with variable names and units.
+            data_varnames_row: Row index of the variable names, counted after
+                *data_skip_rows* are removed.
+            data_varunits_row: Row index of the variable units, counted after
+                *data_skip_rows* are removed. None if the file has no units row.
+            data_na_vals: Values read as missing, e.g. ``[-9999]``.
+            data_delimiter: Column delimiter, e.g. ``','``.
+            data_freq: Expected time resolution, e.g. ``'30min'``. The detected
+                frequency must match it.
+            data_nrows: Number of data rows to read. None reads all rows.
+            timestamp_idx_col: Columns (names or positions) that make up the
+                timestamp. Several columns are joined with a space before
+                parsing. None means the data get no timestamp index.
+            timestamp_datetime_format: Format of the joined timestamp string,
+                e.g. ``'%Y%m%d%H%M'``.
+            timestamp_start_middle_end: Whether the timestamp in the file marks
+                the ``'start'``, ``'middle'`` or ``'end'`` of the averaging
+                interval. The index is named ``TIMESTAMP_<START|MIDDLE|END>``.
+            output_middle_timestamp: If True, the output timestamp index marks
+                the middle of each averaging interval.
+            compression: Compression of the file as understood by
+                ``pandas.read_csv``, e.g. ``'gzip'``. None for uncompressed files.
+        """
 
         self.filepath = filepath if isinstance(filepath, Path) else Path(filepath)
 
@@ -452,13 +511,17 @@ class DataFileReader:
             skiprows=self.data_skip_rows,
             headerrows=self.data_header_rows,
             varnames_row=self.data_varnames_row,
-            varunits_row=self.data_varunits_row)
+            varunits_row=self.data_varunits_row,
+            delimiter=self.data_delimiter or ',',
+            compression=self.compression or 'infer')
 
         # Get number of columns for data
         n_cols_data = get_len_data(
             filepath=self.filepath,
             skiprows=self.data_skip_rows,
-            headerrows=self.data_header_rows)
+            headerrows=self.data_header_rows,
+            delimiter=self.data_delimiter or ',',
+            compression=self.compression or 'infer')
 
         # Check for missing header columns (in case there are more data cols than header cols)
         varnames_list, varunits_list, self.generated_missing_header_cols_list = compare_len_header_vs_data(
@@ -495,8 +558,13 @@ class DataFileReader:
         index = ['UNITS', 'TAGS', 'ADDED']
         data_metadata_df = pd.DataFrame(columns=varnames_list, index=index)
         addtime = datetime.datetime.now()  # Datetime of when var was added
+        # Look units up by name: data_df no longer has the timestamp columns, so
+        # its positions are shifted against the header lists (L323).
+        units = {}
+        for name, unit in zip(varnames_list, varunits_list):
+            units.setdefault(name, unit)
         for varix, varname in enumerate(self.data_df.columns):
-            data_metadata_df.loc['UNITS', varname] = varunits_list[varix]
+            data_metadata_df.loc['UNITS', varname] = units.get(varname)
             data_metadata_df.loc['TAGS', varname] = ["#orig"]
             data_metadata_df.loc['ADDED', varname] = addtime
             data_metadata_df.loc['VARINDEX', varname] = varix
@@ -593,22 +661,24 @@ class DataFileReader:
         # read (see below).
         _temp_parsed_index_col = f"_temp_{parsed_index_col}"
 
-        # Construct timestamp as string
-        df[_temp_parsed_index_col] = ''
+        # Columns can be given by name or by position. Turn positions into names
+        # first: each column is dropped once it is used, which shifts the
+        # positions of the columns after it (L343).
+        tscols = []
         for col in self.timestamp_idx_col:
-
-            # Column can be given as string or integer
             if isinstance(col, str):
-                tscol = df[col].astype(str)
+                tscols.append(col)
             elif isinstance(col, int):
-                tscol = df.iloc[:, col].astype(str)
+                tscols.append(df.columns[col])
             else:
                 raise TypeError(f"Error: unable to parse timestamp column with setting INDEX_COLUMN: {col}.")
 
-            df[_temp_parsed_index_col] = df[_temp_parsed_index_col] + tscol
-            df = df.drop(tscol.name, axis=1, inplace=False)  # Remove col from df
-
-            if col != self.timestamp_idx_col[-1]:
+        # Construct timestamp as string
+        df[_temp_parsed_index_col] = ''
+        for i, col in enumerate(tscols):
+            df[_temp_parsed_index_col] = df[_temp_parsed_index_col] + df[col].astype(str)
+            df = df.drop(col, axis=1, inplace=False)  # Remove col from df
+            if i < len(tscols) - 1:
                 df[_temp_parsed_index_col] += ' '
 
         # Convert parsed timestamp string to datetime
@@ -623,76 +693,3 @@ class DataFileReader:
         df = rename_cols(df=df, renaming_dict={_temp_parsed_index_col: parsed_index_col})
         df = df.set_index(parsed_index_col, inplace=False)
         return df
-
-
-def example_ep_fluxnet():
-    """Runnable example: read an EddyPro FLUXNET file."""
-    from diive.core.times.times import insert_timestamp, format_timestamp_to_fluxnet_format
-
-    FOLDER = r"F:\TMP\FRU\Level-1_FF-202303_FF-202401_2005-2023\Level-1_results_fluxnet"
-    OUTDIR = r"L:\Sync\luhk_work\CURRENT\fru_prep"
-
-    filepaths = search_files(FOLDER, "*.csv")
-    # filepaths = [fp for fp in filepaths
-    #              if fp.stem.startswith("eddypro_")
-    #              and "_fluxnet_" in fp.stem
-    #              and fp.stem.endswith("_adv")]
-    print(filepaths)
-
-    loaddatafile = MultiDataFileReader(filetype='EDDYPRO-FLUXNET-CSV-30MIN', filepaths=filepaths)
-    df = loaddatafile.data_df
-
-    # # Store original column order
-    # orig_col_order = df.columns
-
-    # Set all missing values to -9999 as required by FLUXNET
-    df = df.fillna(-9999)
-
-    # Add timestamp column TIMESTAMP_END
-    df = insert_timestamp(data=df, convention='end', insert_as_first_col=True, verbose=True)
-    # Add timestamp column TIMESTAMP_START
-    df = insert_timestamp(data=df, convention='start', insert_as_first_col=True, verbose=True)
-
-    print("\nAdjusting timestamp formats of TIMESTAMP_START and TIMESTAMP_END to %Y%m%d%H%M ...")
-    df['TIMESTAMP_END'] = format_timestamp_to_fluxnet_format(df=df, timestamp_col='TIMESTAMP_END')
-    df['TIMESTAMP_START'] = format_timestamp_to_fluxnet_format(df=df, timestamp_col='TIMESTAMP_START')
-
-    # # Restore original column order
-    # df = df[orig_col_order].copy()
-
-    outpath = Path(OUTDIR) / 'merged.csv'
-    df.to_csv(outpath, index=False)
-
-
-def example_toa5():
-    """Runnable example: read a TOA5 file."""
-    corrected = r"C:\Users\holukas\Downloads\corrected_files\c-CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
-    uncorrected = r"C:\Users\holukas\Downloads\corrected_files\CH-OE2_iDL_BOX1_0_1_TBL1_20220629-1714.dat"
-
-    corr_df, corr_meta = ReadFileType(filepath=corrected, filetype='TOA5-DAT-1MIN',
-                                      output_middle_timestamp=True).get_filedata()
-    uncorr_df, uncorr_meta = ReadFileType(filepath=uncorrected, filetype='TOA5-DAT-1MIN',
-                                          output_middle_timestamp=True).get_filedata()
-
-    corr_descr = corr_df.describe()
-    uncorr_descr = uncorr_df.describe()
-
-    for c in corr_descr.columns:
-        c_corr_descr = corr_descr[c]
-        c_uncorr_descr = uncorr_descr[c]
-        checkok = c_corr_descr.equals(c_uncorr_descr)
-        if checkok:
-            print(f"OK  -  Variable {c} is the same in both files")
-        else:
-            print(f"{'#' * 40}\n"
-                  f"### FABIO EMERGENCY  -  Variable {c} is not the same in both files\n")
-            print("Stats of CORRECTED:")
-            print(c_corr_descr)
-            print("Stats of uncorrected:")
-            print(c_uncorr_descr)
-            print(f"{'#' * 40}")
-
-
-if __name__ == '__main__':
-    example_ep_fluxnet()
-    # example_toa5()

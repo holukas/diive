@@ -312,7 +312,92 @@ def test_mds_clip_folds_the_window_onto_the_edge_record():
     assert int(res['count'][2]) > in_range
 
     # Away from the edges nothing is folded, so clip and trim agree exactly.
+    # Only the summation order differs: 'trim' adds in time order like gf_mds,
+    # 'clip' uses np.mean like the Python reference.
     _, trimmed = _mds_fill(960)
     _, clipped = _mds_fill(960, edge='clip')
-    assert clipped['filled'][960] == trimmed['filled'][960]
+    assert np.isclose(clipped['filled'][960], trimmed['filled'][960], rtol=0, atol=1e-12)
     assert int(clipped['count'][960]) == int(trimmed['count'][960])
+
+
+# --- MDS diurnal cycle and summation as in C gf_mds ---------------------------
+# Measured against gf_mds compiled from the ONEFlux 1.3.7 C source (harness
+# diive-data/references/mds_parity_oneflux). Its diurnal-cycle method takes the
+# samples by record position (common.c gapfill, GF_TOFILL_METHOD): the same
+# position on each day within +/- i days, +/- 1 h, so across midnight too; the
+# last stage grows i by 3 (windows 7, 13, 19, ...). The mean and SD add the
+# samples one after the other in time order.
+
+def _mds_diurnal_only(tofill, pos):
+    """Fill `pos` when only the diurnal cycle can: its drivers are missing."""
+    from diive.gapfilling.similarity import mds_gapfill_cascade
+    n, hr, swin, ta, vpd, _ = _mds_synthetic()
+    swin, ta = swin.copy(), ta.copy()
+    swin[pos] = np.nan
+    ta[pos] = np.nan
+    return mds_gapfill_cascade(tofill, swin, ta, vpd, hr, _NPERDAY)
+
+
+def test_mds_diurnal_cycle_reaches_across_midnight():
+    # A gap at 00:00 takes the two records before midnight too. Matching on the
+    # hour of day (23.5 vs 0.0) dropped them: 2 samples instead of 4.
+    n, hr, swin, ta, vpd, series = _mds_synthetic()
+    pos = 10 * _NPERDAY
+    assert hr[pos] == 0.0
+    tofill = series.copy()
+    tofill[pos] = np.nan
+    res = _mds_diurnal_only(tofill, pos)
+    assert int(res['method'][pos]) == 3
+    assert res['time_window'][pos] == 1
+    assert int(res['count'][pos]) == 4
+    expected = np.add.accumulate(series[[pos - 2, pos - 1, pos + 1, pos + 2]])[-1] / 4
+    assert res['filled'][pos] == expected
+
+
+def test_mds_last_diurnal_windows_grow_by_three_days():
+    # Days 15-25 are all missing, so the first diurnal window with data is
+    # +/- 6 days (window 13): days 14 and 26, 5 records each. Growing by 3.5
+    # days (window 14) also took two records of days 13 and 27.
+    n, hr, swin, ta, vpd, series = _mds_synthetic()
+    pos = 20 * _NPERDAY + 24
+    tofill = series.copy()
+    tofill[15 * _NPERDAY:26 * _NPERDAY] = np.nan
+    res = _mds_diurnal_only(tofill, pos)
+    assert int(res['method'][pos]) == 3
+    assert res['time_window'][pos] == 13
+    assert int(res['count'][pos]) == 10
+
+
+def test_mds_trim_sums_in_time_order():
+    # All drivers constant: every measured record within +/- 7 days is similar.
+    # gf_mds adds them in time order; np.mean sums pairwise and differs in the
+    # last bits (asserted, so the case keeps discriminating).
+    from diive.gapfilling.similarity import mds_gapfill_cascade
+    n = 40 * _NPERDAY
+    const = np.ones(n)
+    tofill = np.random.RandomState(1).normal(0, 7, n)
+    pos = 20 * _NPERDAY
+    tofill[pos] = np.nan
+    hr = (np.arange(n) % _NPERDAY) / 2.0
+    res = mds_gapfill_cascade(tofill, 100 * const, 10 * const, const, hr, _NPERDAY)
+    w = np.arange(pos - 7 * _NPERDAY + 1, pos + 7 * _NPERDAY)
+    vals = tofill[w][np.isfinite(tofill[w])]
+    mean = np.add.accumulate(vals)[-1] / vals.size
+    assert np.mean(vals) != mean
+    assert int(res['count'][pos]) == vals.size
+    assert res['filled'][pos] == mean
+    dev = vals - mean
+    assert res['sd'][pos] == np.sqrt(np.add.accumulate(dev * dev)[-1] / (vals.size - 1))
+
+
+def test_mds_flag_caps_window_at_999_days():
+    # gf_mds's diurnal-cycle windows keep growing on a multi-year record; a
+    # 1003-day window must not spill into the method digit (3*1000+1003 = 4003
+    # would decode as method 4).
+    from diive.gapfilling.mds import mds_quality_description
+    from diive.gapfilling.similarity import METHOD_MDC, mds_granular_flag
+    flag = mds_granular_flag(METHOD_MDC, 1003)
+    assert flag == 3999
+    assert flag // 1000 == METHOD_MDC
+    assert '999+ d window' in mds_quality_description(flag)
+    assert mds_granular_flag(METHOD_MDC, 997) == 3997

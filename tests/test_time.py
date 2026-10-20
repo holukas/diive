@@ -1,5 +1,6 @@
 import unittest
 
+import numpy as np
 import pandas as pd
 
 import diive.configs.exampledata as ed
@@ -12,6 +13,7 @@ from diive.core.times.times import (
     validate_timestamp_column_name,
 )
 from diive.core.times.times import keep_daterange
+from diive.core.times.times import remove_after_date
 from diive.core.times.times import vectorize_timestamps
 
 
@@ -65,6 +67,18 @@ class TestTime(unittest.TestCase):
             keep_daterange(df, end, start)
         with self.assertRaises(TypeError):
             keep_daterange(df.reset_index(drop=True), start, end)
+
+    def test_remove_after_date_leaves_input_unchanged(self):
+        ix = pd.date_range('2022-08-01', '2023-09-30', freq='D')
+        series = pd.Series(range(len(ix)), index=ix, dtype=float, name='x')
+        original = series.copy()
+
+        out = remove_after_date(data=series, yearly_end_date='08-11')
+
+        pd.testing.assert_series_equal(series, original)
+        self.assertTrue(((out.index.month < 8)
+                         | ((out.index.month == 8) & (out.index.day <= 11))).all())
+        self.assertEqual(out.index.max(), pd.Timestamp('2023-08-11'))
 
     def test_vectorize_timestamps(self):
         df, _ = ed.load_exampledata_DIIVE_CSV_30MIN()
@@ -213,17 +227,23 @@ class TestTime(unittest.TestCase):
     def test_resampling_to_30MIN(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
         resampled_ta = resample_series_to_30MIN(series=df['TA_T1_2_1_Avg'])
-        self.assertEqual(resampled_ta.index[0], pd.Timestamp('2024-04-01 00:30:00'))
+        # The input starts at 23:59:30 (MIDDLE): that interval is too sparse and kept as NaN
+        self.assertEqual(resampled_ta.index[0], pd.Timestamp('2024-04-01 00:00:00'))
+        self.assertTrue(pd.isna(resampled_ta.iloc[0]))
+        self.assertEqual(resampled_ta.first_valid_index(), pd.Timestamp('2024-04-01 00:30:00'))
         self.assertEqual(resampled_ta.loc['2024-04-09 13:30:00'], 2.643333333333333)
         self.assertEqual(resampled_ta.loc['2024-04-09 14:00:00'], 2.5)
         self.assertEqual(resampled_ta.index.freqstr, '30min')
-        self.assertEqual(resampled_ta.sum(), 7984.021494252875)
+        self.assertAlmostEqual(resampled_ta.sum(), 7984.021494252875, places=6)
         resampled_swin = resample_series_to_30MIN(series=df['SW_IN_T1_1_1_Avg'])
-        self.assertEqual(resampled_swin.index[0], pd.Timestamp('2024-04-01 00:30:00'))
+        # The input starts at 23:59:30 (MIDDLE): that interval is too sparse and kept as NaN
+        self.assertEqual(resampled_swin.index[0], pd.Timestamp('2024-04-01 00:00:00'))
+        self.assertTrue(pd.isna(resampled_swin.iloc[0]))
+        self.assertEqual(resampled_swin.first_valid_index(), pd.Timestamp('2024-04-01 00:30:00'))
         self.assertEqual(resampled_swin.loc['2024-04-09 13:30:00'], 104.64)
         self.assertEqual(resampled_swin.loc['2024-04-09 14:00:00'], 87.08333333333333)
         self.assertEqual(resampled_swin.index.freqstr, '30min')
-        self.assertEqual(resampled_swin.sum(), 134375.59183908044)
+        self.assertAlmostEqual(resampled_swin.sum(), 134375.59183908044, places=6)
 
     def test_insert_timestamp(self):
         df, metadata_df = ed.load_exampledata_GENERIC_CSV_HEADER_1ROW_TS_MIDDLE_FULL_1MIN_long()
@@ -302,6 +322,508 @@ class TestTime(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             TimestampSanitizer(data=s, validate_naming=False, output_middle_timestamp=False,
                                regularize=True, verbose=False).get()
+
+
+class TestSanitizerOffGridRecords(unittest.TestCase):
+    """L314: records that are not on the time grid must not vanish silently.
+
+    The grid started at the first timestamp, so one stray first record moved it
+    and every other record was lost, with rows_removed reporting 0.
+    """
+
+    def setUp(self):
+        from diive.core.utils.console import get_verbosity, set_verbosity, VERBOSE_PROGRESS
+        self._saved = get_verbosity()
+        set_verbosity(VERBOSE_PROGRESS)
+
+    def tearDown(self):
+        from diive.core.utils.console import set_verbosity
+        set_verbosity(self._saved)
+
+    def _sanitize(self, df):
+        from diive.core.times.times import TimestampSanitizer
+        from diive.core.utils.console import console
+        with console.capture() as cap:
+            ts = TimestampSanitizer(data=df, output_middle_timestamp=False, verbose=False)
+        return ts.get(), ts.get_status(), cap.get()
+
+    def _assert_on_grid_values_kept(self, df, out, n_off_grid):
+        on_grid = df.index.isin(out.index)
+        self.assertEqual(int((~on_grid).sum()), n_off_grid)
+        pd.testing.assert_series_equal(out['X'].reindex(df.index[on_grid]), df['X'][on_grid],
+                                       check_freq=False)
+
+    def test_stray_first_record(self):
+        idx = pd.date_range('2022-01-01 00:30', periods=17520, freq='30min', name='TIMESTAMP_END')
+        stray = pd.DatetimeIndex([pd.Timestamp('2022-01-01 00:00:01')], name='TIMESTAMP_END')
+        df = pd.DataFrame({'X': np.arange(-1.0, 17520.0)}, index=stray.append(idx))
+        out, status, msg = self._sanitize(df)
+        self.assertEqual(int(out['X'].notna().sum()), 17520)
+        self.assertEqual(out.index[0], pd.Timestamp('2022-01-01 00:30'))
+        self.assertEqual(out.index.freqstr, '30min')
+        self.assertEqual(status['rows_removed_off_grid'], 1)
+        self.assertEqual(status['rows_removed'], 1)
+        self.assertEqual(status['rows_added_by_regularization'], 0)
+        self.assertIn('1 records are not on the 30min time grid', msg)
+        self._assert_on_grid_values_kept(df, out, n_off_grid=1)
+
+    def test_jittered_records(self):
+        idx = pd.date_range('2022-01-01 00:30', periods=480, freq='30min', name='TIMESTAMP_END')
+        jitter = idx.to_series()
+        jitter.iloc[100:110] += pd.Timedelta('1s')
+        df = pd.DataFrame({'X': np.arange(480.0)}, index=pd.DatetimeIndex(jitter.values, name='TIMESTAMP_END'))
+        out, status, msg = self._sanitize(df)
+        self.assertEqual(int(out['X'].notna().sum()), 470)
+        self.assertEqual(status['rows_removed_off_grid'], 10)
+        self.assertEqual(status['rows_removed'], 10)
+        # The ten late records leave ten empty grid slots
+        self.assertEqual(status['rows_added_by_regularization'], 10)
+        self.assertIn('10 records are not on the 30min time grid', msg)
+        self._assert_on_grid_values_kept(df, out, n_off_grid=10)
+
+    def test_mixed_10min_and_1min(self):
+        i10 = pd.date_range('2022-01-01 00:10', periods=1440, freq='10min')
+        i1 = pd.date_range(i10[-1] + pd.Timedelta('1min'), periods=600, freq='1min')
+        df = pd.DataFrame({'X': np.arange(2040.0)}, index=i10.append(i1).rename('TIMESTAMP_END'))
+        out, status, msg = self._sanitize(df)
+        self.assertEqual(status['inferred_frequency'], '10min')
+        self.assertEqual(int(out['X'].notna().sum()), 1500)
+        self.assertEqual(status['rows_removed_off_grid'], 540)
+        self.assertEqual(status['rows_removed'], 540)
+        self.assertEqual(status['net_rows'], -540)
+        self.assertIn('540 records are not on the 10min time grid', msg)
+        self._assert_on_grid_values_kept(df, out, n_off_grid=540)
+
+    def test_regular_grid_with_offset_is_kept(self):
+        """A regular grid that does not start on the full hour keeps every record."""
+        idx = pd.date_range('2022-01-01 00:20', periods=100, freq='h', name='TIMESTAMP_END')
+        df = pd.DataFrame({'X': np.arange(100.0)}, index=idx)
+        out, status, msg = self._sanitize(df)
+        pd.testing.assert_frame_equal(out, df.asfreq('h'), check_index_type=False)
+        self.assertEqual(status['rows_removed'], 0)
+        self.assertNotIn('time grid', msg)
+
+    def test_load_parquet_keeps_records_after_stray_first_record(self):
+        import tempfile
+        from diive.core.io.files import load_parquet, save_parquet
+        from diive.core.utils.console import console
+        idx = pd.date_range('2022-01-01 00:30', periods=480, freq='30min', name='TIMESTAMP_END')
+        stray = pd.DatetimeIndex([pd.Timestamp('2022-01-01 00:00:01')], name='TIMESTAMP_END')
+        df = pd.DataFrame({'X': np.arange(-1.0, 480.0)}, index=stray.append(idx))
+        with tempfile.TemporaryDirectory() as d:
+            with console.capture() as cap:
+                path = save_parquet(filename='stray', data=df, outpath=d)
+                out = load_parquet(path, output_middle_timestamp=False)
+        self.assertEqual(int(out['X'].notna().sum()), 480)
+        self.assertIn('1 records are not on the 30min time grid', cap.get())
+
+    def test_tz_aware_across_dst_keeps_all_records(self):
+        """L329: with a step that does not divide one hour evenly, the wall-clock
+        position after the daylight saving change won the vote. The grid then
+        missed every record."""
+        for freq in ['30min', 'h', '2h', '3h', '6h', '12h']:
+            with self.subTest(freq=freq):
+                idx = pd.date_range('2023-01-01', '2023-12-31', freq=freq, tz='Europe/Zurich',
+                                    name='TIMESTAMP_END')
+                df = pd.DataFrame({'X': np.arange(float(len(idx)))}, index=idx)
+                out, status, msg = self._sanitize(df)
+                pd.testing.assert_frame_equal(out, df.asfreq(freq), check_index_type=False)
+                self.assertEqual(status['rows_removed'], 0)
+                self.assertNotIn('time grid', msg)
+
+
+class TestDetectFreqGroups(unittest.TestCase):
+    """Records next to a timestamp gap must keep the resolution of their regular
+    neighbour; meteo screening drops every record left without a group."""
+
+    @staticmethod
+    def _groups(ix):
+        from diive.core.times.times import detect_freq_groups
+        return detect_freq_groups(index=pd.DatetimeIndex(ix, name='TIMESTAMP_END'))
+
+    def test_single_missing_record_keeps_neighbours(self):
+        ix = pd.date_range('2024-06-01 00:10', periods=144, freq='10min')
+        missing = pd.Timestamp('2024-06-01 08:20')
+        g = self._groups(ix[ix != missing])
+        self.assertEqual(len(g), 143)
+        self.assertFalse(g.isna().any())
+        self.assertTrue((g == 600).all())
+
+    def test_1min_with_5min_gap_keeps_all_records(self):
+        ix = pd.date_range('2024-06-01 00:01', periods=600, freq='1min')
+        g = self._groups(ix.delete(range(100, 104)))
+        self.assertFalse(g.isna().any())
+        self.assertTrue((g == 60).all())
+
+    def test_lone_record_between_two_gaps(self):
+        ix = pd.date_range('2024-06-01 00:10', periods=144, freq='10min')
+        g = self._groups(ix.delete([50, 52]))
+        self.assertTrue((g == 600).all())
+
+    def test_1min_block_then_10min_block(self):
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        b = pd.date_range('2024-06-01 10:10', '2024-06-02 10:00', freq='10min')
+        g = self._groups(a.append(b))
+        self.assertFalse(g.isna().any())
+        self.assertTrue((g.loc[:'2024-06-01 10:00'] == 60).all())
+        self.assertTrue((g.loc['2024-06-01 10:10':] == 600).all())
+        # TIMESTAMP_END: the record at 10:00 covers 09:59-10:00
+        self.assertEqual(g.loc['2024-06-01 10:00'], 60)
+
+    def test_10min_block_then_1min_block(self):
+        a = pd.date_range('2024-06-01 00:10', '2024-06-01 10:00', freq='10min')
+        b = pd.date_range('2024-06-01 10:01', '2024-06-02 10:00', freq='1min')
+        g = self._groups(a.append(b))
+        self.assertFalse(g.isna().any())
+        # TIMESTAMP_END: the record at 10:00 covers 09:50-10:00
+        self.assertTrue((g.loc[:'2024-06-01 10:00'] == 600).all())
+        self.assertTrue((g.loc['2024-06-01 10:01':] == 60).all())
+
+    def test_transitional_record_stays_unassigned(self):
+        a = pd.date_range('2024-06-01 00:10', '2024-06-01 10:00', freq='10min')
+        b = pd.date_range('2024-06-01 10:01', '2024-06-02 10:00', freq='1min')
+        odd = pd.DatetimeIndex(['2024-06-01 10:00:07'])
+        g = self._groups(a.append(odd).append(b))
+        self.assertEqual(g.isna().sum(), 1)
+        self.assertTrue(pd.isna(g.loc['2024-06-01 10:00:07']))
+        self.assertEqual(g.loc[pd.Timestamp('2024-06-01 10:00')], 600)
+        self.assertEqual(g.loc[pd.Timestamp('2024-06-01 10:01')], 60)
+
+    def test_random_holes_keep_one_resolution(self):
+        # L254: holes left short runs at 20MIN, 30MIN, ... and records without a group
+        ix = pd.date_range('2026-03-01 00:10', '2026-04-01 00:00', freq='10min')
+        rng = np.random.default_rng(1)
+        for p in (0.1, 0.3, 0.5):
+            with self.subTest(missing=p):
+                g = self._groups(ix[rng.random(len(ix)) >= p])
+                self.assertTrue((g == 600).all())
+
+    def test_change_of_resolution_with_holes(self):
+        # Only the record at the change itself may be ambiguous.
+        rng = np.random.default_rng(3)
+        a = pd.date_range('2024-06-01 00:10', '2024-06-03 10:00', freq='10min')
+        b = pd.date_range('2024-06-03 10:01', '2024-06-05 10:00', freq='1min')
+        truth = np.r_[np.full(len(a), 600.), np.full(len(b), 60.)]
+        for p in (0.1, 0.2, 0.4):
+            with self.subTest(missing=p):
+                keep = rng.random(len(truth)) >= p
+                g = self._groups(a.append(b)[keep])
+                self.assertFalse(g.isna().any())
+                self.assertLessEqual(int((g.to_numpy() != truth[keep]).sum()), 1)
+
+    def test_genuine_period_of_twelve_records_stays(self):
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        m = pd.date_range('2024-06-01 10:10', '2024-06-01 12:00', freq='10min')  # 12 records
+        c = pd.date_range('2024-06-01 12:01', '2024-06-01 20:00', freq='1min')
+        g = self._groups(a.append(m).append(c))
+        self.assertTrue((g.loc['2024-06-01 10:10':'2024-06-01 12:00'] == 600).all())
+        self.assertTrue((g.loc[:'2024-06-01 10:00'] == 60).all())
+        self.assertTrue((g.loc['2024-06-01 12:01':] == 60).all())
+
+    def test_short_coarse_run_stays_its_own_period(self):
+        # L265: holes in 1MIN data cannot give 6 or 11 records at exactly 10MIN
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        for n in (6, 11):
+            with self.subTest(records=n):
+                m = pd.date_range('2024-06-01 10:10', periods=n, freq='10min')
+                c = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+                g = self._groups(a.append(m).append(c))
+                self.assertTrue((g.loc[m] == 600).all())
+                self.assertTrue((g.drop(m) == 60).all())
+
+    def test_short_run_that_holes_explain_joins_its_neighbours(self):
+        # 20MIN spacing for 11 records is ordinary in 10MIN data with many holes
+        ix = pd.date_range('2024-06-01 00:10', periods=600, freq='10min')
+        keep = np.ones(len(ix), dtype=bool)
+        keep[200:222:2] = False
+        g = self._groups(ix[keep])
+        self.assertTrue((g == 600).all())
+
+    def test_short_fine_run_stays_its_own_period(self):
+        a = pd.date_range('2024-06-01 00:10', '2024-06-01 10:00', freq='10min')
+        b = pd.date_range('2024-06-01 10:01', periods=5, freq='1min')
+        c = pd.date_range('2024-06-01 10:10', '2024-06-01 20:00', freq='10min')
+        g = self._groups(a.append(b).append(c))
+        self.assertTrue((g.loc[b] == 60).all())
+        self.assertTrue((g.drop(b) == 600).all())
+
+    def test_holey_1min_data_give_no_spurious_coarse_period(self):
+        # L265: passes 2-3 joined runs across 1MIN steps into 120 s periods
+        full = pd.date_range('2024-01-01 00:01', periods=60 * 24 * 60, freq='1min')
+        rng = np.random.default_rng(0)
+        for p in (0.3, 0.5, 0.7):
+            with self.subTest(missing=p):
+                g = self._groups(full[rng.random(len(full)) > p])
+                self.assertTrue((g == 60).all())
+
+    def test_own_period_wins_against_a_coarse_run(self):
+        # L283: the last 2MIN record before a 30MIN block, with a 2MIN record missing
+        # two places before it, has a lone 2MIN neighbour and got 1800 s
+        fine = pd.date_range('2024-07-01 12:01', '2024-07-01 15:13', freq='2min')
+        fine = fine.drop(pd.Timestamp('2024-07-01 15:07'))
+        coarse = pd.date_range('2024-07-01 15:43', periods=20, freq='30min')
+        g = self._groups(fine.append(coarse))
+        self.assertTrue((g.loc[fine] == 120).all())
+        self.assertTrue((g.loc[coarse] == 1800).all())
+
+    def test_own_period_wins_against_a_fine_run(self):
+        # L283: the last record of an off-phase 3 x 5MIN block between 2MIN periods
+        # got 120 s from the 2MIN run after it
+        f1 = pd.date_range('2024-07-02 12:00', '2024-07-02 16:36', freq='2min')
+        blk = pd.DatetimeIndex(['2024-07-02 16:45', '2024-07-02 16:50', '2024-07-02 16:55'])
+        f2 = pd.date_range('2024-07-02 16:57', periods=200, freq='2min')
+        g = self._groups(f1.append(blk).append(f2))
+        self.assertTrue((g.loc[blk] == 300).all())
+        self.assertTrue((g.drop(blk) == 120).all())
+
+    def test_short_block_on_its_grid_stays_its_own_period(self):
+        # L286: 2-5 ten-minute records between 1MIN periods got 60 s
+        for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+            for tz in (None, 'Etc/GMT-1'):
+                for n in range(1, 6):
+                    with self.subTest(name=name, tz=tz, records=n):
+                        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min', tz=tz)
+                        m = pd.date_range('2024-06-01 10:10', periods=n, freq='10min', tz=tz)
+                        c = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+                        if name == 'TIMESTAMP_START':
+                            a, m, c = (x - pd.Timedelta(f) for x, f in ((a, '1min'), (m, '10min'), (c, '1min')))
+                        from diive.core.times.times import detect_freq_groups
+                        g = detect_freq_groups(index=pd.DatetimeIndex(a.append(m).append(c), name=name))
+                        # A single record stays ambiguous and gets the finer resolution
+                        self.assertTrue((g.loc[m] == (60 if n == 1 else 600)).all())
+                        self.assertTrue((g.drop(m) == 60).all())
+
+    def test_short_block_off_its_grid_needs_more_records(self):
+        # Off the 10MIN grid, holes in 1MIN data explain up to 5 records
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:05', freq='1min')
+        m = pd.date_range('2024-06-01 10:15', periods=3, freq='10min')
+        c = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+        g = self._groups(a.append(m).append(c))
+        self.assertTrue((g == 60).all())
+
+    def test_coarse_run_keeps_records_after_a_missing_one(self):
+        # L289: 15MIN data, then 12 thirty-minute records with 11:30 missing. The
+        # last two had no group before pass 4, the run counted 10 records and
+        # joined the 15MIN period.
+        q = pd.date_range('2024-01-01 01:45', '2024-01-01 06:00', freq='15min')
+        h = pd.date_range('2024-01-01 06:30', '2024-01-01 12:30', freq='30min')
+        h = h.drop(pd.Timestamp('2024-01-01 11:30'))
+        g = self._groups(q.append(h))
+        self.assertTrue((g.loc[q] == 900).all())
+        self.assertTrue((g.loc[h] == 1800).all())
+
+    def test_empty_and_single_record_index(self):
+        # L291: an empty index raised a shape error
+        for ix in ([], ['2024-01-01 00:10']):
+            with self.subTest(records=len(ix)):
+                g = self._groups(pd.to_datetime(ix))
+                self.assertEqual(len(g), len(ix))
+                self.assertTrue(g.isna().all())
+                self.assertEqual(g.name, 'FREQ_AUTO_SEC')
+
+    def test_own_period_wins_for_timestamp_start(self):
+        # Mirror image of the 2MIN/30MIN case: for TIMESTAMP_START the record's own
+        # period is the next record
+        from diive.core.times.times import detect_freq_groups
+        coarse = pd.date_range('2024-07-01 02:00', periods=20, freq='30min')
+        fine = pd.date_range(coarse[-1] + pd.Timedelta('30min'), periods=97, freq='2min')
+        fine = fine.drop(fine[3])
+        g = detect_freq_groups(index=pd.DatetimeIndex(coarse.append(fine), name='TIMESTAMP_START'))
+        self.assertTrue((g.loc[fine] == 120).all())
+        self.assertTrue((g.loc[coarse] == 1800).all())
+
+    @staticmethod
+    def _named(ix, name):
+        from diive.core.times.times import detect_freq_groups
+        return detect_freq_groups(index=pd.DatetimeIndex(ix, name=name))
+
+    def test_regular_outages_keep_their_resolution(self):
+        # L301: alternating spacings (1, 2 / 1, 3 / 1, 4 steps) got no group at all
+        for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+            for res in (60, 600):
+                for every, missing in ((3, 1), (4, 2), (5, 3)):
+                    with self.subTest(name=name, res=res, every=every, missing=missing):
+                        ix = pd.date_range('2024-07-01', periods=3000, freq=f'{res}s')
+                        ix = ix[(np.arange(len(ix)) % every) >= missing]
+                        self.assertTrue((self._named(ix, name) == res).all())
+
+    def test_partial_regular_outage_keeps_its_records(self):
+        # L301: two days of 1MIN data with every 3rd record missing and one hour with
+        # 3 of 4 missing kept only the 16 records of that hour
+        ix = pd.date_range('2024-07-01 00:01', periods=2 * 1440, freq='1min')
+        pos = np.arange(len(ix))
+        keep = (pos % 3) != 2
+        hour = (pos >= 1440) & (pos < 1500)
+        keep[hour] = (pos[hour] % 4) == 0
+        g = self._groups(ix[keep])
+        self.assertFalse(g.isna().any())
+        self.assertGreater(int((g == 60).sum()), len(g) - 20)
+
+    def test_regular_outage_needs_whole_multiples_of_one_spacing(self):
+        # Stamps that jitter around 10MIN must not get a common resolution of 1 s
+        steps = np.tile([599, 601], 200)
+        ix = pd.Timestamp('2024-07-01') + pd.to_timedelta(np.r_[0, np.cumsum(steps)], unit='s')
+        g = self._groups(ix)
+        self.assertFalse((g == 1).any())
+
+    def test_short_block_next_to_a_gap(self):
+        # L302: a reboot gap between 1MIN data and a 10MIN block hid the block. A
+        # gap before the block hides the spacing of its first record, so 2 records
+        # stay ambiguous there.
+        a = pd.date_range('2024-06-01 00:01', '2024-06-01 10:00', freq='1min')
+        for n, gap_before, gap_after, block in ((2, False, True, True), (3, True, False, True),
+                                                (3, True, True, True), (2, True, False, False)):
+            with self.subTest(records=n, gap_before=gap_before, gap_after=gap_after):
+                m = pd.date_range('2024-06-01 10:20' if gap_before else '2024-06-01 10:10', periods=n, freq='10min')
+                c = pd.date_range(m[-1] + pd.Timedelta('6min' if gap_after else '1min'), periods=400, freq='1min')
+                for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+                    ix, blk = a.append(m).append(c), m
+                    if name == 'TIMESTAMP_START':
+                        # Mirror image in time: each record keeps its own spacing
+                        mirror = pd.Timestamp('2024-06-04')
+                        ix, blk = (mirror - (ix - mirror)).sort_values(), mirror - (m - mirror)
+                    g = self._named(ix, name)
+                    self.assertTrue((g.loc[blk] == (600 if block else 60)).all(), name)
+                    self.assertTrue((g.drop(blk) == 60).all(), name)
+
+    def test_short_block_at_the_start_or_end(self):
+        # L302: at the edges of the data one side has no finer records. With
+        # TIMESTAMP_END the first record has no spacing of its own.
+        for n in (2, 3, 4):
+            with self.subTest(records=n):
+                m = pd.date_range('2024-06-01 00:10', periods=n, freq='10min')
+                f = pd.date_range(m[-1] + pd.Timedelta('1min'), periods=400, freq='1min')
+                g = self._groups(m.append(f))
+                self.assertTrue((g.loc[m] == (600 if n >= 4 else 60)).all())
+                self.assertTrue((g.loc[f] == 60).all())
+                f = pd.date_range('2024-06-01 00:01', periods=400, freq='1min')
+                m = pd.date_range(f[-1] + pd.Timedelta('10min'), periods=n, freq='10min')
+                g = self._groups(f.append(m))
+                self.assertTrue((g.loc[m] == (600 if n >= 3 else 60)).all())
+                self.assertTrue((g.loc[f] == 60).all())
+
+    def test_short_block_with_fewer_than_twelve_records(self):
+        # L304: pass 4 returned before the block rule
+        ix = pd.date_range('2024-06-01 09:57', periods=4, freq='1min').append(
+            pd.DatetimeIndex(['2024-06-01 10:10', '2024-06-01 10:20'])).append(
+            pd.date_range('2024-06-01 10:21', periods=4, freq='1min'))
+        g = self._groups(ix)
+        self.assertEqual(g.tolist(), [60] * 4 + [600] * 2 + [60] * 4)
+
+    def test_stray_stamp_does_not_pull_its_neighbour(self):
+        # L304: the record after a stray stamp got the stray's spacing and was dropped
+        for name in ('TIMESTAMP_END', 'TIMESTAMP_START'):
+            for res, stray in ((60, '2024-07-01 12:30:30'), (600, '2024-07-01 12:05')):
+                with self.subTest(name=name, res=res):
+                    ix = pd.date_range('2024-07-01', periods=(1440 * 60) // res, freq=f'{res}s')
+                    ix = ix.append(pd.DatetimeIndex([stray])).sort_values()
+                    g = self._named(ix, name)
+                    self.assertEqual(g.loc[stray], res / 2)
+                    self.assertTrue((g.drop(pd.Timestamp(stray)) == res).all())
+
+    def _both_orientations(self, ix, expected):
+        """Check *expected* (per record, in seconds) for TIMESTAMP_END and for the
+        mirror image as TIMESTAMP_START (time reversed, so each record keeps its
+        own averaging period)."""
+        ix = pd.DatetimeIndex(ix)
+        mirrored = pd.Timestamp('2030-01-01') - (ix[::-1] - pd.Timestamp('2020-01-01'))
+        for name, stamps, exp in (('TIMESTAMP_END', ix, expected), ('TIMESTAMP_START', mirrored, expected[::-1])):
+            with self.subTest(name=name):
+                g = self._named(stamps, name).to_numpy()
+                np.testing.assert_array_equal(g, exp)
+
+    def test_last_coarse_record_keeps_its_resolution(self):
+        # L310: with the record before it missing, the last coarse record before
+        # 1MIN data took the 60 s of the record after it
+        for coarse, missing in (('30min', ['07:30']), ('10min', ['07:50']), ('30min', ['07:00']),
+                                ('30min', ['07:00', '07:30'])):
+            with self.subTest(coarse=coarse, missing=missing):
+                c = pd.date_range('2024-03-04 00:30', '2024-03-05 08:00', freq=coarse)
+                c = c.drop(pd.DatetimeIndex([f'2024-03-05 {m}' for m in missing]))
+                f = pd.date_range('2024-03-05 08:01', '2024-03-05 12:00', freq='1min')
+                expected = np.r_[np.full(len(c), pd.Timedelta(coarse).total_seconds()), np.full(len(f), 60.)]
+                self._both_orientations(c.append(f), expected)
+
+    def test_first_coarse_record_after_holey_fine_data(self):
+        # L310 mirror case: the record at 10:00 is one 1MIN step from the record
+        # before it, which got no resolution in passes 1-3. It took the 600 s of
+        # the record after it once the 10MIN run counted as a period.
+        f = pd.date_range('2024-06-03 08:00', '2024-06-03 09:51', freq='1min').append(
+            pd.DatetimeIndex(['2024-06-03 09:54', '2024-06-03 09:57', '2024-06-03 09:59', '2024-06-03 10:00']))
+        c = pd.date_range('2024-06-03 10:10', periods=30, freq='10min')
+        self._both_orientations(f.append(c), np.r_[np.full(len(f), 60.), np.full(len(c), 600.)])
+
+    def test_overlapping_regular_outages_keep_their_resolution(self):
+        # L309: every 3rd and every 4th 10MIN record missing (spacings 1, 3, 2, 3,
+        # 1, 2 steps), or only records 2 and 5 of every 5 kept (3, 2 steps). Next
+        # to 1MIN data all records joined the 1MIN period, alone they had no group.
+        pos = np.arange(1440)
+        ten = pd.date_range('2024-03-01 00:10', periods=len(pos), freq='10min')
+        fine = pd.date_range(ten[-1] + pd.Timedelta('1min'), periods=1440, freq='1min')
+        for pattern, keep in (('3rd and 4th missing', ~((pos % 3 == 0) | (pos % 4 == 0))),
+                              ('2nd and 5th of 5 kept', (pos % 5 == 1) | (pos % 5 == 4))):
+            for with_fine in (False, True):
+                with self.subTest(pattern=pattern, with_fine=with_fine):
+                    ix = ten[keep].append(fine) if with_fine else ten[keep]
+                    expected = np.r_[np.full(int(keep.sum()), 600.), np.full(len(fine) if with_fine else 0, 60.)]
+                    self._both_orientations(ix, expected)
+
+    def test_pairs_of_regular_outages_keep_their_records(self):
+        # L309: 74 of 151 pairs of outage patterns lost more than 5 % of the
+        # records. Only a first or last record may stay without a group.
+        import itertools
+        pats = [(1, 2), (1, 3), (1, 4), (1, 5), (2, 4), (3, 5), (2, 5), (1, 6), (2, 3)]
+        pos = np.arange(3000)
+        ix = pd.date_range('2024-01-01 00:10', periods=len(pos), freq='10min')
+        for (w1, k1), (w2, k2) in itertools.combinations(pats, 2):
+            for j in range(k2):
+                keep = ~((pos % k1) < w1) & ~(((pos + j) % k2) < w2)
+                if keep.mean() < .2:
+                    continue
+                with self.subTest(p1=(w1, k1), p2=(w2, k2), offset=j):
+                    g = self._groups(ix[keep]).to_numpy()
+                    self.assertFalse(np.isnan(g[2:-2]).any())
+
+    def test_regular_outage_does_not_spread_from_a_stray_stamp(self):
+        # A stray stamp at 00:24:30 in 1MIN data with 00:21 and 00:24 missing
+        # leaves 00:23 with spacings of 60 and 90 s (common divisor 30 s). One
+        # such record is no regular outage: 00:22 stays 60 s.
+        ix = pd.date_range('2024-07-01', periods=600, freq='1min')
+        ix = ix.drop(pd.DatetimeIndex(['2024-07-01 00:21', '2024-07-01 00:24']))
+        ix = ix.append(pd.DatetimeIndex(['2024-07-01 00:24:30'])).sort_values()
+        g = self._groups(ix)
+        self.assertEqual(g.loc[pd.Timestamp('2024-07-01 00:22')], 60)
+        self.assertNotEqual(g.loc[pd.Timestamp('2024-07-01 00:23')], 30)
+
+
+class TestDescribeTimeResolution(unittest.TestCase):
+    """Text of the detected time resolution, as shown after a download and in plots."""
+
+    def _describe(self, ix):
+        from diive.core.times.times import describe_time_resolution
+        return describe_time_resolution(ix)
+
+    def test_regular(self):
+        self.assertEqual(self._describe(pd.date_range('2024-01-01', periods=50, freq='30min')), '30min')
+        self.assertEqual(self._describe(pd.date_range('2024-01-01', periods=50, freq='1min')), '1min')
+        self.assertEqual(self._describe(pd.date_range('2024-01-01', periods=5, freq='D')), '24h')
+
+    def test_missing_records_keep_the_resolution(self):
+        ix = pd.date_range('2024-01-01', periods=500, freq='10min')
+        self.assertEqual(self._describe(ix.delete([10, 11, 12, 200, 300])), '10min')
+
+    def test_mixed_resolutions_with_counts_in_order(self):
+        a = pd.date_range('2024-01-01 00:10', periods=100, freq='10min')
+        b = pd.date_range(a[-1] + pd.Timedelta('1min'), periods=300, freq='1min')
+        self.assertEqual(self._describe(a.append(b)), '10min (100 records), 1min (300 records)')
+
+    def test_unsorted_index_is_sorted_first(self):
+        ix = pd.date_range('2024-01-01', periods=50, freq='30min')
+        self.assertEqual(self._describe(ix[::-1]), '30min')
+
+    def test_too_few_records(self):
+        self.assertEqual(self._describe(pd.DatetimeIndex([])), 'unknown')
+        self.assertEqual(self._describe(pd.DatetimeIndex(['2024-01-01'])), 'unknown')
 
 
 class TestStlDecompose(unittest.TestCase):
@@ -425,10 +947,6 @@ class TestStlDecompose(unittest.TestCase):
                         'a series shorter than 2 * seasonal should warn')
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class TestStlSurvivesGaps(unittest.TestCase):
     """A gap must not empty the whole decomposition.
 
@@ -517,3 +1035,92 @@ class TestSeasonalityDetectionDoesNotInvent(unittest.TestCase):
         t = np.arange(1000)
         res = detect_seasonality(pd.Series(np.sin(2 * np.pi * t / 50)))
         self.assertAlmostEqual(res['primary_period'], 50, delta=1)
+
+
+class TestCommonTimeGrid(unittest.TestCase):
+    """L331: records added to a dataset must share its time resolution and grid."""
+
+    def _idx(self, start, periods, freq):
+        return pd.date_range(start, periods=periods, freq=freq, name='TIMESTAMP_MIDDLE')
+
+    def test_same_grid_returns_the_resolution(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min')
+        new = self._idx('2024-01-05 00:30', 48, '30min')  # later period, gap between
+        self.assertEqual(common_time_grid(cur, new), '30min')
+
+    def test_other_resolution_is_refused(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min')
+        new = self._idx('2024-01-01 00:10', 144, '10min')
+        with self.assertRaisesRegex(ValueError, '30min.*10min'):
+            common_time_grid(cur, new)
+
+    def test_other_time_steps_are_refused(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min')
+        new = self._idx('2024-01-02 00:15', 48, '30min')  # :15/:45 against :00/:30
+        with self.assertRaisesRegex(ValueError, 'not on the 30min time grid'):
+            common_time_grid(cur, new)
+
+    def test_current_data_off_their_own_grid_are_refused(self):
+        from diive.core.times.times import common_time_grid
+        cur = self._idx('2024-01-01 00:30', 48, '30min').append(
+            pd.DatetimeIndex(['2024-01-02 00:10'], name='TIMESTAMP_MIDDLE'))
+        new = self._idx('2024-01-03 00:30', 48, '30min')
+        with self.assertRaisesRegex(ValueError, 'mix time resolutions'):
+            common_time_grid(cur, new)
+
+    def test_too_few_records_cannot_be_checked(self):
+        from diive.core.times.times import common_time_grid
+        one = pd.DatetimeIndex(['2024-01-01 00:30'], name='TIMESTAMP_MIDDLE')
+        self.assertIsNone(common_time_grid(one, one))
+
+
+class TestNominalFreqSpelling(unittest.TestCase):
+    """L322: nominal_freq is compared as a duration, not as text."""
+
+    def _sanitize(self, freq, nominal, periods=24 * 30):
+        import diive as dv
+        idx = pd.date_range('2024-01-01 01:00', periods=periods, freq=freq,
+                            name='TIMESTAMP_END')
+        df = pd.DataFrame({'TA': np.arange(len(idx), dtype=float)}, index=idx)
+        return dv.times.TimestampSanitizer(data=df, nominal_freq=nominal).get()
+
+    def test_hourly_spellings_are_accepted(self):
+        for nominal in ['h', '1h', '1H', '60min']:
+            with self.subTest(nominal=nominal):
+                self.assertEqual(self._sanitize('h', nominal).index.freqstr, 'h')
+
+    def test_daily_given_as_d_is_accepted(self):
+        out = self._sanitize('D', 'D', periods=60)
+        self.assertEqual(len(out), 60)
+
+    def test_half_hourly_spellings_are_accepted(self):
+        for nominal in ['30min', '0.5h']:
+            with self.subTest(nominal=nominal):
+                self.assertEqual(len(self._sanitize('30min', nominal)), 24 * 30)
+
+    def test_a_different_step_is_still_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'frequency validation failed'):
+            self._sanitize('h', '30min')
+
+
+class TestRemovedRowCounts(unittest.TestCase):
+    """L348: one NaT and one duplicate timestamp are counted once each."""
+
+    def test_nat_and_duplicate_counts(self):
+        import diive as dv
+        idx = pd.DatetimeIndex(['2024-01-01 00:30', '2024-01-01 01:00', '2024-01-01 01:00', None,
+                                '2024-01-01 01:30', '2024-01-01 02:00'], name='TIMESTAMP_MIDDLE')
+        df = pd.DataFrame({'TA': [1., 2, 3, 4, 5, 6]}, index=idx)
+        san = dv.times.TimestampSanitizer(data=df, nominal_freq='30min')
+        out = san.get()
+        status = san.get_status()
+        self.assertEqual(status['rows_removed_nat'], 1)
+        self.assertEqual(status['rows_removed_duplicates'], 1)
+        self.assertEqual(len(out), 4)
+
+
+if __name__ == '__main__':
+    unittest.main()

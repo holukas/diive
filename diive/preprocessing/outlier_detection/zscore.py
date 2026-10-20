@@ -1,7 +1,8 @@
 """
-Outlier detection using Z-score methods.
+ZSCORE: Z-SCORE OUTLIER DETECTION
+=================================
 
-This module provides two z-score-based outlier detection approaches:
+Three z-score-based outlier detection approaches:
 
 - **Global:** Single z-score threshold for entire time series
 - **Daytime/Nighttime:** Separate z-score thresholds for different times of day
@@ -14,8 +15,7 @@ Quality flags:
 
 See examples/preprocessing/outlier_detection/outlier_zscore.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd
@@ -24,11 +24,10 @@ from pandas import Series, DatetimeIndex
 import diive.core.funcs.funcs as funcs
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail
-from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
+from diive.preprocessing.outlier_detection.common import (create_daytime_nighttime_flags, reject_legacy_params,
+                                                          window_to_records)
 
 
-@ConsoleOutputDecorator()
 class zScore(FlagBase):
     r"""Detect outliers using z-score with flexible threshold modes.
 
@@ -55,6 +54,17 @@ class zScore(FlagBase):
     - NaN: Record missing in the input, so no test could be performed
 
     Example:
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> zs = dv.outliers.zScore(series=s, thres_zscore=4).run()
+        >>> cleaned = zs.filteredseries
+
+        Separate daytime and nighttime, stricter at night (needs the site location):
+
+        >>> zs = dv.outliers.zScore(series=s, separate_day_night=True,
+        ...                         thres_zscore_daytime=4, thres_zscore_nighttime=3,
+        ...                         lat=46.815, lon=9.856, utc_offset=1).run()
+
         See `examples/preprocessing/outlier_detection/outlier_zscore.py` for complete examples.
     """
 
@@ -247,9 +257,18 @@ class zScore(FlagBase):
         return ok, rejected, n_outliers
 
 
-@ConsoleOutputDecorator()
 class zScoreRolling(FlagBase):
-    """Flag outliers by the z-score within a rolling window. See :meth:`__init__`."""
+    """Flag outliers by the z-score within a rolling window. See :meth:`__init__`.
+
+    Example:
+        ``winsize`` is a record count (48 is one day of 30-minute data) or a time span:
+
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> zr = dv.outliers.zScoreRolling(series=s, thres_zscore=4, winsize=48).run()
+        >>> cleaned = zr.filteredseries
+        >>> zr = dv.outliers.zScoreRolling(series=s, thres_zscore=4, winsize='1D').run()
+    """
 
     flagid = 'OUTLIER_ZSCOREROLLING'
 
@@ -257,7 +276,7 @@ class zScoreRolling(FlagBase):
                  series: Series,
                  idstr: str = None,
                  thres_zscore: float = 4,
-                 winsize: int = None,
+                 winsize: int | str = None,
                  showplot: bool = False,
                  plottitle: str = None,
                  verbose: bool = False):
@@ -275,8 +294,17 @@ class zScoreRolling(FlagBase):
             idstr: Identifier suffix for output variable names.
             thres_zscore: Z-score threshold for outlier detection (default 4).
                 Values with |z-score| > threshold are flagged as outliers.
-            winsize: Window size in records for rolling statistics.
-                If None, defaults to len(series) / 20 (5% of data).
+            winsize: Window size for rolling statistics, as a record count or
+                as a time span such as ``'1D'``. A time span is converted to
+                records at the series' frequency (``'1D'`` is 48 records of
+                30-min data, 144 of 10-min data) and must be a whole multiple
+                of it. The window must be at least 3 records either way.
+                The window rolls over the records present, so missing records
+                (gaps, and outliers removed by earlier iterations) do not count
+                and the window stretches across them: with 20 % of the records
+                missing, ``'7D'`` covers about 9 calendar days.
+                If None, 5 % of the records with a value, counted in the
+                first iteration.
             showplot: If True, display results plot.
             plottitle: Optional title string for the plot.
             verbose: If True, print iteration statistics.
@@ -286,6 +314,7 @@ class zScoreRolling(FlagBase):
         # Validate inputs
         if thres_zscore <= 0:
             raise ValueError('thres_zscore must be positive.')
+        winsize = window_to_records(winsize, self.series, name='winsize', verbose=verbose)
         if winsize is not None and winsize < 3:
             raise ValueError('winsize must be at least 3 records.')
 

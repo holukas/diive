@@ -13,9 +13,18 @@ Contents
 Related Documentation
 ---------------------
 
-See ``dv.qaqc`` for:
+``dv.qaqc`` exports:
 
-- ``FlagQCF`` — Overall quality flag combining individual tests
+- ``FlagQCF``: Overall quality flag combining individual tests
+- ``StepwiseMeteoScreeningDb``: Stepwise meteo screening of variables from an InfluxDB
+  database (needs the ``db`` extra)
+- ``Measurement``, ``MEASUREMENTS``: Meteo measurement groups used by the screening
+  workflow (e.g. ``TA``, ``SW``)
+- ``CorrectionSpec``, ``CORRECTIONS``: The corrections the screening workflow offers
+- ``corrections_for_measurement()``, ``correction_spec()``: Which corrections apply to a
+  measurement, and the details of one correction
+- ``detect_measurement()``, ``measurement_label()``: Guess the measurement from a variable
+  name, and a display label for a measurement code
 
 The EddyPro flag functions are not re-exported by ``dv.qaqc``. Import them from
 ``diive.preprocessing.qaqc``:
@@ -51,8 +60,8 @@ Use Cases
    qcf.calculate(daytime_accept_qcf_below=2)  # Accept good+medium daytime
 
    # QCF values: 0=good, 1=marginal, 2=poor
-   filtered = df[qcf.filteredseries.notna()]  # Keep only good quality
-   highest_quality = df[qcf.filteredseries_hq.notna()]  # Keep only best
+   filtered = df[qcf.filteredseries.notna()]  # Records accepted by the thresholds
+   highest_quality = df[qcf.filteredseries_hq.notna()]  # Only QCF=0
 
    # Reports and plots
    qcf.report_qcf_series()  # Summary statistics

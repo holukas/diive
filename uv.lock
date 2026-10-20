@@ -460,7 +460,7 @@ wheels = [
 
 [[package]]
 name = "diive"
-version = "0.91.2"
+version = "0.92.0"
 source = { editable = "." }
 dependencies = [
     { name = "bokeh" },
@@ -474,19 +474,26 @@ dependencies = [
     { name = "seaborn" },
     { name = "shap" },
     { name = "statsmodels" },
+    { name = "threadpoolctl" },
     { name = "uncertainties" },
     { name = "xgboost" },
     { name = "yellowbrick" },
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "influxdb-client" },
+    { name = "jupyterlab" },
+    { name = "pyside6" },
+    { name = "pyvista" },
+    { name = "pyvistaqt" },
+    { name = "trimesh" },
+]
 db = [
     { name = "influxdb-client" },
 ]
 gui = [
     { name = "pyside6" },
-]
-gui3d = [
     { name = "pyvista" },
     { name = "pyvistaqt" },
     { name = "trimesh" },
@@ -495,9 +502,6 @@ gui3d = [
 [package.dev-dependencies]
 build = [
     { name = "pyinstaller" },
-]
-db = [
-    { name = "diive", extra = ["db"] },
 ]
 dev = [
     { name = "autopep8" },
@@ -519,30 +523,32 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bokeh", specifier = ">=3.7.1,<4.0.0" },
+    { name = "diive", extras = ["gui", "db"], marker = "extra == 'all'" },
     { name = "influxdb-client", marker = "extra == 'db'", specifier = ">=1.37.0" },
+    { name = "jupyterlab", marker = "extra == 'all'", specifier = ">=4.3.6,<5.0.0" },
     { name = "matplotlib", specifier = ">=3.10.0,<4.0.0" },
     { name = "numpy", specifier = ">=2.2.4,<3.0.0" },
     { name = "pandas", specifier = ">=3.0.0,<4.0.0" },
     { name = "pyarrow", specifier = ">=19.0.1,<20.0.0" },
     { name = "pyside6", marker = "extra == 'gui'", specifier = ">=6.8,<7.0" },
-    { name = "pyvista", marker = "extra == 'gui3d'", specifier = ">=0.44" },
-    { name = "pyvistaqt", marker = "extra == 'gui3d'", specifier = ">=0.11" },
+    { name = "pyvista", marker = "extra == 'gui'", specifier = ">=0.44" },
+    { name = "pyvistaqt", marker = "extra == 'gui'", specifier = ">=0.11" },
     { name = "pyyaml", specifier = ">=6.0.2,<7.0.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "scikit-learn", specifier = ">=1.6.1,<2.0.0" },
     { name = "seaborn", specifier = ">=0.13.2,<0.14.0" },
     { name = "shap", specifier = ">=0.50.0,<1.0.0" },
     { name = "statsmodels", specifier = ">=0.14.4,<0.15.0" },
-    { name = "trimesh", marker = "extra == 'gui3d'", specifier = ">=4.0" },
+    { name = "threadpoolctl", specifier = ">=3.1.0,<4.0.0" },
+    { name = "trimesh", marker = "extra == 'gui'", specifier = ">=4.0" },
     { name = "uncertainties", specifier = ">=3.2.2,<4.0.0" },
     { name = "xgboost", specifier = ">=3.0.0,<4.0.0" },
     { name = "yellowbrick", specifier = ">=1.5,<2.0" },
 ]
-provides-extras = ["gui", "gui3d", "db"]
+provides-extras = ["gui", "db", "all"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pyinstaller", specifier = ">=6.10" }]
-db = [{ name = "diive", extras = ["db"] }]
 dev = [
     { name = "autopep8", specifier = ">=2.3.2" },
     { name = "furo", specifier = ">=2025.12.19" },

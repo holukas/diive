@@ -6,7 +6,7 @@ A tiny app-wide store for the project's settings — the author name, a free-tex
 project description, and the measurement site's metadata (site name, latitude,
 longitude, elevation, UTC offset). Entered in the **Settings ▸ Project settings**
 tab and reused wherever a diive function needs site coordinates (e.g.
-daytime/nighttime separation, the flux processing chain).
+daytime/nighttime separation, the flux post-processing chain).
 
 This holds *values only* (no domain logic): the GUI collects them here and passes
 them to the library functions, which already accept ``lat`` / ``lon`` /

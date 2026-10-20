@@ -431,6 +431,173 @@ class TestPlots(unittest.TestCase):
         self.assertGreater(calls_for(pf._LEGEND_BEST_MAX_POINTS + 1), 0)
         self.assertEqual(calls_for(pf._LEGEND_BEST_MAX_POINTS), 0)
 
+    @staticmethod
+    def _legend_render(build, plain, zoom=None):
+        """Like `_legend_bounds`, but also return the rendered pixels."""
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.legend import Legend
+        fig = Figure(figsize=(6, 4), dpi=100)
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        build(ax)
+        legend = ax.get_legend()
+        if plain:
+            legend.__class__ = Legend
+        if zoom:
+            ax.set_xlim(*zoom)
+        fig.canvas.draw()
+        return legend.get_window_extent().bounds, np.asarray(fig.canvas.buffer_rgba()).copy()
+
+    @staticmethod
+    def _long_lines():
+        """Builders of axes with long time-series lines and a 'best' legend."""
+        import numpy as np
+        import pandas as pd
+        from diive.core.plotting import plotfuncs as pf
+        n = 20_000
+        idx = pd.date_range("2021-01-01", periods=n, freq="1min")
+        t = np.linspace(0, 2 * np.pi, n)
+
+        def wave(phase, gaps=False, style='-'):
+            def build(ax):
+                y = np.sin(t + phase)
+                if gaps:
+                    # Gaps at the start and in the middle. The segment test
+                    # joins the finite vertices around a gap.
+                    y[:500] = np.nan
+                    y[n // 3:n // 3 + 4000] = np.nan
+                    y[::7] = np.nan
+                ax.plot(idx, y, style, label='series')
+                pf.default_legend(ax=ax)
+            return build
+
+        def mixed(ax):
+            ax.plot(idx, np.cos(t), label='long')
+            ax.plot(idx[::4000], np.zeros(5), 'o', label='short')
+            ax.scatter(idx, np.sin(t), s=1, label='points')
+            pf.default_legend(ax=ax)
+
+        def reversed_x(ax):
+            # Display x decreases: matplotlib scores this line itself.
+            ax.plot(idx[::-1], np.sin(t), label='reversed')
+            pf.default_legend(ax=ax)
+
+        mid = (idx[n // 4], idx[n // 2])
+        return [
+            (wave(0.0), None),
+            (wave(np.pi / 2), None),
+            (wave(np.pi), None),
+            (wave(3 * np.pi / 2), None),
+            (wave(np.pi / 2, gaps=True), None),
+            (wave(3 * np.pi / 2, gaps=True, style='o'), None),
+            (wave(0.0, gaps=True), mid),
+            (mixed, None),
+            (reversed_x, None),
+        ]
+
+    def test_line_legend_best_lands_where_matplotlib_puts_it(self):
+        # Long lines with display x that never decreases are scored per
+        # x-slice. The legend must land where matplotlib puts it, pixel for
+        # pixel, with NaN gaps, markers only, after a zoom and next to
+        # other artists.
+        import numpy as np
+        seen = set()
+        for build, zoom in self._long_lines():
+            ours, ours_px = self._legend_render(build, plain=False, zoom=zoom)
+            theirs, theirs_px = self._legend_render(build, plain=True, zoom=zoom)
+            self.assertEqual(ours, theirs)
+            np.testing.assert_array_equal(ours_px, theirs_px)
+            seen.add(ours)
+        self.assertGreater(len(seen), 2)
+
+    def test_sorted_line_score_matches_matplotlib(self):
+        # The slice score equals matplotlib's two tests on the whole line, also
+        # with ties in x, NaN and inf vertices, and boxes on vertex coordinates.
+        import numpy as np
+        from matplotlib.path import Path
+        from matplotlib.transforms import Bbox
+        from diive.core.plotting import plotfuncs as pf
+        rng = np.random.default_rng(0)
+        checked = 0
+        for _ in range(500):
+            n = int(rng.integers(1, 60))
+            v = np.c_[np.sort(rng.integers(0, 30, n)), rng.integers(0, 30, n)].astype(float)
+            v[rng.random(n) < rng.random() * 0.7] = np.nan
+            v[rng.random(n) < 0.05, 1] = np.inf
+            finite = np.isfinite(v).all(axis=1)
+            if not finite.any():
+                continue
+            line = pf._SortedLine(v, finite)
+            for _ in range(20):
+                x0, y0 = rng.integers(-3, 32, 2) + rng.choice([0, 0.5])
+                w, h = rng.integers(0, 12, 2) + rng.choice([0, 0.5])
+                box = Bbox.from_bounds(x0, y0, w, h)
+                expected = box.count_contains(v) + Path(v).intersects_bbox(box, filled=False)
+                self.assertEqual(line.score(box), expected)
+                checked += 1
+        self.assertGreater(checked, 5000)
+
+    def test_find_best_position_mirrors_matplotlib(self):
+        # _ArrayOffsetsLegend copies matplotlib's private _find_best_position.
+        # Both must return the same place on an axes with every kind of artist
+        # and a long sorted line, so a change in matplotlib shows here.
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from matplotlib.legend import Legend
+        from matplotlib.patches import Circle
+        from diive.core.plotting import plotfuncs as pf
+        n = pf._LEGEND_SORTED_MIN_VERTICES * 5
+        x = np.linspace(0, 1, n)
+        for y in (np.sin(6 * x), -np.sin(6 * x), 0.5 + 0 * x):
+            fig = Figure()
+            FigureCanvasAgg(fig)
+            ax = fig.add_subplot()
+            y = y.copy()
+            y[n // 2:n // 2 + 100] = np.nan
+            ax.plot(x, y, label='line')
+            ax.plot(x[::-1], y, label='reversed')
+            ax.scatter([0.2, np.nan], [0.3, 0.4])
+            ax.bar([0.5], [0.5], width=0.1)
+            ax.add_patch(Circle((0.3, 0.7), 0.1))
+            ax.fill_between([0, 0.5, 1], [0, 0.1, 0], [0.2, 0.3, 0.2])
+            ax.text(0.8, 0.2, 'note')
+            pf.default_legend(ax=ax)
+            legend = ax.get_legend()
+            self.assertIsInstance(legend, pf._ArrayOffsetsLegend)
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            for width, height in ((40, 20), (120, 60), (300, 200)):
+                self.assertEqual(legend._find_best_position(width, height, renderer),
+                                 Legend._find_best_position(legend, width, height, renderer))
+
+    def test_find_best_position_is_still_called(self):
+        # Matplotlib still asks the legend for the 'best' place (if it stops,
+        # the override is dead code and long lines are slow again).
+        import types
+        import numpy as np
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        from matplotlib.figure import Figure
+        from diive.core.plotting import plotfuncs as pf
+        fig = Figure()
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot()
+        ax.plot(np.arange(5000), np.sin(np.arange(5000) / 500), label='line')
+        pf.default_legend(ax=ax)
+        legend = ax.get_legend()
+        calls = []
+        find = legend._find_best_position
+
+        def spy(self, *args):
+            calls.append(1)
+            return find(*args)
+
+        legend._find_best_position = types.MethodType(spy, legend)
+        fig.canvas.draw()
+        self.assertGreater(len(calls), 0)
+
     def test_timeseries_title_and_markersize(self):
         # On a caller ax, an explicit title is honored and marker size applied.
         import pandas as pd
@@ -1326,7 +1493,7 @@ class TestPlotClasses(unittest.TestCase):
                 self.assertEqual(len(ax.patches), 2 * len(yearly))
                 plt.close(fig)
 
-    # --- 3D surface grid (library path, no gui3d extra needed) ---
+    # --- 3D surface grid (library path, no PyVista needed) ---
 
     def test_datetime_surface_grid_shape_and_axes(self):
         from diive.core.plotting.surface_grid import datetime_surface_grid
@@ -1390,10 +1557,13 @@ class TestPlotClasses(unittest.TestCase):
         labels = [t.get_text() for ax in fig.axes for t in ax.texts]
         self.assertNotIn("7", labels)
         plt.close(fig)
-        # A series with nothing left at all says so rather than failing inside sklearn.
-        with self.assertRaises(ValueError) as ctx:
-            RidgeLinePlot(self.series * np.nan)
-        self.assertIn("no valid", str(ctx.exception))
+        # A series with nothing left at all says so on the figure rather than
+        # failing inside sklearn (L353, it raised ValueError before).
+        fig = plt.figure()
+        RidgeLinePlot(self.series * np.nan).plot(fig=fig, showplot=False)
+        labels = [t.get_text() for ax in fig.axes for t in ax.texts]
+        self.assertIn("TA: no finite values", labels)
+        plt.close(fig)
 
     def test_cumulative_labels_an_all_nan_column_instead_of_raising(self):
         """L69: an unfilled scenario column is all-NaN, and had no legend total to index."""
@@ -1466,6 +1636,42 @@ class TestHeatmapDateTimeShowLessXticklabels(unittest.TestCase):
         self.assertLess(len(thinned), len(full))
 
 
+class TestHeatmapDateTimeTickInterval(unittest.TestCase):
+    """The hour ticks fall on cell boundaries for every grid, also under one minute.
+
+    The tick interval was computed in whole minutes, so a 5 s or 30 s grid gave
+    0 minutes and the heatmap raised ZeroDivisionError (L288).
+    """
+
+    @staticmethod
+    def _series(freq):
+        import numpy as np
+        import pandas as pd
+        idx = pd.date_range("2026-03-08", "2026-03-10", freq=freq, inclusive="right", name="TIMESTAMP_END")
+        return pd.Series(np.sin(np.arange(len(idx)) / 100.0), index=idx, name="TA")
+
+    def test_interval_per_grid(self):
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        expected = {'5s': 3, '30s': 3, '1min': 3, '7min': 3, '10min': 3, '30min': 3,
+                    '90min': 3, '4h': 12, 'D': 3}
+        for freq, hours in expected.items():
+            ticks, labels = HeatmapDateTime(self._series(freq))._set_ticks()
+            self.assertEqual(labels, list(range(hours, 24, hours)), freq)
+            self.assertEqual(ticks, [float(h) for h in labels], freq)
+
+    def test_sub_minute_heatmap_renders(self):
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        for freq in ('5s', '30s'):
+            for orientation in ('vertical', 'horizontal'):
+                fig, ax = plt.subplots()
+                HeatmapDateTime(self._series(freq), ax_orientation=orientation).plot(ax=ax, fig=fig)
+                fig.canvas.draw()
+                hour_axis = ax.xaxis if orientation == 'vertical' else ax.yaxis
+                self.assertEqual([t.get_text() for t in hour_axis.get_ticklabels()],
+                                 ['3', '6', '9', '12', '15', '18', '21'])
+                plt.close(fig)
+
+
 class TestHeatmapYearMonthLattice(unittest.TestCase):
     """Cells must sit on a complete year x month lattice.
 
@@ -1523,3 +1729,199 @@ class TestHeatmapYearMonthLattice(unittest.TestCase):
         # 12 labelled ticks over 12 cells; before the fix there were 12 ticks
         # over 5 cells, so a tick pointed at the wrong month's colour.
         self.assertEqual(len(ax.get_xticks()), h.z.shape[1])
+
+
+class TestL219PlottingFixes(unittest.TestCase):
+    """Regression tests for the plotting bugs in finding L219.
+
+    Axes come from a bare ``Figure()`` where the code under test takes ``ax``,
+    so a pyplot call that targets the current figure cannot hide a bug.
+    """
+
+    def test_has_twin_reads_the_axes_figure(self):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.plotfuncs import has_twin
+        fig = Figure()
+        ax = fig.add_subplot()
+        self.assertFalse(has_twin(ax))  # raised AttributeError ('ax.fig')
+        ax.twinx()
+        self.assertTrue(has_twin(ax))
+
+    def test_scatterxy_keeps_its_constrained_layout(self):
+        import warnings
+        import numpy as np
+        import pandas as pd
+        from matplotlib.layout_engine import ConstrainedLayoutEngine
+        from diive.core.plotting.scatter import ScatterXY
+        rng = np.random.default_rng(0)
+        x = pd.Series(rng.normal(size=100), name='x')
+        y = pd.Series(rng.normal(size=100), name='y')
+        s = ScatterXY(x=x, y=y)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            s.plot()
+        msgs = [str(w.message) for w in caught]
+        self.assertFalse([m for m in msgs if 'layout has changed' in m], msgs)
+        self.assertIsInstance(s.fig.get_layout_engine(), ConstrainedLayoutEngine)
+        plt.close(s.fig)
+
+    def _compound_plot(self, **kwargs):
+        import numpy as np
+        import pandas as pd
+        from matplotlib.figure import Figure
+        from diive.core.plotting.compoundextremes import CompoundExtremesPlot
+        rng = np.random.default_rng(1)
+        x = pd.Series(rng.normal(size=60), name='x')
+        y = pd.Series(rng.normal(size=60), name='y')
+        cat = pd.Series(rng.choice(['none', 'hot'], size=60))
+        ax = Figure().add_subplot()
+        CompoundExtremesPlot(x=x, y=y, category=cat).plot(ax=ax, **kwargs)
+        return ax
+
+    def test_compoundextremes_legend_false_draws_no_legend(self):
+        self.assertIsNone(self._compound_plot(legend=False).get_legend())
+        self.assertIsNone(self._compound_plot(
+            format_style=FormatStyle(show_legend=False)).get_legend())
+        legend = self._compound_plot(legend=True, legend_title='Type').get_legend()
+        self.assertIsNotNone(legend)
+        self.assertEqual(legend.get_title().get_text(), 'Type')
+
+    def _assert_keeps_constrained_layout(self, plot_obj):
+        """A standalone plot() must not switch its constrained figure to tight."""
+        import warnings
+        from matplotlib.layout_engine import ConstrainedLayoutEngine
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            plot_obj.plot()
+        msgs = [str(w.message) for w in caught]
+        self.assertFalse([m for m in msgs if 'layout has changed' in m], msgs)
+        self.assertIsInstance(plot_obj.fig.get_layout_engine(), ConstrainedLayoutEngine)
+        plt.close(plot_obj.fig)
+
+    def test_compoundextremes_standalone_keeps_its_constrained_layout(self):
+        # Finding L225: plot() without ax called self.fig.tight_layout().
+        import numpy as np
+        import pandas as pd
+        from diive.core.plotting.compoundextremes import CompoundExtremesPlot
+        rng = np.random.default_rng(1)
+        x = pd.Series(rng.normal(size=60), name='x')
+        y = pd.Series(rng.normal(size=60), name='y')
+        cat = pd.Series(rng.choice(['none', 'hot'], size=60))
+        self._assert_keeps_constrained_layout(CompoundExtremesPlot(x=x, y=y, category=cat))
+
+    def test_dielcycle_standalone_keeps_its_constrained_layout(self):
+        # Finding L225: plot() without ax called self.fig.tight_layout().
+        from diive.core.plotting.dielcycle import DielCycle
+        self._assert_keeps_constrained_layout(DielCycle(_synthetic_series(years=1)))
+
+    def test_heatmaps_reject_an_orientation_that_differs_from_init(self):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime, HeatmapYearMonth
+        series = _synthetic_series(years=1)
+        for cls in (HeatmapDateTime, HeatmapYearMonth):
+            with self.subTest(cls=cls.__name__):
+                hm = cls(series, ax_orientation='vertical')
+                fig = Figure()
+                ax = fig.add_subplot()
+                # Used to plot the vertical grid with horizontal axis labels.
+                with self.assertRaises(ValueError):
+                    hm.plot(ax=ax, fig=fig, ax_orientation='horizontal')
+                self.assertEqual(hm.ax_orientation, 'vertical')
+                # The same value as in __init__ is still accepted.
+                hm.plot(ax=ax, fig=fig, ax_orientation='vertical')
+                self.assertIn(ax.get_ylabel(), ('Date', 'Year'))
+
+
+class TestL353NonFiniteValues(unittest.TestCase):
+    """L353: CumulativeYear, HistogramPlot and RidgeLinePlot raised on +inf/-inf,
+    CumulativeYear and RidgeLinePlot also on an all-NaN series.
+
+    Infinite values are left out. When no finite value is left, the plot shows
+    a note instead of raising. Axes come from a bare ``Figure()``.
+    """
+
+    NOTE = "TA: no finite values"
+
+    @staticmethod
+    def _series(kind: str):
+        import numpy as np
+        series = _synthetic_series(years=2)
+        if kind == "+inf":
+            series.iloc[[100, 9000]] = np.inf
+        elif kind == "-inf":
+            series.iloc[[100, 9000]] = -np.inf
+        elif kind == "allnan":
+            series[:] = np.nan
+        elif kind == "allinf":
+            series[:] = np.inf
+        return series
+
+    @staticmethod
+    def _texts(fig):
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        FigureCanvasAgg(fig).draw()  # limits and ticks are resolved only when drawing
+        return [t.get_text() for ax in fig.axes for t in ax.texts]
+
+    def _plot_cumulative_year(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.cumulative import CumulativeYear
+        fig = Figure()
+        cy = CumulativeYear(series, show_reference=True)
+        cy.plot(ax=fig.add_subplot(), showplot=False)
+        return fig, cy
+
+    def _plot_histogram(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.histogram import HistogramPlot
+        fig = Figure()
+        hist = HistogramPlot(series, method='n_bins', n_bins=10)
+        hist.plot(ax=fig.add_subplot(), show_kde=True, show_mean=True, show_median=True)
+        return fig, hist
+
+    def _plot_ridgeline(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.ridgeline import RidgeLinePlot
+        fig = Figure()
+        ridge = RidgeLinePlot(series)
+        ridge.plot(fig=fig, how='monthly', showplot=False)
+        return fig, ridge
+
+    def test_infinite_values_are_left_out(self):
+        import numpy as np
+        finite = _synthetic_series(years=2)
+        for kind in ("+inf", "-inf"):
+            series = self._series(kind)
+            with self.subTest(kind=kind, cls="CumulativeYear"):
+                fig, cy = self._plot_cumulative_year(series)
+                self.assertNotIn(self.NOTE, self._texts(fig))
+                self.assertEqual(cy.n_infinite, 2)
+                self.assertFalse(np.isinf(cy.cumulatives_per_year_df.to_numpy()).any())
+                self.assertTrue(np.isfinite(fig.axes[0].get_ylim()).all())
+            with self.subTest(kind=kind, cls="HistogramPlot"):
+                fig, hist = self._plot_histogram(series)
+                self.assertNotIn(self.NOTE, self._texts(fig))
+                self.assertEqual(hist.n_infinite, 2)
+                self.assertEqual(hist.counts.sum(), len(finite) - 2)
+                self.assertTrue(np.isfinite(hist.edges).all())
+            with self.subTest(kind=kind, cls="RidgeLinePlot"):
+                fig, ridge = self._plot_ridgeline(series)
+                self.assertNotIn(self.NOTE, self._texts(fig))
+                self.assertEqual(ridge.n_infinite, 2)
+                self.assertEqual(len(fig.axes), 12)
+                self.assertTrue(np.isfinite(ridge.xlim).all())
+
+    def test_no_finite_values_shows_a_note(self):
+        for kind in ("allnan", "allinf"):
+            series = self._series(kind)
+            with self.subTest(kind=kind, cls="CumulativeYear"):
+                fig, _ = self._plot_cumulative_year(series)
+                self.assertIn(self.NOTE, self._texts(fig))
+            with self.subTest(kind=kind, cls="HistogramPlot"):
+                fig, _ = self._plot_histogram(series)
+                # All-NaN keeps the note it had before L353.
+                note = "TA: no data" if kind == "allnan" else self.NOTE
+                self.assertIn(note, self._texts(fig))
+            with self.subTest(kind=kind, cls="RidgeLinePlot"):
+                fig, _ = self._plot_ridgeline(series)
+                self.assertEqual(len(fig.axes), 1)
+                self.assertIn(self.NOTE, self._texts(fig))

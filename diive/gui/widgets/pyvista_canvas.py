@@ -6,8 +6,8 @@ A Qt widget wrapping ``pyvistaqt.QtInteractor`` — a VTK/OpenGL render window
 that embeds in a PySide6 layout and gives smooth, GPU-accelerated rotation of
 3-D scenes (trackball camera, no event-loop blocking).
 
-PyVista/VTK is an **optional** dependency (the ``gui3d`` extra). It is imported
-lazily here so a plain ``gui`` install never pulls in VTK; `pyvista_available()`
+PyVista/VTK is part of the ``gui`` extra. It is imported lazily here so
+opening the app does not load VTK; `pyvista_available()`
 reports whether it's present, and `Pyvista3DCanvas` raises a clear
 :class:`Missing3DDependency` if constructed without it (the tab catches this and
 shows install instructions instead of a stack trace).
@@ -25,11 +25,11 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 #: Console-script hint shown when the extra is missing.
-INSTALL_HINT = "uv sync --extra gui --extra gui3d  (or: pip install 'diive[gui,gui3d]')"
+INSTALL_HINT = "uv sync --extra gui  (or: pip install 'diive[gui]')"
 
 
 class Missing3DDependency(RuntimeError):
-    """Raised when the 3-D canvas is built without the ``gui3d`` extra."""
+    """Raised when the 3-D canvas is built without PyVista/VTK installed."""
 
 
 def pyvista_available() -> bool:
@@ -49,10 +49,10 @@ class Pyvista3DCanvas(QWidget):
         super().__init__(parent)
         if not pyvista_available():
             raise Missing3DDependency(
-                "3-D plotting needs the 'gui3d' extra. Install:\n" + INSTALL_HINT)
+                "3-D plotting needs PyVista/VTK. Install:\n" + INSTALL_HINT)
 
-        # Imported here (not at module top) so the module loads in a plain
-        # 'gui' install, where the 3D tabs can still be imported.
+        # Imported here (not at module top) so the module loads without
+        # PyVista, where the 3D tabs can still be imported.
         import pyvista as pv
         from pyvistaqt import QtInteractor
 

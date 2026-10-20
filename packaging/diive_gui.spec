@@ -5,7 +5,8 @@ PyInstaller spec for the diive desktop GUI (Windows, one-folder build).
 Build with the helper script:  packaging/build_gui.ps1
 Or directly:                   uv run pyinstaller packaging/diive_gui.spec --noconfirm
 
-Produces  dist/diive-gui/  containing diive-gui.exe + all dependencies.
+Produces  dist/diive-gui/  containing diive-gui.exe + all dependencies
+(dist/diive-gui-internal/ for the internal build with DIIVE_BUILD_DB=1).
 Zip that folder and hand it to users; they unzip and run diive-gui.exe.
 No Python / uv / pip needed on their machine.
 
@@ -106,10 +107,9 @@ binaries += collect_dynamic_libs("xgboost")
 datas += collect_data_files("xgboost")
 hiddenimports += ["xgboost", "xgboost.core", "xgboost.sklearn"]
 
-# --- optional 3-D plotting (gui3d extra: pyvista + pyvistaqt + VTK) -------
-# Only bundled if the gui3d extra is installed in the build env; a 2-D-only
-# build (gui extra alone) skips it, matching the runtime lazy-import design
-# (the 3D tab shows an install notice if VTK is absent). VTK ships hundreds of
+# --- 3-D plotting (part of the gui extra: pyvista + pyvistaqt + VTK) ------
+# Only bundled if installed in the build env, matching the runtime lazy-import
+# design (the 3D tab shows an install notice if VTK is absent). VTK ships hundreds of
 # compiled modules + data files that PyInstaller's static analysis misses, so
 # collect_all is required. `vtkmodules` is the real package; `vtk` is a thin
 # wrapper. qtpy/pyvistaqt route VTK's render window through PySide6, so the
@@ -126,16 +126,20 @@ if _ilu.find_spec("pyvista") is not None and _ilu.find_spec("pyvistaqt") is not 
     # static analyzer keeps it (collect_all covers it, but pin it explicitly).
     hiddenimports += ["vtkmodules.qt.QVTKRenderWindowInteractor"]
 
-# --- optional InfluxDB support (db group: influxdb-client) ----------------
-# diive's InfluxDB engine (diive/core/io/db/influx) ships with diive; its only
-# third-party requirement is influxdb_client, bundled here when present in the
-# build env (uv sync --group db). The client is imported lazily (inside the
-# engine's connection/upload code), so PyInstaller's static analysis can miss
-# it; collect_all pins it along with its submodules + data. Without the db group
-# the GUI's Database tabs show an install notice (influxdb_available() -> False),
-# matching the runtime lazy-import design. reactivex/certifi are plain imports
-# the static analyzer already finds once influxdb_client is reached.
-if _ilu.find_spec("influxdb_client") is not None:
+# --- InfluxDB support (internal builds only) -------------------------------
+# The database tabs are for internal use for now, so the public build leaves
+# influxdb_client out even when the build env has it installed. Only an internal
+# build (build_gui.ps1 -WithDb, which sets DIIVE_BUILD_DB=1) bundles it. Without
+# it, influxdb_available() is False in the app and the GUI hides File > Database.
+# The client is imported lazily (inside the engine's connection/upload code):
+# static analysis would still find those imports, so the public build lists it
+# in `excludes` below, and the internal build pins it with collect_all.
+# reactivex/certifi are plain imports the analyzer finds once it reaches the client.
+_WITH_DB = os.environ.get("DIIVE_BUILD_DB") == "1"
+if _WITH_DB:
+    if _ilu.find_spec("influxdb_client") is None:
+        raise SystemExit("DIIVE_BUILD_DB=1 needs the db extra: "
+                         "uv sync --extra all --group build")
     _d, _b, _h = collect_all("influxdb_client", filter_submodules=_no_test_submodules)
     datas += _d
     binaries += _b
@@ -172,6 +176,8 @@ excludes = [
     # Bundled test suites are filtered out at collection time instead — see
     # _no_test_submodules() above (handles every nesting level reliably).
 ]
+if not _WITH_DB:
+    excludes += ["influxdb_client"]
 
 a = Analysis(
     ["launch_diive_gui.py"],
@@ -214,5 +220,7 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="diive-gui",
+    # Separate output folders, so the internal build never shares files with
+    # the public one (COLLECT overwrites but never removes old files).
+    name="diive-gui-internal" if _WITH_DB else "diive-gui",
 )

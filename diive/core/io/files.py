@@ -1,4 +1,11 @@
-"""Read and write data files (CSV, parquet, ...)."""
+"""
+IO: FILES
+=========
+
+Save and load parquet and pickle files, unzip files, coerce data to the diive format.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 import os
 import pickle
 import time
@@ -8,7 +15,8 @@ from typing import Callable, Optional
 
 from pandas import Series, DataFrame, read_parquet
 
-from diive.core.times.times import TimestampSanitizer, validate_timestamp_naming
+from diive.core.times.times import (TimestampSanitizer, validate_timestamp_naming, DetectFrequency,
+                                    continuous_timestamp_freq)
 from diive.core.utils.console import info, detail
 
 #: Allowed names for a timestamp index in a diive parquet file.
@@ -94,7 +102,8 @@ def save_parquet(filename: str, data: DataFrame or Series, outpath: str or None 
             Full filepath to saved Parquet file.
 
     Notes:
-        Index name and frequency information are preserved in the Parquet file.
+        The index name is preserved in the Parquet file, the index frequency is not.
+        load_parquet() detects the frequency again when it sanitizes the timestamp.
         When reloading with load_parquet(), use output_middle_timestamp to convert
         timestamp representation if needed.
 
@@ -131,7 +140,12 @@ def load_parquet(filepath: str or Path, output_middle_timestamp: bool = True,
             **'TIMESTAMP_END', 'TIMESTAMP_START', or 'TIMESTAMP_MIDDLE'.**
         sanitize_timestamp : bool, optional (default True)
             Validate and regularize timestamp index: check naming convention, auto-detect
-            frequency, fill small gaps, remove duplicate timestamps. Calls TimestampSanitizer.
+            frequency, remove duplicate timestamps and insert missing timestamps as
+            empty (NaN) rows. Calls TimestampSanitizer.
+            Records that are not on the regular time grid (for example 1-min
+            records in 10-min data, or a record 1 s late) are removed, with a
+            warning that gives their number. Use sanitize_timestamp=False to
+            load all records as saved.
             Required for output_middle_timestamp to work.
 
     Returns:
@@ -181,6 +195,12 @@ def load_parquet_many(filepaths: list, output_middle_timestamp: bool = True,
     :class:`diive.core.io.filereader.MultiDataFileReader` and shares its
     ``progress_callback`` contract.
 
+    With ``sanitize_timestamp=True``, the merged data are put on a regular
+    time grid when the files leave a time gap between them: missing
+    timestamps are added as empty (NaN) records. Records that are not on the
+    grid (for example from a file with a different time resolution) are
+    removed, with a warning that gives their number.
+
     Args:
         filepaths: Parquet file paths to read and merge, in order.
         output_middle_timestamp: Forwarded to :func:`load_parquet`.
@@ -205,6 +225,11 @@ def load_parquet_many(filepaths: list, output_middle_timestamp: bool = True,
         merged = df if merged is None else merged.combine_first(df)
         if progress_callback:
             progress_callback('done', idx + 1, total, filepath)
+    if sanitize_timestamp and merged is not None and merged.index.freq is None:
+        # Files with a time gap between them leave missing timestamps in the
+        # merged index
+        freq = DetectFrequency(index=merged.index).get()
+        merged = continuous_timestamp_freq(data=merged, freq=freq)
     return merged
 
 
@@ -275,17 +300,3 @@ def verify_dir(path: str) -> None:
     """ Create dir if it does not exist. """
     Path(path).mkdir(parents=True, exist_ok=True)
     return None
-
-
-def _example_read_parquet():
-    df = load_parquet(
-        filepath=r"F:\Sync\luhk_work\40 - DATA\DATASETS\2025_FORESTS\2-parquet_merged\CH-Dav_ENF_ICOS+FXN_1997-2024.parquet",
-        output_middle_timestamp=True,
-        sanitize_timestamp=False
-    )
-    print(df)
-    df.to_csv(r"F:\TMP\example.csv")
-
-
-if __name__ == "__main__":
-    _example_read_parquet()

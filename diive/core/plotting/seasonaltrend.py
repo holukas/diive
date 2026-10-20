@@ -1,8 +1,10 @@
 """
-Visualization functions for seasonal-trend decomposition.
+SEASONALTREND: PLOTS FOR SEASONAL-TREND DECOMPOSITION
+=====================================================
 
-Provides methods to plot decomposition results, spectral analysis,
-and seasonality strength comparisons.
+Plot decomposition results, spectral analysis and seasonality strength comparisons.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import numpy as np
@@ -39,16 +41,18 @@ def plot_decomposition(
         quality (pd.Series, optional): Quality flags (0–1) for transparency.
                                        Used only if highlight_quality=True.
         title (str, optional): Figure title. If None, auto-generated.
-        color_scheme (dict, optional): Custom colors {'original', 'trend', 'seasonal', 'residual'}.
-                                      If None, uses defaults.
+        color_scheme (dict, optional): Custom colors {'original', 'trend', 'seasonal',
+            'residual', 'acf'}. If None, uses defaults. A custom dict needs all keys
+            that are drawn ('acf' only with show_residual_acf=True).
 
     Returns:
         plt.Figure: Matplotlib figure object
 
     Notes:
-        - Panel 1: Original series (black) with trend overlay (blue)
+        - Panel 1: Original series (blue) with trend overlay (red), default colours
         - Panel 2: Trend component
-        - Panel 3: Seasonal component (shows ~2 cycles)
+        - Panel 3: Seasonal component (first three cycles, with 365 records per cycle
+          when ``decomp.seasonal_period`` is None)
         - Panel 4: Residuals (or ACF of residuals)
         - Quality highlighting uses alpha transparency (high quality = opaque)
     """

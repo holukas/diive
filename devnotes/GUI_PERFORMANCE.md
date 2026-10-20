@@ -43,7 +43,7 @@ Pitfalls learned the hard way:
 | Data change with 62 tabs open (only the Overview renders) | 2.2 s | 2.2 s |
 | Overview: click a variable | 1.5–2.1 s | 1.5–2.1 s |
 | Open Select variables | 1.8 s | 3.4 s |
-| Open Flux processing chain (first open, lazy imports) | 1.3 s | 1.3 s |
+| Open Flux post-processing chain (first open, lazy imports) | 1.3 s | 1.3 s |
 | Theme change / open Appearance tab | 1.3 s | 1.7 / 2.3 s |
 | Open Driver explorer / Stepwise screening / Spectrogram | 0.9–1.0 s | 1.7–2.2 s |
 | Open Time series, Diel cycle, Cumulative, Cumulative year plot tabs | 0.7–0.8 s | 1.4–1.8 s |
@@ -90,7 +90,7 @@ constrained layout about 320 ms per click; `dv.sstats` for the stats band 60–1
 Largest costs: `sstats` pulling in `scipy.stats` (about 0.8 s) and the example-data module
 pulling in pandas (about 0.5 s).
 
-### [ ] P8. First open of the Flux processing chain tab costs 1.3 s
+### [ ] P8. First open of the Flux post-processing chain tab costs 1.3 s
 Menu tabs are imported on first open (`registry.LazyTab`), so this tab pays for importing the
 flux chain modules then. The cost moved here from startup on purpose. Could be hidden by
 pre-importing in the background after startup.

@@ -5,14 +5,16 @@ GUI.WIDGETS.STEPWISE_METHOD_PARAMS: PARAM WIDGETS FOR THE STEPWISE OUTLIER CHAIN
 One small widget per ``StepwiseOutlierDetection.flag_*`` method, collecting that
 method's parameters and producing a ``{"method": str, "kwargs": dict}`` *step* —
 the shape the library's ``level32_to_code`` consumes and the shape a stepwise
-chain (flux L3.2 tab, standalone stepwise tab) feeds to the detector.
+chain (flux L3.2 tab, Stepwise screening tab, Meteo screening tab) feeds to the
+detector. The Meteo screening tab calls the steps on ``StepwiseMeteoScreeningDb``.
 
 GUI-only: these are widgets, labels, and tooltips. The method *names* and their
 parameter *meanings* are the library's (`StepwiseOutlierDetection`); detection
 itself runs in the library. The day/night split needs no coordinates here — the
-detector is built with the site coordinates, so a step only carries
-``separate_day_night`` (plus per-period thresholds where the method has
-them).
+tab gives the detector the site coordinates (the Meteo screening tab applies them
+at run time), so a step only carries ``separate_day_night`` (plus per-period
+thresholds where the method has them). A new Hampel step has the split on when
+the project site is configured (``site.manager.configured``), off otherwise.
 
 Add a method = add a ``_StepParams`` subclass and list it in ``STEP_METHODS``.
 
@@ -28,6 +30,8 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QWidget,
 )
+
+from diive.gui import site
 
 
 def _fspin(default: float, lo: float, hi: float, step: float = 0.5,
@@ -105,7 +109,8 @@ class HampelParams(_StepParams):
     def _build(self, form: QFormLayout) -> None:
         self.window = _ispin(48 * 13, 3, 1_000_000)
         self.window.setToolTip("Sliding-window size in record count (624 = 13 days at "
-                               "30-min sampling, Papale 2006).")
+                               "30-min sampling, Papale 2006). The span in days depends on "
+                               "the resolution: 13 days of 1-min data are 18720 records.")
         form.addRow("Window (records)", self.window)
         self.n_sigma = _fspin(5.5, 0.1, 50.0)
         self.n_sigma.setToolTip("Threshold width in MADs; lower = stricter. Used for all "
@@ -115,6 +120,13 @@ class HampelParams(_StepParams):
         self.diff_cb.setChecked(True)
         form.addRow(self.diff_cb)
         self.dn_cb = QCheckBox("Separate daytime / nighttime")
+        self.dn_cb.setToolTip(
+            "Each period gets its own median, MAD and threshold, computed in the "
+            "same window from its own records only. The night includes the records "
+            "with up to 20 W m-2 potential radiation, so these records are judged "
+            "against the night statistics. On by default when the site coordinates "
+            "are set in Project settings, off without them (day and night would "
+            "come from (0, 0)).")
         form.addRow(self.dn_cb)
         self.n_sigma_dt = _fspin(5.5, 0.1, 50.0)
         self.n_sigma_dt.setToolTip("Threshold (n sigma) for daytime records.")
@@ -124,15 +136,43 @@ class HampelParams(_StepParams):
         form.addRow("Nighttime n sigma", self.n_sigma_nt)
         self.n_sigma_dt.setEnabled(False)
         self.n_sigma_nt.setEnabled(False)
+        # The per-period spins follow the global value until the user edits them
+        # (a new step starts with day/night on when the site is configured).
+        self._dt_follows = self._nt_follows = True
+        self._syncing = False
+        self.n_sigma.valueChanged.connect(self._sync_periods)
+        self.n_sigma_dt.valueChanged.connect(self._dt_edited)
+        self.n_sigma_nt.valueChanged.connect(self._nt_edited)
         self.dn_cb.toggled.connect(self._toggle_dn)
+        # Only the default for a new step: load() sets a saved step's own value.
+        self.dn_cb.setChecked(site.manager.configured)
         self._add_repeat(form)
+
+    def _sync_periods(self, *_) -> None:
+        """Copy the global value into the per-period spins the user has not edited."""
+        self._syncing = True
+        try:
+            if self._dt_follows:
+                self.n_sigma_dt.setValue(self.n_sigma.value())
+            if self._nt_follows:
+                self.n_sigma_nt.setValue(self.n_sigma.value())
+        finally:
+            self._syncing = False
+
+    def _dt_edited(self, *_) -> None:
+        if not self._syncing:
+            self._dt_follows = False
+
+    def _nt_edited(self, *_) -> None:
+        if not self._syncing:
+            self._nt_follows = False
 
     def _toggle_dn(self, on: bool) -> None:
         self.n_sigma_dt.setEnabled(on)
         self.n_sigma_nt.setEnabled(on)
         if on:  # seed per-period from the global value (convention)
-            self.n_sigma_dt.setValue(self.n_sigma.value())
-            self.n_sigma_nt.setValue(self.n_sigma.value())
+            self._dt_follows = self._nt_follows = True
+            self._sync_periods()
 
     def kwargs(self) -> dict:
         kw = dict(window_length=self.window.value(), n_sigma=self.n_sigma.value(),
@@ -148,13 +188,18 @@ class HampelParams(_StepParams):
         self.window.setValue(int(kwargs.get("window_length", self.window.value())))
         self.n_sigma.setValue(float(kwargs.get("n_sigma", self.n_sigma.value())))
         self.diff_cb.setChecked(bool(kwargs.get("use_differencing", True)))
-        # Set the toggle first (it seeds the per-period spins from the global
-        # value), then overwrite with the saved per-period thresholds.
         self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
+        # A missing per-period value falls back to the global value and keeps
+        # following it. A saved one is kept, and follows the global value only
+        # when it equals it.
+        self._dt_follows = self._nt_follows = True
+        self._sync_periods()
         if kwargs.get("n_sigma_daytime") is not None:
             self.n_sigma_dt.setValue(float(kwargs["n_sigma_daytime"]))
+            self._dt_follows = self.n_sigma_dt.value() == self.n_sigma.value()
         if kwargs.get("n_sigma_nighttime") is not None:
             self.n_sigma_nt.setValue(float(kwargs["n_sigma_nighttime"]))
+            self._nt_follows = self.n_sigma_nt.value() == self.n_sigma.value()
         self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 
@@ -192,33 +237,34 @@ class LocalSDParams(_StepParams):
             self.n_sd_nt.setValue(self.n_sd.value())
 
     def kwargs(self) -> dict:
-        win = self.winsize.value() or None
+        kw = dict(n_sd=self.n_sd.value(), winsize=self.winsize.value() or None,
+                  constant_sd=self.constant_cb.isChecked(),
+                  separate_day_night=self.dn_cb.isChecked(),
+                  **self._repeat_kwargs())
         if self.dn_cb.isChecked():
-            # LocalSD takes list [daytime, nighttime] for the per-period split.
-            n_sd = [self.n_sd_dt.value(), self.n_sd_nt.value()]
-            winsize = [win, win] if win is not None else None
-        else:
-            n_sd = self.n_sd.value()
-            winsize = win
-        return dict(n_sd=n_sd, winsize=winsize, constant_sd=self.constant_cb.isChecked(),
-                    separate_day_night=self.dn_cb.isChecked(),
-                    **self._repeat_kwargs())
+            kw.update(n_sd_daytime=self.n_sd_dt.value(),
+                      n_sd_nighttime=self.n_sd_nt.value())
+        return kw
 
     def load(self, kwargs: dict) -> None:
         self.constant_cb.setChecked(bool(kwargs.get("constant_sd", False)))
-        dn = bool(kwargs.get("separate_day_night", False))
-        self.dn_cb.setChecked(dn)
         n_sd = kwargs.get("n_sd", self.n_sd.value())
         win = kwargs.get("winsize", 0)
-        if dn and isinstance(n_sd, (list, tuple)):
-            self.n_sd_dt.setValue(float(n_sd[0]))
-            self.n_sd_nt.setValue(float(n_sd[1]))
-            win0 = win[0] if isinstance(win, (list, tuple)) and win else win
-            self.winsize.setValue(int(win0) if win0 else 0)
-        else:
-            val = n_sd[0] if isinstance(n_sd, (list, tuple)) else n_sd
-            self.n_sd.setValue(float(val))
-            self.winsize.setValue(int(win) if isinstance(win, int) and win else 0)
+        # Projects saved before v0.91.2 store [daytime, nighttime] lists here.
+        if isinstance(n_sd, (list, tuple)):
+            kwargs = {**kwargs, "n_sd_daytime": n_sd[0], "n_sd_nighttime": n_sd[1]}
+            n_sd = n_sd[0]
+        if isinstance(win, (list, tuple)):
+            win = win[0] if win else 0
+        self.n_sd.setValue(float(n_sd))
+        self.winsize.setValue(int(win) if win else 0)
+        # Set the toggle first (it seeds the per-period spins from the global
+        # value), then overwrite with the saved per-period thresholds.
+        self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
+        if kwargs.get("n_sd_daytime") is not None:
+            self.n_sd_dt.setValue(float(kwargs["n_sd_daytime"]))
+        if kwargs.get("n_sd_nighttime") is not None:
+            self.n_sd_nt.setValue(float(kwargs["n_sd_nighttime"]))
         self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
 
 
@@ -305,7 +351,8 @@ class LOFParams(_StepParams):
         form.addRow("Contamination (0=auto)", self.contamination)
         self.dn_cb = QCheckBox("Separate daytime / nighttime")
         form.addRow(self.dn_cb)
-        self._add_repeat(form)
+        # A repeated pass flags the contamination fraction again each time.
+        self._add_repeat(form, default=False)
 
     def kwargs(self) -> dict:
         return dict(
@@ -321,7 +368,80 @@ class LOFParams(_StepParams):
         cont = kwargs.get("contamination")
         self.contamination.setValue(float(cont) if cont else 0.0)
         self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
-        self.repeat_cb.setChecked(bool(kwargs.get("repeat", True)))
+        self.repeat_cb.setChecked(bool(kwargs.get("repeat", False)))
+
+
+#: Range of the limit spin boxes: wide enough for any meteo or flux unit.
+_LIMIT_RANGE = 1e12
+#: Default limits: wide enough to flag nothing until set for the variable.
+_LIMIT_DEFAULT = 10_000.0
+
+
+class AbsLimParams(_StepParams):
+    method = "flag_outliers_abslim_test"
+    label = "Absolute limits"
+    supports_daynight = True
+
+    def _build(self, form: QFormLayout) -> None:
+        self.minval = self._limit(-_LIMIT_DEFAULT, "Lowest accepted value (variable units); "
+                                  "records below it are flagged.")
+        self.maxval = self._limit(_LIMIT_DEFAULT, "Highest accepted value (variable units); "
+                                  "records above it are flagged.")
+        form.addRow("Minimum (global)", self.minval)
+        form.addRow("Maximum (global)", self.maxval)
+        self.dn_cb = QCheckBox("Separate daytime / nighttime")
+        form.addRow(self.dn_cb)
+        self.min_dt = self._limit(-_LIMIT_DEFAULT, "Lowest accepted value for daytime records.")
+        self.max_dt = self._limit(_LIMIT_DEFAULT, "Highest accepted value for daytime records.")
+        self.min_nt = self._limit(-_LIMIT_DEFAULT, "Lowest accepted value for nighttime records.")
+        self.max_nt = self._limit(_LIMIT_DEFAULT, "Highest accepted value for nighttime records.")
+        form.addRow("Daytime min", self.min_dt)
+        form.addRow("Daytime max", self.max_dt)
+        form.addRow("Nighttime min", self.min_nt)
+        form.addRow("Nighttime max", self.max_nt)
+        for sp in self._period_spins():
+            sp.setEnabled(False)
+        self.dn_cb.toggled.connect(self._toggle_dn)
+        # No repeat: a fixed range flags the same records on every pass.
+
+    @staticmethod
+    def _limit(default: float, tip: str) -> QDoubleSpinBox:
+        sp = _fspin(default, -_LIMIT_RANGE, _LIMIT_RANGE, step=1.0, decimals=4)
+        sp.setToolTip(tip)
+        return sp
+
+    def _period_spins(self) -> tuple:
+        return self.min_dt, self.max_dt, self.min_nt, self.max_nt
+
+    def _toggle_dn(self, on: bool) -> None:
+        for sp in self._period_spins():
+            sp.setEnabled(on)
+        if on:  # seed per-period from the global values (convention)
+            self.min_dt.setValue(self.minval.value())
+            self.min_nt.setValue(self.minval.value())
+            self.max_dt.setValue(self.maxval.value())
+            self.max_nt.setValue(self.maxval.value())
+
+    def kwargs(self) -> dict:
+        kw = dict(minval=self.minval.value(), maxval=self.maxval.value(),
+                  separate_day_night=self.dn_cb.isChecked())
+        if self.dn_cb.isChecked():
+            kw.update(minval_daytime=self.min_dt.value(), maxval_daytime=self.max_dt.value(),
+                      minval_nighttime=self.min_nt.value(),
+                      maxval_nighttime=self.max_nt.value())
+        return kw
+
+    def load(self, kwargs: dict) -> None:
+        for key, sp in (("minval", self.minval), ("maxval", self.maxval)):
+            if kwargs.get(key) is not None:
+                sp.setValue(float(kwargs[key]))
+        # Set the toggle first (it seeds the per-period spins from the global
+        # values), then overwrite with the saved per-period limits.
+        self.dn_cb.setChecked(bool(kwargs.get("separate_day_night", False)))
+        for key, sp in (("minval_daytime", self.min_dt), ("maxval_daytime", self.max_dt),
+                        ("minval_nighttime", self.min_nt), ("maxval_nighttime", self.max_nt)):
+            if kwargs.get(key) is not None:
+                sp.setValue(float(kwargs[key]))
 
 
 class MissingValsParams(_StepParams):
@@ -345,6 +465,7 @@ STEP_METHODS: list[type[_StepParams]] = [
     ZScoreRollingParams,
     IncrementsParams,
     LOFParams,
+    AbsLimParams,
     MissingValsParams,
 ]
 

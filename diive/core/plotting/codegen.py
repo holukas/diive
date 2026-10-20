@@ -431,7 +431,7 @@ def datetime_surface_to_code(varname: str, *, cmap: str = "viridis",
 
     The GUI renders it with PyVista (GPU); this snippet rebuilds the same numeric
     grid via :func:`~diive.plotting.datetime_surface_grid` and draws a matplotlib
-    3-D surface so it runs anywhere without the optional 3-D extra.
+    3-D surface so it runs anywhere without PyVista.
     """
     return (
         "import matplotlib.pyplot as plt\n"
@@ -461,7 +461,7 @@ def surface_xyz_to_code(x: str, y: str, z: str, *, n_bins: int = 30,
     The GUI renders it with PyVista (GPU); this snippet grids the scattered
     points onto a regular X-Y mesh via :class:`~diive.analysis.GridAggregator`
     (equal-width bins, ``aggfunc`` over Z per cell) and draws a matplotlib 3-D
-    surface so it runs anywhere without the optional 3-D extra.
+    surface so it runs anywhere without PyVista.
     """
     return (
         "import matplotlib.pyplot as plt\n"

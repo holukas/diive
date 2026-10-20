@@ -2,9 +2,9 @@
 DATA FUNCTIONS: FRAMES
 ======================
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+DataFrame helpers: column and record selection, renaming, header parsing and reshaping.
 
+Part of the diive library: https://github.com/holukas/diive
 """
 from pathlib import Path
 
@@ -49,7 +49,7 @@ def keep_vars(data: DataFrame | Series,
         raise ValueError(f"Variables not found in data: {missing}")
     out = data.loc[:, list(variables)].copy()
     if verbose:
-        info(f"Kept {len(variables)} of {data.shape[1]} variables.")
+        info(f"Kept {len(variables)} of {data.shape[1]} variables.", verbose=verbose)
     return out
 
 
@@ -260,10 +260,6 @@ def aggregated_as_hires(aggregate_series: Series,
 
     Example: half-hourly timestamp for daily maximum temperature
     """
-    # Imported here, not at module level: gapfilling pulls in sklearn/xgboost/shap,
-    # and this leaf module is imported by low-level code that must not depend on them.
-    from diive.gapfilling.interpolate import linear_interpolation
-
     # Aggregate series
     lowres_df = pd.DataFrame(aggregate_series.resample(to_freq).agg(to_agg))
     # lowres_df = lowres_df.rolling(window=5, center=True).mean()  # Testing
@@ -274,6 +270,10 @@ def aggregated_as_hires(aggregate_series: Series,
     if lowres_df[agghires_col].isnull().any() \
             and interpolate_missing_vals \
             and interpolation_lim:
+        # Imported here, not at module level: gapfilling pulls in sklearn/xgboost/shap,
+        # and this leaf module is imported by low-level code that must not depend on them.
+        # Only this branch needs it, the callers in the library never interpolate.
+        from diive.gapfilling.interpolate import linear_interpolation
         lowres_df[agghires_col] = linear_interpolation(series=lowres_df[agghires_col],
                                                        limit=interpolation_lim)
 
@@ -282,7 +282,6 @@ def aggregated_as_hires(aggregate_series: Series,
     # lowres_df = lowres_df.ffill()
 
     # lowres_df.interpolate(limit=1)
-    # todo here linear interpolation with gap length limit
 
     # Input data
     hires_df = pd.DataFrame(index=hires_timestamp)
@@ -374,13 +373,21 @@ def convert_data_to_numeric(df: pd.DataFrame) -> pd.DataFrame:
 
 def get_len_data(filepath: Path,
                  skiprows: list = None,
-                 headerrows: list = None):
-    """Check number of columns of the first data row after the header part"""
+                 headerrows: list = None,
+                 delimiter: str = ',',
+                 compression='infer'):
+    """Check number of columns of the first data row after the header part.
+
+    Pass the file's *delimiter* and *compression* as the data are read with,
+    otherwise a file separated by ';' or tabs is counted as one column (L342).
+    """
     skip_num_lines = len(headerrows) + len(skiprows)
     first_data_row_df = pd.read_csv(filepath,
                                     skiprows=skip_num_lines,
                                     header=None,
-                                    nrows=1)
+                                    nrows=1,
+                                    sep=delimiter,
+                                    compression=compression)
     return first_data_row_df.columns.size
 
 
@@ -388,7 +395,9 @@ def parse_header(filepath: Path,
                  varnames_row: int,
                  varunits_row: int = None,
                  skiprows: list = None,
-                 headerrows: list = None) -> tuple[list, list, int]:
+                 headerrows: list = None,
+                 delimiter: str = ',',
+                 compression='infer') -> tuple[list, list, int]:
     """Read variable names and units from a csv file.
 
     Units are optional since they are not included in all data files.
@@ -398,7 +407,7 @@ def parse_header(filepath: Path,
         variable units in row 3 the settings are:
             skiprows=[0, 1, 4, 5, 6]
             varnames_row=0
-            varnames_units=1
+            varunits_row=1
 
     Args:
         filepath: Path to the csv file.
@@ -407,9 +416,11 @@ def parse_header(filepath: Path,
         skiprows: Ignored rows at start of file.
             For example: [0, 1, 2] would ignore the first 3 rows of the file.
         headerrows: (deprecated)
+        delimiter: Column separator of the file, as the data are read with.
+        compression: Compression of the file, as the data are read with.
 
     Returns:
-        Lists of variable names and units, and integer of number of rows.
+        Lists of variable names and units, and the number of header columns.
     """
     df = pd.read_csv(filepath,
                      # skiprows=[0, 1],
@@ -417,7 +428,9 @@ def parse_header(filepath: Path,
                      # header=headerrows,
                      # index_col=False,
                      header=None,
-                     nrows=2)
+                     nrows=2,
+                     sep=delimiter,
+                     compression=compression)
     varnames_list = df.loc[varnames_row].copy().tolist()
     if varunits_row is not None:
         varunits_list = df.loc[varunits_row].copy().tolist()
@@ -680,7 +693,7 @@ def _example_convert_matrix_to_longform():
     from diive.configs.exampledata import load_exampledata_parquet_long
     df = load_exampledata_parquet_long()
     series = df['Tair_f'].copy()
-    monthly = dv.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
+    monthly = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
     monthly_longform = transform_yearmonth_matrix_to_longform(matrixdf=monthly)
     print(monthly)
     print(monthly_longform)

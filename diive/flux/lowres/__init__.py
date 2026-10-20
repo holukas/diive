@@ -2,7 +2,8 @@
 FLUX - LOW-RESOLUTION PROCESSING
 =================================
 
-30-min flux analysis: quality control, storage correction, USTAR filtering, uncertainty.
+30-min flux analysis: quality control, storage correction, USTAR filtering, uncertainty,
+time lags and the open-path self-heating correction.
 
 Part of the diive library: https://github.com/holukas/diive
 """

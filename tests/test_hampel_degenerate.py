@@ -67,9 +67,9 @@ class TestGapSpanningDifferences(unittest.TestCase):
         return s
 
     def test_clustered_spikes_are_still_all_removed(self):
-        """Iterating must keep working: the gap mask comes from the INPUT data, so
-        a value removed in an earlier iteration must not make its neighbours
-        untestable - otherwise a cluster of spikes shelters itself after pass one."""
+        """A cluster of three spikes must not shelter itself. A value removed in
+        an earlier iteration ends a run (L226), so the clustered spikes must all
+        go in the first pass or as a short run between the holes."""
         rng = np.random.default_rng(11)
         idx = pd.date_range('2020-05-01', periods=3000, freq='1min', name='TIMESTAMP_MIDDLE')
         s = pd.Series(20 + rng.normal(0, 0.05, len(idx)), index=idx, name='SWC')
@@ -89,6 +89,45 @@ class TestGapSpanningDifferences(unittest.TestCase):
         edge_after = flag.iloc[1400]
         self.assertNotEqual(edge_before, 2)
         self.assertNotEqual(edge_after, 2)
+
+
+class TestSpikeAtRunEdge(unittest.TestCase):
+    """A spike on a record with a missing neighbour (series start or end, gap edge)
+    used to be untestable. With repeat=True each iteration then flagged the next
+    record paired with it, until the whole run up to the next gap was rejected."""
+
+    @staticmethod
+    def _smooth():
+        rng = np.random.default_rng(1)
+        idx = pd.date_range('2024-07-01 00:15', periods=48 * 30, freq='30min', name='TIMESTAMP_MIDDLE')
+        hour = idx.hour + idx.minute / 60
+        s = pd.Series(15 + 5 * np.sin(2 * np.pi * (hour - 9) / 24) + rng.normal(0, 0.2, len(idx)),
+                      index=idx, name='TA')
+        s.iloc[700:710] = np.nan
+        return s
+
+    def test_edge_spike_is_flagged_without_cascade(self):
+        for pos in (0, 1, 699, 710, 711, -2, -1):
+            with self.subTest(pos=pos):
+                s = self._smooth()
+                s.iloc[pos] += 30
+                ham = _hampel(s, window_length='7D', n_sigma=5.5)
+                ham.calc(repeat=True)
+                flag = ham.get_flag()
+                self.assertEqual(flag.iloc[pos], 2)
+                self.assertLessEqual((flag == 2).sum(), 3)
+
+    def test_edge_band_matches_the_decision(self):
+        # The data-space band exposed for plotting must contain exactly the kept
+        # records, also at run edges where the test is one-sided.
+        s = self._smooth()
+        s.iloc[710] += 30
+        ham = _hampel(s, window_length='7D', n_sigma=5.5)
+        ham.calc(repeat=False)
+        x = s.dropna()
+        outside = (x > ham.last_upper_bound) | (x < ham.last_lower_bound)
+        self.assertTrue(outside.iloc[x.index.get_loc(s.index[710])])
+        self.assertEqual(int(outside.sum()), int((ham.get_flag() == 2).sum()))
 
 
 class TestNonFixedFrequencyIndex(unittest.TestCase):
@@ -112,8 +151,8 @@ class TestNonFixedFrequencyIndex(unittest.TestCase):
         flag = ham.get_flag()
         self.assertEqual(flag.iloc[60], 2)
         # The regular monthly spacing must not be mistaken for gaps, which would
-        # leave every record untestable.
-        self.assertFalse(ham._untestable.iloc[1:-1].any())
+        # split the series into runs too short to test.
+        self.assertEqual(ham._segment.nunique(), 1)
 
     def test_yearly_index_runs(self):
         rng = np.random.default_rng(5)

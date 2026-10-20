@@ -56,7 +56,7 @@ df = dv.load_exampledata_parquet()
 # Variables
 ta_col = 'Tair_f'  # Gap-filled air temperature
 rh_col = 'RH'  # Relative humidity
-vpd_col = 'VPD_hPa'
+vpd_col = 'VPD_kPa'
 
 # Subset data - use 1 year to keep example quick
 df_subset = df.loc[(df.index.year == 2018)].copy()
@@ -96,8 +96,8 @@ df_subset = df.loc[(df.index.year == 2021)].copy()
 # Variables
 ta_col = 'Tair_f'
 rh_col = 'RH'
-vpd_col = 'VPD_hPa'
-vpd_gf_col = 'VPD_hPa_gfilled'
+vpd_col = 'VPD_kPa'
+vpd_gf_col = 'VPD_kPa_gfilled'
 
 # Subset and calculate VPD
 subset_df = df_subset[[ta_col, rh_col]].copy()
@@ -157,7 +157,7 @@ df = dv.load_exampledata_parquet()
 # Variables
 ta_col = 'Tair_f'
 rh_col = 'RH'
-vpd_col = 'VPD_hPa'
+vpd_col = 'VPD_kPa'
 
 # Subset and calculate VPD
 subset_df = df[[ta_col, rh_col]].copy()

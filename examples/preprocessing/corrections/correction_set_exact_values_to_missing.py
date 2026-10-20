@@ -36,7 +36,7 @@ series_corr = dv.corrections.set_exact_values_to_missing(
     series=series,
     values=[0, 1, 10],
     showplot=True,
-    verbose=1
+    verbose=True
 )
 
 print("\nCorrected data:")

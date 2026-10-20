@@ -43,8 +43,9 @@ from PySide6.QtWidgets import (
 )
 
 import diive
-from diive.core.utils.console import info, success
+from diive.core.utils.console import info, success, warn
 from diive.gui import config, db, events, metadata_store, site, theme
+from diive.gui.tabs.base import ADD_DECLINED_KEY
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
@@ -52,6 +53,7 @@ from diive.gui.registry import (
     TAB_CLASSES,
 )
 from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
+from diive.gui.widgets.column_picker import NONE_ITEM
 from diive.gui.widgets.daterange_dialog import DateRangeDialog
 from diive.gui.widgets.menu import studio_menu
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
@@ -59,6 +61,40 @@ from diive.gui.widgets.worker import WorkerRunner, shutdown_process_pool
 
 #: Source name of the bundled example dataset (also its title-bar label).
 _EXAMPLE_SOURCE = "example data (CH-DAV)"
+
+#: Old menu labels still found in saved projects, mapped to the current label.
+_RENAMED_MENU_LABELS = {"Flux processing chain": "Flux post-processing chain"}
+
+#: Menu tabs merged into another tab: old label -> (new label, state preset,
+#: renamed control keys, controls the old tab did not have). A project saved
+#: with an old tab reopens as the new one, preset to the old tab's variant,
+#: with its saved controls carried over.
+_MERGED_MENU_TABS = {
+    "Nighttime partitioning (ONEFlux)": (
+        "NEE partitioning", {"method": "nighttime", "mode": "oneflux"}, {}, {}),
+    "Nighttime partitioning (REddyProc)": (
+        "NEE partitioning", {"method": "nighttime", "mode": "reddyproc"}, {}, {}),
+    # The old daytime ONEFlux tab had no gap-filled NEE input. Without "(none)"
+    # the picker would guess one, possibly from another u* scenario, and change
+    # the results in windows without measured nighttime NEE (L325).
+    "Daytime partitioning (ONEFlux)": (
+        "NEE partitioning", {"method": "daytime", "mode": "oneflux"}, {},
+        {"nee_f": NONE_ITEM}),
+    # The old daytime REddyProc tab called its gap-filled drivers "ta" / "sw_in".
+    "Daytime partitioning (REddyProc)": (
+        "NEE partitioning", {"method": "daytime", "mode": "reddyproc"},
+        {"ta": "ta_f", "sw_in": "sw_in_f"}, {}),
+}
+
+
+def _migrate_merged_tab(label: str, state: dict) -> tuple[str, dict]:
+    """The new label and state for a tab saved under a merged label (see
+    ``_MERGED_MENU_TABS``). Other labels pass through unchanged."""
+    if label not in _MERGED_MENU_TABS:
+        return label, state
+    new_label, preset, renames, added = _MERGED_MENU_TABS[label]
+    controls = {renames.get(k, k): v for k, v in (state.get("controls") or {}).items()}
+    return new_label, {**state, **preset, "controls": {**added, **controls}}
 
 
 def _namespace_metadata(raw: dict, key: str) -> dict:
@@ -85,6 +121,30 @@ def _namespace_metadata(raw: dict, key: str) -> dict:
     else:
         userdata = {"tags": raw, "descriptions": {}}  # legacy flat name->tags
     return {key: userdata}
+
+
+def ask_save_changes(parent, question: str) -> str:
+    """Ask whether to save unsaved changes: ``"save"``, ``"discard"`` or
+    ``"cancel"``.
+
+    Module level so tests can answer it without showing the box: a modal dialog
+    nobody clicks blocks a test run for good. Test files that close a
+    ``MainWindow`` patch it, e.g. ``monkeypatch.setattr("diive.gui.app.
+    ask_save_changes", lambda *a: "discard")``.
+    """
+    btn = QMessageBox.StandardButton
+    box = QMessageBox(parent)
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.setWindowTitle("Unsaved changes")
+    box.setText(question)
+    box.setInformativeText("Changes you don't save are lost.")
+    box.setStandardButtons(btn.Save | btn.Discard | btn.Cancel)
+    box.button(btn.Discard).setText("Don't save")
+    box.setDefaultButton(btn.Save)
+    box.setEscapeButton(btn.Cancel)
+    box.exec()
+    clicked = box.standardButton(box.clickedButton())
+    return {btn.Save: "save", btn.Discard: "discard"}.get(clicked, "cancel")
 
 
 def _read_startup_data(last_project):
@@ -240,9 +300,18 @@ class MainWindow(QMainWindow):
         self._io_then: tuple | None = None
         self._io_actions: list = []
         self._startup_done = None  # `run()`'s callback for the deferred first load
+        # Unsaved changes since the last open/load or project save (L324). Set by
+        # `_mark_modified`, cleared by `_mark_clean`. Notes saved in the Metadata
+        # explorer emit no signal, so the user tags/notes are also compared with
+        # their state at the last open/save (`_has_unsaved_changes`).
+        self._modified = False
+        self._edit_count = 0  # bumped on every change; a save checks it is unchanged
+        self._clean_user_data: dict = {}
+        self._last_save_ok = False  # outcome of the last project save
+        self._title = self._base_title  # window title without the '*' marker
 
         self._tabs = []
-        self._header = None  # set only in Studio chrome (None => native)
+        self._header = None  # the Studio header, set by _build_studio_chrome
         self._studio_tabs = False  # Studio pill tabs carry favicon-style glyphs
         self._tabwidget = QTabWidget()
         # Custom tab bar so the always-on Overview/Log tabs read slightly
@@ -278,6 +347,10 @@ class MainWindow(QMainWindow):
         bar = self._tabwidget.tabBar()
         bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         bar.customContextMenuRequested.connect(self._tab_context_menu)
+        # A project saves the tab order, the variable metadata and the site.
+        bar.tabMoved.connect(self._mark_modified)
+        metadata_store.manager.changed.connect(self._mark_modified)
+        site.manager.changed.connect(self._mark_modified)
 
         # Variable-list "Edit metadata…" (any tab) opens the Metadata explorer.
         metadata_store.manager.editRequested.connect(self._edit_metadata)
@@ -338,9 +411,9 @@ class MainWindow(QMainWindow):
 
         self._header = StudioHeaderBar()
         # Each top-level menu (File, Data, Plot, …) becomes an inline dropdown
-        # button in the header instead of a native menu bar; the same builder
-        # populates both shells. Studio menus are translucent so the QSS rounds
-        # their corners into a white card (no square popup-shadow artefact).
+        # button in the header instead of a native menu bar. Studio menus are
+        # translucent so the QSS rounds their corners into a white card (no
+        # square popup-shadow artefact).
         def _add_menu(name):
             # Frameless + translucent (via studio_menu) so the QSS-rounded white
             # card has no opaque (black) corners and no native popup shadow.
@@ -466,14 +539,17 @@ class MainWindow(QMainWindow):
         file_menu.addAction(_io_act("&Export data as...", self._save_file))
         file_menu.addSeparator()
         # Database I/O (InfluxDB) folded in from its own former top-level menu as
-        # a "Database ▸" submenu — it's just another data source/sink.
-        db_submenu = studio_menu(self)
-        for label in MENU_TABS.get("Database", {}):
-            db_submenu.addAction(_menu_tab_act(label))
-        db_action = file_menu.addMenu(db_submenu)
-        db_action.setText("&Database")
-        db_action.setIcon(menu_icon("Database"))
-        file_menu.addSeparator()
+        # a "Database ▸" submenu — it's just another data source/sink. Internal
+        # for now: shown only with the optional 'db' extra (the public exe leaves
+        # it out), so other users never see a feature they cannot use.
+        if db.influxdb_available():
+            db_submenu = studio_menu(self)
+            for label in MENU_TABS.get("Database", {}):
+                db_submenu.addAction(_menu_tab_act(label))
+            db_action = file_menu.addMenu(db_submenu)
+            db_action.setText("&Database")
+            db_action.setIcon(menu_icon("Database"))
+            file_menu.addSeparator()
         file_menu.addAction(_act("E&xit", self.close, "Ctrl+Q"))
 
         data_menu = add_menu("&Data")
@@ -549,12 +625,12 @@ class MainWindow(QMainWindow):
                 # Set the 3-D surface (GPU/VTK) apart from the 2-D plot methods.
                 if menu_name == "Plot" and label == "3D surface":
                     menu.addSeparator()
-                # Set the random-uncertainty tool apart from the partitioning tabs.
+                # Set the random-uncertainty tool apart from the partitioning tab.
                 if menu_name == "Flux" and label == "Random uncertainty (PAS20)":
                     menu.addSeparator()
                 menu.addAction(_menu_tab_act(label))
-                # Set the full processing chain apart from the standalone tools.
-                if menu_name == "Flux" and label == "Flux processing chain":
+                # Set the full post-processing chain apart from the standalone tools.
+                if menu_name == "Flux" and label == "Flux post-processing chain":
                     menu.addSeparator()
 
         help_menu = add_menu("&Help")
@@ -671,6 +747,69 @@ class MainWindow(QMainWindow):
         self._sync_event_columns()
         self._apply_range()
         self._tabwidget.setCurrentIndex(0)  # show the Overview tab on load
+        self._mark_clean()  # a freshly loaded dataset has nothing to save yet
+
+    # --- unsaved changes (L324) ------------------------------------------
+    def _mark_modified(self, *_args) -> None:
+        """Note a change a project save would keep (data, range, variable
+        subset, metadata, events, site, open tabs). Takes and ignores signal
+        arguments, so it connects to any signal directly."""
+        self._edit_count += 1
+        if not self._modified:
+            self._modified = True
+            self._show_title()
+
+    def _mark_clean(self, user_data: dict | None = None) -> None:
+        """Nothing left to save: after an open/load or a successful save.
+        `user_data` is the saved tags/notes (default: the current ones)."""
+        self._modified = False
+        self._clean_user_data = (user_data if user_data is not None
+                                 else metadata_store.manager.store.user_data())
+        self._show_title()
+
+    def _has_unsaved_changes(self) -> bool:
+        if self._full_data is None:
+            return False
+        return (self._modified or metadata_store.manager.store.user_data()
+                != self._clean_user_data)
+
+    def _show_title(self) -> None:
+        """Window and header title, with a leading '*' while there are unsaved
+        changes."""
+        title = f"*{self._title}" if self._modified else self._title
+        self.setWindowTitle(title)
+        if self._header is not None:
+            self._header.set_title(title)
+
+    def _confirm_discard(self, action: str) -> bool:
+        """Before `action` replaces the current work: if it has unsaved changes,
+        ask Save / Don't save / Cancel. True means go on.
+
+        Save writes the project (Save as when no project is open yet) and goes
+        on only once that write has succeeded.
+        """
+        if not self._has_unsaved_changes():
+            return True
+        answer = ask_save_changes(self, f"Save changes before {action}?")
+        if answer == "discard":
+            return True
+        if answer != "save":
+            return False
+        return self._save_and_wait()
+
+    def _save_and_wait(self) -> bool:
+        """Save the project and block until the write is done. True on success,
+        False if it failed or the user cancelled the Save as dialog."""
+        self._wait_for_io()  # a job in flight would refuse the save
+        self._last_save_ok = False
+        if self._project_dir is not None:
+            started = self._write_project_async(self._project_dir, self._project_name)
+        else:
+            started = self._save_project_as()
+        if not started:
+            return False
+        self._wait_for_io()
+        return self._last_save_ok
 
     def _apply_range(self) -> None:
         """Derive `_data` from `_full_data` (+ active `_range`) and push to tabs.
@@ -696,9 +835,11 @@ class MainWindow(QMainWindow):
             if keep:
                 self._data = diive.keep_vars(self._data, keep)
                 title += f" [{len(keep)} of {total} variables]"
-        self.setWindowTitle(title)
-        if self._header is not None:
-            self._header.set_title(title)
+        self._title = title
+        # Every change to the data, the date range or the variable subset ends
+        # here. A load or a save clears the mark again right after.
+        self._mark_modified()
+        self._show_title()
         self._reset_range_act.setEnabled(self._range is not None)
         self._reset_subset_act.setEnabled(bool(self._var_subset))
         self._push_data()
@@ -788,6 +929,7 @@ class MainWindow(QMainWindow):
         if hasattr(tab, "set_active_subset") and self._var_subset:
             tab.set_active_subset(self._var_subset)
         self._tabwidget.setCurrentWidget(tab.widget())
+        self._mark_modified()  # a project reopens the same tabs
 
     def _next_menu_index(self, label: str) -> int:
         """Smallest unused 1-based index among open tabs of this menu label."""
@@ -829,19 +971,28 @@ class MainWindow(QMainWindow):
         """Reopen the menu tabs recorded by `_open_tabs_state` (label/title/pin)."""
         for entry in state or []:
             label = entry.get("label")
+            label = _RENAMED_MENU_LABELS.get(label, label)  # projects saved before a rename
+            title = entry.get("title")
+            tab_state = entry.get("state") or {}
+            if label in _MERGED_MENU_TABS:
+                # The old title names the old tab: keep the new tab's own title.
+                label, tab_state = _migrate_merged_tab(label, tab_state)
+                title = None
             if label not in MENU_TAB_CLASSES:
                 continue  # unknown/renamed feature — skip rather than crash
+            if label in MENU_TABS["Database"] and not db.influxdb_available():
+                continue  # a project from an internal build; the menu is hidden here
             self._open_menu_tab(label)
             tab = self._menu_tab_list[-1] if self._menu_tab_list else None
             if tab is None:
                 continue
             idx = self._tabwidget.indexOf(tab.widget())
-            if idx >= 0 and entry.get("title"):
-                self._tabwidget.setTabText(idx, entry["title"])
+            if idx >= 0 and title:
+                self._tabwidget.setTabText(idx, title)
             # Re-apply the tab's own inputs (the list is already populated, since
             # _open_menu_tab pushed the current data). Tolerant of stale state.
             try:
-                tab.restore_state(entry.get("state") or {})
+                tab.restore_state(tab_state)
             except Exception:
                 pass
             if entry.get("pinned"):
@@ -878,6 +1029,7 @@ class MainWindow(QMainWindow):
         # each theme change. Deleting the page here is what actually frees them.
         widget.setParent(None)
         widget.deleteLater()
+        self._mark_modified()
         if self._tabwidget.count() == 0:
             return
         target = max(0, index - 1)
@@ -966,6 +1118,7 @@ class MainWindow(QMainWindow):
                 tab.on_data_loaded(self._data_for(tab), self._created)
             self._pinned.add(tab)
         self._refresh_tab_icon(tab)
+        self._mark_modified()
 
     def _refresh_tab_icon(self, tab) -> None:
         """Pinned tabs show a pin glyph; otherwise restore the favicon (Studio)."""
@@ -1004,15 +1157,29 @@ class MainWindow(QMainWindow):
             self, "Rename tab", "Tab name:", text=self._tabwidget.tabText(index))
         if ok and new.strip():
             self._tabwidget.setTabText(index, new.strip())
+            self._mark_modified()
 
-    def _add_features(self, new_df) -> None:
+    def _add_features(self, new_df, confirm_overwrite: bool = True) -> None:
         """Merge engineered features into the dataset and re-push to tabs.
 
         Features merge into `_full_data` (the full record), so they survive a
         later range reset; rows outside a computed feature's range align to NaN.
         The active range is then re-derived so tabs see the new columns.
+
+        Every tab's Add goes through here, so this is the one place that asks
+        before a new column replaces an existing one of the same name (a typed
+        name, a default such as ``SW_IN_POT``, or a tab re-adding its own
+        earlier output). Cancel adds nothing. `confirm_overwrite=False` is for
+        callers that already asked (Add timestamp column).
         """
         if new_df is None or new_df.empty or self._full_data is None:
+            return
+        if confirm_overwrite and not self._confirm_replace(
+                [str(c) for c in new_df.columns if str(c) in self._full_data.columns]):
+            info("Nothing added: existing variables kept")
+            # The emitting tab reads this after its emit returns and keeps its
+            # Add button and status line (DiiveTab._emit_features).
+            new_df.attrs[ADD_DECLINED_KEY] = True
             return
         # Rebind instead of mutating in place (`assign` aligns on index just the
         # same): with no active range `_data` *is* `_full_data`, the very frame
@@ -1038,6 +1205,21 @@ class MainWindow(QMainWindow):
                 attrs, timestamp=datetime.now().strftime("%Y-%m-%d %H:%M"))
             metadata_store.manager.notify()
         self._apply_range()
+
+    def _confirm_replace(self, names: list) -> bool:
+        """Ask before new columns replace existing ones. True if nothing clashes
+        or the user agrees."""
+        if not names:
+            return True
+        shown = "\n".join(names[:15])
+        if len(names) > 15:
+            shown += f"\n... and {len(names) - 15} more"
+        return QMessageBox.question(
+            self, "Replace variables",
+            f"The dataset already has {len(names)} variable(s) with these names:\n\n"
+            f"{shown}\n\nReplace them with the new values? Cancel adds nothing.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel) == QMessageBox.StandardButton.Yes
 
     def _add_timestamp_column(self) -> None:
         """Open the Add-timestamp-column dialog and append the derived column.
@@ -1081,7 +1263,7 @@ class MainWindow(QMainWindow):
         new_df.attrs[ATTRS_KEY] = {name: provenance_attr(
             origin=DERIVED, operation="Add timestamp column",
             params={"convention": convention, "format": fmt}, tags=["timestamp"])}
-        self._add_features(new_df)
+        self._add_features(new_df, confirm_overwrite=False)  # asked above
 
     def _add_event(self) -> None:
         """Open the Add-event dialog and register the event (creates its 0/1
@@ -1098,6 +1280,7 @@ class MainWindow(QMainWindow):
     def _on_events_changed(self) -> None:
         """React to any event edit: keep the menu toggle in sync and reconcile
         each event's 0/1 flag column against the dataset."""
+        self._mark_modified()  # a project saves the events
         self._sync_events_toggle()
         # A column add/edit/delete re-renders the Overview through the data push;
         # a visibility-only toggle changes no column, so refresh it explicitly.
@@ -1113,6 +1296,7 @@ class MainWindow(QMainWindow):
 
     def _on_event_categories_changed(self) -> None:
         """Recolour the Overview's event overlays after a category-palette edit."""
+        self._mark_modified()  # the categories are saved with the events
         self._refresh_overview_events()
 
     def _refresh_overview_events(self) -> None:
@@ -1149,8 +1333,12 @@ class MainWindow(QMainWindow):
             return False
         desired = {}
         for ev in events.manager.events:
-            desired[ev.flag_name] = diive.events.event_to_flag(
+            flag = diive.events.event_to_flag(
                 ev, self._full_data.index, name=ev.flag_name)
+            # Events with the same name (a harvest every year) share one column,
+            # so it marks the records of all of them, not only the last one.
+            prev = desired.get(ev.flag_name)
+            desired[ev.flag_name] = flag if prev is None else prev | flag
         changed = False
         added = []
         # Only drop EVENT_ columns we created (don't touch an EVENT_-named column
@@ -1251,11 +1439,24 @@ class MainWindow(QMainWindow):
                 "The rename would produce duplicate variable names:\n\n"
                 f"{', '.join(clashes)}")
             return
+        # Rename the metadata first: if the store refuses, the data stay as they
+        # are, so data and metadata never disagree on the names (L337). A store
+        # entry under a target name that is no longer a column is left over from
+        # a deleted variable: it has no data to protect, so it gives way.
+        store = metadata_store.manager.store
+        for new in mapping.values():
+            if new not in self._full_data.columns:
+                store.drop(new)
+        try:
+            store.rename(mapping)
+        except ValueError as err:
+            QMessageBox.warning(self, "Rename variables",
+                                f"Could not rename the variables:\n\n{err}")
+            return
         self._full_data = self._full_data.rename(columns=mapping)
         self._created = {mapping.get(c, c) for c in self._created}
         if self._var_subset is not None:  # keep renamed vars in the active subset
             self._var_subset = [mapping.get(c, c) for c in self._var_subset]
-        metadata_store.manager.store.rename(mapping)
         metadata_store.manager.notify()
         self._apply_range()
         success(f"Renamed {len(mapping)} variables")
@@ -1278,10 +1479,17 @@ class MainWindow(QMainWindow):
         if self._var_subset is None:
             return
         self._var_subset = None
+        # Clear the picks of open Select variables tabs too, so they do not show
+        # (and a saved project does not keep) the discarded subset (L336).
+        for tab in self._menu_tab_list:
+            if getattr(tab, "_menu_label", None) == "Select variables"                     and hasattr(tab, "set_active_subset"):
+                tab.set_active_subset([])
         self._apply_range()
         success("Reverted to all variables")
 
     def _load_example(self) -> None:
+        if not self._confirm_discard("loading the example data"):
+            return
         df = diive.load_exampledata_parquet()
         # The bundled example always opens clean — no persisted tags/notes.
         self._set_data(df, source=_EXAMPLE_SOURCE, persist_metadata=False)
@@ -1292,7 +1500,7 @@ class MainWindow(QMainWindow):
             return
         if dlg.load_mode == "add" and self._full_data is not None:
             self._add_dataset(dlg.dataframe, dlg.source_name)
-        else:
+        elif self._confirm_discard("opening the data file"):
             self._set_data(dlg.dataframe, source=dlg.source_name)
 
     def _add_dataset(self, new_df, source: str) -> None:
@@ -1309,8 +1517,19 @@ class MainWindow(QMainWindow):
         flagged NEW. Loading with a label keeps a second run's columns separate
         (all-new names) for side-by-side comparison; without one, same-named
         variables are simply extended.
+
+        All records of a dataset share one time resolution (L331): data of
+        another resolution, or with timestamps off the current time grid, are
+        refused and nothing changes. Otherwise the merged record is put on one
+        regular grid, so a gap between the two periods becomes empty rows.
         """
+        from diive.core.times.times import common_time_grid, continuous_timestamp_freq
         existing = self._full_data
+        try:
+            freq = common_time_grid(existing.index, new_df.index)
+        except ValueError as err:
+            self._refuse_add(source, str(err))
+            return
         new_cols = [str(c) for c in new_df.columns if str(c) not in existing.columns]
         extended_cols = [str(c) for c in new_df.columns if str(c) in existing.columns]
 
@@ -1322,7 +1541,10 @@ class MainWindow(QMainWindow):
         merged = existing.reindex(union_index).combine_first(new_df.reindex(union_index))
         merged = merged[list(existing.columns) + new_cols]
         merged.index.name = existing.index.name
-        n_new_rows = len(union_index) - len(existing.index)
+        if freq is not None and len(union_index) > 1:
+            # One regular grid: a gap between the two periods becomes empty rows.
+            merged = continuous_timestamp_freq(merged, freq)
+        n_new_rows = len(merged) - len(existing.index)
         self._full_data = merged
 
         ts = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1352,6 +1574,28 @@ class MainWindow(QMainWindow):
         if n_new_rows:
             parts.append(f"+{n_new_rows:,} new timestamps")
         success(f"Merged {source}: " + (", ".join(parts) if parts else "no changes"))
+
+    def _refuse_add(self, source: str, message: str) -> None:
+        """Tell the user why "Add to current data" left the dataset unchanged."""
+        warn(f"Not added: {source}. The data do not match the time resolution "
+             "or time grid of the current data.")
+        QMessageBox.warning(self, "Add to current data", message)
+
+    def _warn_mixed_resolution(self, index) -> None:
+        """Say once when an opened dataset mixes time resolutions. Projects
+        saved by earlier versions can hold such data, and the steps that put
+        records on a regular grid (Stepwise screening, Feature engineering,
+        heatmaps) drop the records of the other resolution. The data stay as
+        they are."""
+        from diive.core.times.times import describe_time_resolution, detect_freq_groups
+        if len(index) < 3 or getattr(index, "freq", None) is not None:
+            return
+        groups = detect_freq_groups(index).dropna()
+        if groups.nunique() > 1:
+            warn("This dataset mixes time resolutions: "
+                 f"{describe_time_resolution(index)}. Stepwise screening, "
+                 "Feature engineering and heatmaps drop the records that are not "
+                 "on the time grid of the most common resolution.")
 
     def _save_file(self) -> None:
         """Export the current dataset as a diive-format parquet or CSV file."""
@@ -1458,31 +1702,34 @@ class MainWindow(QMainWindow):
         else:
             self._save_project_as()
 
-    def _save_project_as(self) -> None:
-        """Pick a name + location and write a new diive project folder."""
+    def _save_project_as(self) -> bool:
+        """Pick a name + location and write a new diive project folder.
+
+        Returns True if the write started (it finishes on the worker thread).
+        """
         from diive.core.io.project import is_project, project_name_to_dirname
         from diive.gui.widgets.save_project_dialog import SaveProjectDialog
         if self._full_data is None:
             QMessageBox.information(self, "Save project", "No data loaded yet.")
-            return
+            return False
         default_name = self._project_name or (self._source or "project").split(".")[0]
         dlg = SaveProjectDialog(default_name, self._last_project_dir, self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
+            return False
         name, location = dlg.values()
         folder = Path(location) / project_name_to_dirname(name)
         if folder.exists() and not is_project(folder):
             QMessageBox.warning(
                 self, "Save project",
                 f"'{folder.name}' already exists and is not a diive project.")
-            return
+            return False
         if folder.exists() and QMessageBox.question(
                 self, "Save project",
                 f"Overwrite the existing project '{folder.name}'?") \
                 != QMessageBox.StandardButton.Yes:
-            return
+            return False
         self._last_project_dir = location
-        self._write_project_async(folder, name, adopt=True)
+        return self._write_project_async(folder, name, adopt=True)
 
     def _log_tab(self):
         """The always-on Log tab, located by type (order-independent)."""
@@ -1501,6 +1748,7 @@ class MainWindow(QMainWindow):
         extras = {
             "site": site.manager.as_dict(),
             "events": events.manager.as_dict(),
+            "database": db.manager.as_dict(),  # path only, never the token
             "range": ([self._range[0].isoformat(), self._range[1].isoformat()]
                       if self._range else None),
             "var_subset": list(self._var_subset) if self._var_subset else None,
@@ -1532,6 +1780,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Save failed", f"Could not save project:\n{err}")
             return False
         QApplication.restoreOverrideCursor()
+        self._mark_clean(project.metadata.user_data())
         success(f"Saved project '{name}'")
         return True
 
@@ -1542,22 +1791,32 @@ class MainWindow(QMainWindow):
         write has succeeded.
         """
         from diive.core.io.project import save_project
+        project = self._project_snapshot(name)
+        # What the file will hold: the change count and tags/notes of this
+        # moment. Edits made while the worker writes keep the window modified.
+        saved_state = (self._edit_count, project.metadata.user_data())
         return self._run_io(
-            f"Saving project '{name}'…", save_project,
-            (folder, self._project_snapshot(name)),
-            on_done=partial(self._on_project_saved, Path(folder), name, adopt),
+            f"Saving project '{name}'…", save_project, (folder, project),
+            on_done=partial(self._on_project_saved, Path(folder), name, adopt,
+                            saved_state),
             on_failed=self._on_project_save_failed)
 
     def _on_project_saved(self, folder: Path, name: str, adopt: bool,
-                          _result=None) -> None:
+                          saved_state: tuple, _result=None) -> None:
+        self._last_save_ok = True
+        edit_count, user_data = saved_state
+        unchanged = edit_count == self._edit_count
         if adopt:
             self._project_dir, self._project_name = folder, name
             self._last_project = str(folder)
             self._source = name
             self._apply_range()  # refresh title with the project name
+        if unchanged:
+            self._mark_clean(user_data)
         success(f"Saved project '{name}'")
 
     def _on_project_save_failed(self, message: str) -> None:
+        self._last_save_ok = False
         QMessageBox.critical(self, "Save failed", f"Could not save project:\n{message}")
 
     def _initial_load(self, on_finished=None) -> None:
@@ -1615,6 +1874,8 @@ class MainWindow(QMainWindow):
                 self, "Open project",
                 "That folder is not a diive project (no '__diive__' marker).")
             return
+        if not self._confirm_discard("opening another project"):
+            return
         self._run_io(f"Opening project '{Path(folder).name}'…", load_project, (folder,),
                      on_done=partial(self._apply_project, folder),
                      on_failed=self._on_project_open_failed)
@@ -1653,6 +1914,8 @@ class MainWindow(QMainWindow):
         # Clear the current workspace before loading, so the project's saved tabs
         # replace it (and stale tabs don't get the incoming data push).
         self._close_all_menu_tabs()
+        # After the tabs are closed, so a reopened Database connection tab shows it.
+        db.manager.load_dict(project.extras.get("database") or {})
         # Restore the project's events *before* the data swap: `_set_data` builds
         # every event's 0/1 column on the incoming index, so loading them after it
         # first materialised the outgoing session's events on the new data and
@@ -1703,7 +1966,10 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._restore_active_tab(project.extras.get("active_tab"))
+        self._mark_clean()  # the restore above marked changes: none are new
         success(f"Opened project '{project.name}'")
+        # After the log restore above, which replaces the log text.
+        self._warn_mixed_resolution(project.data.index)
 
     def _restore_active_tab(self, title) -> None:
         """Focus the tab the user had active when the project was saved."""
@@ -1792,11 +2058,20 @@ class MainWindow(QMainWindow):
         show_about(self)
 
     def closeEvent(self, event) -> None:
-        """Persist preferences (theme, window geometry, last filetype) on exit."""
+        """Ask to save unsaved changes, then persist preferences (theme, window
+        geometry, last filetype) on exit. Cancel keeps the window open."""
         from diive.gui.widgets import open_data_dialog as odd
         # Let a running save finish (and its outcome register) before the
         # window and, at app exit, the worker's daemon thread go away.
         self._wait_for_io()
+        if not self._confirm_discard("closing"):
+            event.ignore()
+            return
+        for signal in (metadata_store.manager.changed, site.manager.changed):
+            try:
+                signal.disconnect(self._mark_modified)
+            except (RuntimeError, TypeError):
+                pass
         # Stop reacting to the app-wide event store once closed (the singleton
         # outlives the window; a stale window must not react to later edits).
         try:
@@ -1823,7 +2098,6 @@ class MainWindow(QMainWindow):
             "theme": theme.manager.as_dict(),
             "site": site.manager.as_dict(),
             "events": events.manager.as_dict(),
-            "database": db.manager.as_dict(),  # path only — never the token
             "geometry": bytes(self.saveGeometry().toBase64()).decode("ascii"),
             "last_filetype": odd._last_choice,
             "variable_metadata": self._saved_metadata,
@@ -1857,11 +2131,10 @@ def run(app: QApplication | None = None, splash=None) -> int:
     theme.manager.apply()
     site.manager.load_dict(cfg.get("site", {}))
     events.manager.load_dict(cfg.get("events", {}))
-    db.manager.load_dict(cfg.get("database", {}))
     from diive.gui.widgets import open_data_dialog as odd
     odd._last_choice = cfg.get("last_filetype")
 
-    # Splash while the window builds (it auto-loads the example dataset).
+    # Splash while the window builds and loads the last project or the example.
     show_message(splash, "Loading…")
     app.processEvents()  # paint the splash before the (blocking) window build
 

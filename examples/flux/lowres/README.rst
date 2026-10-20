@@ -1,7 +1,8 @@
 Low-Resolution Flux Processing Examples
 =======================================
 
-Low-resolution (30-minute) eddy-covariance flux processing at the Swiss FluxNet site (CH-LAE).
+Low-resolution (30-minute) eddy-covariance flux processing, mostly with data from the Swiss FluxNet
+site CH-LAE (some examples use CH-DAV or CH-CHA).
 Covers time lag detection, quality filtering, self-heating correction, uncertainty estimation, and turbulence thresholds.
 
 Examples
@@ -42,7 +43,7 @@ Running Examples
    # Run one example
    uv run python examples/flux/lowres/flux_timelag_analysis.py
 
-   # Run all low-res flux examples
+   # Run more low-res flux examples
    uv run python examples/flux/lowres/flux_selfheating.py
    uv run python examples/flux/lowres/flux_selfheating_production.py
    uv run python examples/flux/lowres/flux_uncertainty.py
@@ -66,5 +67,5 @@ Key Concepts
 Related Documentation
 ---------------------
 
-- `Flux Processing Chain <../index.html>`_ — Multi-level L2-L4.2 workflow
+- `Flux Post-Processing Chain <../postprocessingchain/index.html>`_ — Multi-level L2-L4.2 workflow
 - Source: ``diive/flux/lowres/``

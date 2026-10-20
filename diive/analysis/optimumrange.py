@@ -2,8 +2,8 @@
 ANALYSIS: OPTIMUM RANGE
 =======================
 
-Find optimal ranges for bivariate relationships using statistical methods.
-Identify acceptable operating conditions and valid data subsets.
+Find the range of a driver (x) where a response (y) is at its maximum or
+minimum, and count per year how many x values fall below, in and above it.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -50,7 +50,7 @@ class FindOptimumRange:
             df: Input DataFrame
             xcol: Column name of driver variable (x)
             ycol: Column name of response variable (y)
-            n_bins: Number of bins to divide x data into
+            n_bins: Number of quantile bins for the x data (bins with equal record counts)
             bins_agg: Aggregation method for y values within bins (default: 'median')
             rwinsize: Window size for rolling aggregation (as fraction of total bins)
             ragg: Rolling aggregation method (default: 'mean')
@@ -75,9 +75,6 @@ class FindOptimumRange:
 
         Example:
             See `examples/analysis/analysis_optimumrange.py` for complete examples.
-
-        See Also:
-            find_optimum_range : Convenience function.
         """
         self.df = df[[xcol, ycol]].copy()
         self.xcol = xcol
@@ -253,9 +250,9 @@ class FindOptimumRange:
         """Display the optimum-range analysis figure.
 
         Args:
-            saveplot: If True, save the figure to *path*.
-            title: Optional figure title.
-            path: Output path used when *saveplot* is True.
+            saveplot: If True, save the figure as PNG to *path*.
+            title: Optional figure title, also used in the file name of the saved figure.
+            path: Folder for the saved figure when *saveplot* is True.
             xlabel: Axis label for the driver (x); defaults to the column name.
             ylabel: Axis label for the response (y); defaults to the column name.
             xunit: Optional unit appended to the x label.
@@ -431,7 +428,7 @@ class FindOptimumRange:
         ax.legend(loc='upper right', fontsize='small', framealpha=0.8, ncol=3)
 
     def plot_rolling_bin_aggregates(self, ax):
-        """Plot rolling mean of y medians in bins of x"""
+        """Plot the rolling mean (with std) of the binned y aggregates. Needs ``ragg='mean'``."""
 
         # Get data
         rbin_aggs_df = self.results_optrange['rbin_aggs_df'].copy()

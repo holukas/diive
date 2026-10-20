@@ -115,7 +115,7 @@ print("-" * 60)
 test_info = [
     ('Spike detection', 'SPIKE_HF'),
     ('Amplitude resolution', 'AMPLITUDE_RESOLUTION_HF'),
-    ('Dropout detection', 'DROPOUT_TEST'),
+    ('Dropout detection', 'DROPOUT_HF'),
     ('Absolute limits', 'ABSOLUTE_LIMITS_HF'),
     ('Skewness/Kurtosis (hard)', 'SKEWKURT_HF'),
     ('Skewness/Kurtosis (soft)', 'SKEWKURT_SF'),

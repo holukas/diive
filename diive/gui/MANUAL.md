@@ -7,29 +7,7 @@ A point-and-click desktop app for exploring time series data with diive.
 
 ---
 
-## Install & launch
-
-```bash
-pip install 'diive[gui]'     # or: uv sync --extra gui
-diive-gui
-```
-
-To start the GUI from your own Python script, put the call under a main guard:
-
-```python
-from diive.gui import launch
-
-if __name__ == "__main__":
-    launch()
-```
-
-Some tabs compute in a separate background process, which re-imports your script
-when it starts. Without the guard, that process would run the script again and open
-a second window.
-
-For the optional **Database** tabs (read/write an InfluxDB), also install the
-`db` dependency group: `uv sync --group db` (or `pip install influxdb-client`).
-Without it the Database tabs show a short install notice instead of failing.
+## Starting the app
 
 A splash screen with a loading spinner appears while the app starts. diive then
 **reopens the project you had open last**. If you haven't saved one yet, the
@@ -54,6 +32,20 @@ again any time via **Help ▸ About**.
 Selecting several files of the same type **merges** them into one dataset. The
 filetype you used is remembered for next time.
 
+When data are already loaded, **Load mode** offers **Add to current data**. It adds
+the new timestamps and variables to the current dataset and never overwrites
+existing values. All records of a dataset have one time resolution, so the added
+data must have the same resolution and the same time steps as the current data
+(for example 30 minutes at :00 and :30). Otherwise nothing is added and a message
+names both resolutions. Resample the data to the resolution of the current data
+first. Data from a later period are added on the same time grid, and the time
+between the two periods becomes empty records.
+
+Projects saved by earlier versions can mix two time resolutions. When you open such
+a project, the Log says so once. Stepwise screening, Feature engineering and the
+heatmaps then leave out the records that are not on the time grid of the most
+common resolution.
+
 ### Focusing on a date range
 
 **Data ▸ Select date range…** (Ctrl+R) narrows the dataset to a *from / to*
@@ -75,17 +67,33 @@ writes a `<name>.diive` folder containing:
 - all your **metadata**: variable tags, notes, and the full origin and processing
   history;
 - the **project settings** (author, description, site details, and your sticky
-  notes) and the active **date range**;
+  notes), the active **date range** and any **variable subset** (see
+  [Select variables](#selectvariables));
 - the **open tabs**, meaning the same tabs reopen in order, with pins, each
   restored to its selected variable(s) and settings, and the tab you had active
   regains focus;
-- the **Overview** state (its selected variable and any variable subset);
+- the **Overview** state (its selected variable);
 - a `__diive__` marker that identifies the folder as a diive project.
 
 **File ▸ Open project…** (Ctrl+Shift+O) loads a `.diive` folder and restores all of
 the above. Once a project is open, **Ctrl+S (File ▸ Save project)** updates it in
 place, and the window title shows the project name. diive reopens your most recent
 project automatically the next time you launch it.
+
+While there are unsaved changes, the window title starts with `*`. A change is an
+edit to the data, the date range, the variable subset, tags or notes, events or
+project settings, or opening, closing, renaming, moving or pinning a tab. Changes
+to the settings inside a tab are not tracked. Before you close diive, open another
+project, open a data file in place of the current data or load the example data,
+diive asks whether to save the changes:
+
+- **Save** saves the project and then goes on. Without an open project, diive first
+  asks for a name and a location, as **Save project as…** does. If you cancel that
+  dialog or the save fails, diive stops and keeps the current data.
+- **Don't save** goes on without saving.
+- **Cancel** keeps everything as it is.
+
+**Add to current data** keeps the current work, so it does not ask.
 
 Opening, saving, and exporting run in the background, so the window stays usable.
 While one runs, the header says what is happening and the open, save, and export
@@ -133,7 +141,7 @@ or library.
 
 The window opens with **Overview** and **Log**. These two stay open: they have no
 close button. Other tabs open from the menus and can be closed (×). Most can be
-opened **multiple times**, so you'll get *Heatmap 1*, *Heatmap 2*, and so on. You
+opened **multiple times**, so you'll get *Heatmap date/time 1*, *Heatmap date/time 2*, and so on. You
 can **drag tabs to reorder** them, and **double-click a tab (left button) to
 rename** it.
 
@@ -143,6 +151,11 @@ file, a date-range change, added features), which is handy for comparing while y
 change the data elsewhere. A pin marker appears on the tab; right-click → **Unpin**
 to let it follow the data again. Overview and Log are always live.
 
+**Add to dataset** in any tab adds the results as new variables. If the dataset
+already has a variable with one of their names, diive lists those names and asks
+before it replaces them. This also happens when you add the results of the same tab
+a second time. **Cancel** adds nothing.
+
 The menu bar runs across the top of the window: **File**, **Data**, **Variables**,
 **Plot**, **Cleaning**, **Flux**, **Gap-filling**, **Analyze**, **Settings**, and
 **Help**. On a narrow window the menus that don't fit fold into a **More ⌄** dropdown
@@ -151,8 +164,9 @@ buttons always stay readable.
 
 The sections below are grouped by feature area, and each says which menu it lives
 under. A few menus gather more than one area: **File ▸ Database** holds the InfluxDB
-tools, the **Data** menu holds the event markers, and **Cleaning** holds the outlier
-filters and the corrections together.
+tools (only in installations with database support, see [Database](#database)), the
+**Data** menu holds the event markers, and **Cleaning** holds the outlier filters and
+the corrections together.
 
 ---
 
@@ -160,14 +174,19 @@ filters and the corrections together.
 
 The first tab, focused on every load. Click a variable to see, for that variable:
 
+- a **band of statistics** above the figure: the variable name with its origin and
+  tags, then the count, mean, SD, min/max, percentiles, and more. **Hover** any one
+  for a short description of what it is.
 - a **figure** with several panels (the variable name is the figure title): a tall
   **time series** across the top, a full-height **date/time heatmap** down the right,
   and a bottom strip of smaller panels — a **cumulative** sum, a per-month **diel
   cycle**, the **daily mean ± SD**, a **distribution** (histogram with a KDE curve and
   mean/median markers), and a **cumulative waterfall**. The cumulative and waterfall
   panels show their running total inside the axes.
-- a **ribbon of statistics** along the bottom (count, mean, SD, min/max,
-  percentiles, and more). **Hover** any one for a short description of what it is.
+
+A column that is not numeric (text, dates or true/false values) has no figure.
+Selecting it shows a short note instead of the panels, and adding it does not change
+the selected variable.
 
 The datetime panels (time series, cumulative, daily mean, waterfall) share an x-axis,
 so panning or zooming one zooms them all to the same period. The heatmap follows the
@@ -223,7 +242,7 @@ pill to edit *that* panel's settings on their own — line width, colour, title,
 everything is independent per subplot. A newly added panel inherits the active
 panel's look but is given a distinct line colour automatically.
 
-**Axes** (time series, scatter, cumulative year; Y-only for the diel cycle): set
+**Axes** (time series, scatter, cumulative, cumulative year, waterfall, and Y only for the diel cycle): set
 **X/Y min/max** (blank means automatic), **log** scaling, and **invert Y**. An
 explicit limit you set here always wins over the kept pan/zoom. (The grid is toggled
 once, in the **Format** group's *Show grid*.)
@@ -384,7 +403,7 @@ binary glTF with the colours baked into a texture (imports directly into PowerPo
 *Insert ▸ 3D Models*, Blender, and Meta Quest / WebXR viewers); **3D print (.stl)** writes
 a watertight solid with a base plate, ready to slice and print.
 
-This needs the optional **`gui3d`** extra (PyVista/VTK); without it the tab shows install
+This needs PyVista/VTK, which the `gui` extra installs; if they are missing, the tab shows install
 instructions instead of failing. **Copy Python** (top-right) copies a script that builds
 the same surface as a Matplotlib 3-D plot (so it runs without the extra).
 
@@ -405,7 +424,7 @@ Everything else matches the 3D surface tab: the same relief controls (style, col
 exaggeration, opacity, Y stretch, smooth terrain, shadows, smooth shading, mesh), the same
 view presets and orbit/flyover animations, and the same **VR (.glb)** / **3D print (.stl)**
 exports. **Copy Python** copies a script that grids the data with
-`dv.analysis.GridAggregator` and draws the surface in Matplotlib (no 3-D extra needed).
+`dv.analysis.GridAggregator` and draws the surface in Matplotlib (no PyVista needed).
 
 ### Wind rose
 
@@ -446,8 +465,10 @@ final sum. One variable at a time. Settings:
 
 - **Resample period** and **aggregation** — the period each bar covers and how its
   values are combined.
-- **Uptake is negative** — flip the orientation so that uptake (a negative flux)
-  draws downward.
+- **Uptake is negative (NEE)**: the sign convention for the bar colours. On (the
+  default), negative values count as uptake (uptake colour) and positive values as
+  release (release colour). Untick it for sign-flipped data where positive means
+  uptake.
 - **Bar colours and width**, **connector lines** between bars, and the **units**.
 
 ---
@@ -460,7 +481,9 @@ event…** shortcut, and the **Show events on plots** toggle.*
 Mark **when something happened** at the site (fertilization, harvest, grazing, a
 management step, a sensor swap) and overlay those markers on the plots. Each event
 is stored as a `0/1` column (`EVENT_<name>`, where 1 means the event took place),
-so it travels with the data and can be used like any other flag. When events are
+so it travels with the data and can be used like any other flag. Events with the
+same name share one column, which marks the records of all of them (for example a
+"Harvest" event for each year). When events are
 visible, they are drawn on the time-series, cumulative, and daily panels (labels on
 the time series) and along the y-axis of the date/time heatmap. Events are saved
 with the project and between sessions, and are rebuilt on the current index when you
@@ -667,11 +690,14 @@ The **Preview** section holds two display options that don't change the result:
   entries. Every iteration's band accumulates in the top panel (a tightening
   envelope); the bottom panel shows just the current pass's band. Shown in data
   units even with double-differencing on. Toggling it re-renders the last result.
-- **Separate daytime / nighttime** *(optional).* Use **different** thresholds for
-  day and night. That is the point of separating: with the same value for both, the
-  result is identical to not separating. Set **Daytime n sigma** and **Nighttime n
-  sigma** (they start from the global value, then edit each); the coordinates
-  default from **Settings ▸ Project settings**. Day and night outliers are then
+- **Separate daytime / nighttime** *(optional).* Daytime points are judged against
+  the median and spread of the daytime points in the window, nighttime points against
+  those of the nighttime points, as in ONEFlux. This matters for variables with a
+  quiet night, such as radiation or fluxes, even with the same threshold for both.
+  Set **Daytime n sigma** and **Nighttime n sigma** (they start from the global
+  value, then edit each). Latitude and
+  longitude default from **Settings ▸ Project settings**; the UTC offset is shown
+  read-only from there. Day and night outliers are then
   drawn in red and blue, and the status line reports how many of each were found.
 
 **Detect outliers** runs the filter; the status line reports the total and the
@@ -692,8 +718,8 @@ parameters differ:
   outlier (lower is stricter).
 - **Constant SD (whole series).** Use the SD of the entire series instead of a
   rolling SD within the window.
-- **Separate daytime / nighttime.** Set a window and n SD per period (these become
-  `[daytime, nighttime]` lists for the library).
+- **Separate daytime / nighttime.** Set a window and n SD per period (they start
+  from the global values).
 
 Adds `{var}_LOCALSD` and its flag to the variable list.
 
@@ -763,7 +789,9 @@ kept set is not a single upper/lower envelope. Parameters:
   default) to trim the **whole series** against one distribution. Tick one or both
   to restrict the trim to those periods, each screened against its own distribution.
 - **Latitude / Longitude / UTC offset.** Used (and enabled) only when a day/night
-  box is ticked; seeded from **Settings ▸ Project settings**.
+  box is ticked; latitude and longitude are seeded from **Settings ▸ Project
+  settings**, the UTC offset is shown read-only from there (see
+  [Project settings](#projectsettings)).
 
 Adds `{var}_TRIMLOW` and its flag (`FLAG_{var}_OUTLIER_TRIMLOW_TEST`) to the
 variable list.
@@ -771,7 +799,7 @@ variable list.
 ### Absolute limits filter
 
 The simplest, one-sided test: flag everything **outside a fixed range**. Set a
-**Min** and **Max**; any value below the min or above the max is rejected, and the
+**Minimum** and **Maximum**. Any value below the minimum or above the maximum is rejected, and the
 limits are drawn on the preview as the detection band. Use it for hard physical
 constraints (relative humidity must be 0 to 100 %, for example). Optionally split
 by day and night to enforce different ranges per period. Same preview, day/night
@@ -788,6 +816,9 @@ density is substantially lower than that of its nearest neighbours. Parameters:
   density (default 20).
 - **Contamination.** The expected fraction of outliers (default 0.01), or tick
   **Auto** to use the threshold from the LOF paper.
+- **Repeat until no more outliers** *(off by default).* With a fixed
+  contamination, every pass flags that fraction of the remaining points again,
+  so repeated passes remove most of the data. One pass is usually what you want.
 
 Adds `{var}_LOF` and its flag to the variable list.
 
@@ -813,9 +844,16 @@ is shown so the plots stay large:
 
 - **Outliers.** The chain as a vertical list of **method cards** (each shows all its
   settings and how many points it removed; reorder with ▲▼, edit, or delete).
-  **＋ Add step** opens the method picker. The **Run outliers** button below the
+  **＋ Add step** opens the method picker (Hampel, Local SD, the z-score family,
+  Local outlier factor, Absolute limits, Missing values). The **Run outliers** button below the
   list applies the chain. Editing a step does *not* update the preview until you
-  run (a `•` on the button marks unapplied edits).
+  run (a `•` on the button marks unapplied edits). A new **Hampel** step has
+  **Separate daytime / nighttime** on when the site coordinates are set in
+  **Settings ▸ Project settings**, off without them. With the split each period
+  gets its own median, MAD and threshold, and the night includes the records with
+  up to 20 W m-2 potential radiation. The daytime and nighttime n sigma follow the
+  global n sigma until you edit them. Saved steps keep their own setting. The same default applies to Hampel steps in the
+  Meteo screening tab and the flux chain's Level 3.2.
 - **Corrections.** High-resolution corrections applied to the QCF-filtered series
   (nighttime zero-offset, relative-humidity offset, set-to-min/max, set-to-value,
   set-exact-to-missing). The **Measurement** dropdown (auto-detected from the
@@ -829,6 +867,14 @@ is shown so the plots stay large:
 **Add cleaned + flags + QCF to dataset** appends every step's flag, the overall QCF
 flag, the QCF-filtered series, and (if any corrections ran) the corrected series.
 **Copy Python** copies a reproducible script for the whole chain.
+
+Latitude, longitude and the UTC offset (used for the day/night split and some
+corrections) come from **Settings ▸ Project settings**. When you change them there,
+results computed with the old values are cleared; click **Run outliers** /
+**Run corrections** again. If the UTC offset is not set, the status line says so
+after a run (0 is used). Without site coordinates, **Run outliers** refuses a chain
+with an enabled step that separates daytime and nighttime, and the status line says
+why. Steps without the split run without a site.
 
 **Corrections.** The **Corrections** section of the **Cleaning** menu has one tab per
 correction; they all share the same layout. **Click a variable** in the **Target**
@@ -845,7 +891,8 @@ For variables that should read **zero at night** (shortwave radiation, PPFD). Fo
 each day it works out the average of that day's nighttime values (the **offset**),
 subtracts it from all of the day's records, then forces the nighttime to zero. It
 needs the **site coordinates** (from **Settings ▸ Project settings**) to tell day
-from night; the latitude / longitude / UTC offset are shown and pre-filled.
+from night; the latitude and longitude are shown and pre-filled, the UTC offset is
+shown read-only from Project settings.
 
 - **Clamp negative values to zero** *(on by default).* After the offset is removed
   and the night zeroed, set any remaining negative values (daytime included) to zero
@@ -861,9 +908,13 @@ below zero. Adds `{var}_NIGHTOFFSET`.
 
 ### Remove relative humidity offset
 
-For **relative humidity** that drifts above 100%. The daily mean of the values
-exceeding 100% is removed as an offset and anything still over 100% is capped at 100.
-Same layout as above (no site coordinates needed). Adds `{var}_RHOFFSET`.
+For **relative humidity** that drifts above 100%. For each day with values above
+100%, the offset is the mean of these values minus 100. Days without such values get
+an offset interpolated from the nearest earlier and later days with them (before the
+first and after the last such day, that day's offset is carried). The offset is
+subtracted from every record, and anything still over 100% is set to 100. A single
+foggy day above 100% therefore lowers the whole series. Same layout as above (no site
+coordinates needed). Adds `{var}_RHOFFSET`.
 
 ### Set to max threshold / Set to min threshold
 
@@ -894,18 +945,24 @@ and the **Events** section (see [Events](#events)).
 
 ### Select variables
 
-Pick a subset of variables to focus the **Overview** list on. Click a variable on
-the left (*Available*) to move it to the right (*Selected*); click one on the right
-to remove it. **Add all →** (under the Available list) moves everything across, and
-**Clear** (under the Selected list) empties the selection. **Confirm → update
-Overview** restricts the Overview's variable list to your selection. Your data is
-not changed (load new data or re-open to reset).
+Pick a subset of variables to work with. Click a variable on the left
+(*Available*) to move it to the right (*Selected*). Click one on the right to remove
+it. **Add all →** (under the Available list) moves everything across, and **Clear**
+(under the Selected list) empties the selection. **Confirm → update Overview**
+narrows the working dataset to your selection: every tab then lists only these
+variables, except pinned tabs, which keep their data. The window title shows how
+many variables are in use. This tab always lists every variable, so you can add
+dropped ones back. Your data is not changed: **Data ▸ Reset to all variables**
+brings the full variable list back. A saved project reopens with the variables that
+were in use when you saved it. The picks in this tab are restored too, but only
+**Confirm** applies them.
 
 ### Select records by condition
 
 Build a filtered copy of one variable (the **target**) using the value of another
 variable (the **condition**). Click a target on the left, then build an
-**operation** in the settings: pick a condition variable, a **lower** / **upper**
+**operation** in the settings: pick a condition variable (only numeric variables
+are listed, not datetime or true/false columns), a **lower** / **upper**
 range (untick a side for an open bound), the boundary inclusivity, and an
 **action** — *Keep selected records* (drop everything except the in-range ones) or
 *Remove selected records* (drop the in-range ones, keep the rest). **Select
@@ -1054,24 +1111,33 @@ The preview gives three views of the result: the **diel cycle per month** above 
 **full time series** on the left, and the date/time **heatmap** on the right.
 
 Edit the **Name** (default `SW_IN_POT`) and **Add … to dataset** to append the new
-column; **Copy Python** copies a runnable `dv.variables.potrad` script. Values are the
+column. If the data already have a `SW_IN_POT` column, diive asks before it replaces
+it. **Copy Python** copies a runnable `dv.variables.potrad` script. Values are the
 mean over each averaging period, matching the `SW_IN_POT` column of FLUXNET/AmeriFlux/
-ICOS products. The UTC offset is local standard time; daylight saving is never applied.
+ICOS products. All timestamps use the UTC offset from Project settings.
 
 ---
 
 ## Flux
 
-### Flux processing chain
+### Flux post-processing chain
 
-A guided workspace for the flux processing chain, covering **Input + Level 2 +
-Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling). Pick the flux column
-and site, choose which Level-2 quality tests to run, set the Level-3.1 storage
+A guided workspace for the flux post-processing chain, covering **Input + Level 2 +
+Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling). Pick the flux column,
+choose which Level-2 quality tests to run, set the Level-3.1 storage
 correction, optionally build a Level-3.2 outlier-detection chain, apply Level-3.3
 USTAR filtering, run gap-filling, then run the chain. The accepted (QCF-filtered)
 flux of the deepest level shows as a heatmap. **Copy Python** puts the exact,
 reproducible diive script for what you did on the clipboard, so a point-and-click
 run stays scriptable.
+
+The **site coordinates** and the **UTC offset** come from **Settings ▸ Project
+settings**. The Input page shows them read-only. To change them, go to Project
+settings. The chain computes potential radiation and the day/night split from these
+values, so without a configured site the tab does not run and **Copy Python** copies
+nothing. A run at latitude 0, longitude 0 on UTC would look plausible and be wrong
+for your site. After you change Project settings, levels computed with the old
+values can no longer be added to the dataset. Run the chain again from **Input**.
 
 Each level has its own **Add to dataset** button (next to that level's run button),
 enabled once the level has run. It appends that level's output columns (its flags,
@@ -1094,6 +1160,15 @@ intermediate results out of the chain without waiting for the whole pipeline.
   CUT and VUT are alternative strategies, so pick one; the percentiles (16/50/84)
   are the uncertainty scenarios within it. Each scenario is gap-filled separately at
   Level 4.1.
+
+**Level 4.1: gap-filling** runs any of Random Forest, XGBoost and MDS on each USTAR
+scenario. For MDS, pick the SW_IN, TA and VPD driver columns and the tolerances.
+Each driver also has an optional **QC flag** column (default **(none)**), as in the
+**MDS gap-filling** tab: with a flag, only records with a measured driver value count
+as similar conditions, as in ONEFlux's NEE gap-filling. The flag column must be in the
+loaded dataset. **Mode** chooses how the fill is averaged, as in the **MDS
+gap-filling** tab (default **diive**). Projects saved before this option load as
+**ONEFlux**, the plain mean they were filled with.
 
 > Needs eddy-covariance input with the raw EddyPro columns (FC, USTAR, the `*_TEST`
 > flags). The bundled CH-DAV example is a processed product and won't run the chain,
@@ -1143,59 +1218,78 @@ on the right with a results readout below it.
 ### NEE partitioning
 
 Split measured net ecosystem exchange (NEE) into its two component fluxes, **gross
-primary production (GPP)** and **ecosystem respiration (RECO)**, using one of four
-faithful method ports, each on its own tab:
+primary production (GPP)** and **ecosystem respiration (RECO)**. Open it from
+**Flux ▸ NEE partitioning**. One tab covers four faithful method ports, chosen with
+two switches at the top of the settings column:
 
-- **Nighttime partitioning (ONEFlux).** Reichstein et al. (2005), per calendar year.
-  Output columns end in `_NT_OF`.
-- **Nighttime partitioning (REddyProc).** The REddyProc `sMRFluxPartition` variant
-  (single temperature sensitivity for the whole record). Columns end in `_NT_RP`.
-- **Daytime partitioning (REddyProc).** The light-response-curve method (Lasslop et
-  al. 2010, REddyProc `partitionNEEGL`). Columns end in `_DT_RP`.
-- **Daytime partitioning (ONEFlux).** The FLUXNET2015 light-response method (Lasslop
-  et al. 2010, ONEFlux). Columns end in `_DT_OF`.
+- **Method** picks the algorithm. **Nighttime** (Reichstein et al. 2005) reads
+  respiration straight from nighttime NEE, when photosynthesis is switched off, fits
+  its temperature response, extends that response into the daytime and recovers GPP
+  as the rest. **Daytime** (Lasslop et al. 2010) fits a light-response curve to
+  daytime NEE and gets GPP and RECO from the same fit, so it also uses VPD and
+  radiation.
+- **Mode** picks the reference implementation. **ONEFlux (ICOS, default)** is the
+  processing used by ICOS and FLUXNET2015. **REddyProc** is the R package of the same
+  name.
 
-The two families get at the split differently. The **nighttime** methods read
-respiration straight from nighttime NEE, when photosynthesis is switched off, fit its
-temperature response, extrapolate that response into the daytime, and recover GPP as
-the leftover. The **daytime** methods fit a light-response curve to daytime NEE and
-separate GPP and RECO together, so they also draw on VPD and radiation. ONEFlux and
-REddyProc are two established reference implementations of these algorithms. Running
-more than one and comparing is a common sanity check, which is why each writes its own
-column suffix and all four can sit in the dataset side by side.
+Each combination writes its own column suffix:
+
+| Method | Mode | Columns end in |
+|---|---|---|
+| Nighttime | ONEFlux | `_NT_OF` (per calendar year) |
+| Nighttime | REddyProc | `_NT_RP` (`sMRFluxPartition`, one temperature sensitivity for the whole record) |
+| Daytime | ONEFlux | `_DT_OF` (`flux_part_gl2010`) |
+| Daytime | REddyProc | `_DT_RP` (`partitionNEEGL`) |
+
+Running more than one and comparing is a common sanity check. Because each writes
+its own columns, all four can sit in the dataset side by side.
 
 A note on signs: NEE is negative when the ecosystem takes up carbon. GPP and RECO come
 back as positive fluxes, related by NEE = RECO - GPP.
 
-On each tab, pick the **input columns** (auto-filled from the data, with a green ✓ /
-red ✗ marker showing whether the chosen column exists):
+Pick the **input columns** (auto-filled from the data, with a green ✓ / red ✗ marker
+showing whether the chosen column exists). The tab shows only the inputs the chosen
+method and mode need. A column you picked stays picked when you switch away and back.
 
-- The **nighttime** methods need *measured* and *gap-filled* NEE and air
-  temperature, plus shortwave-in radiation for the day/night split.
-- The **daytime** methods fit on *measured* NEE with *gap-filled* meteo drivers (air
-  temperature, VPD, shortwave-in). The ONEFlux daytime variant also takes the
-  measured air temperature and radiation; the REddyProc daytime variant has an
-  optional **NEE SD** column (leave it as *(none)* to use the method's default
-  uncertainty).
+| Method / Mode | Inputs besides measured NEE | Site location |
+|---|---|---|
+| Nighttime / ONEFlux | measured TA and SW_IN, gap-filled NEE and TA | latitude |
+| Nighttime / REddyProc | measured TA and SW_IN, gap-filled NEE and TA | latitude, longitude, UTC offset |
+| Daytime / ONEFlux | measured TA and SW_IN, gap-filled TA, SW_IN and VPD, optional gap-filled NEE | none |
+| Daytime / REddyProc | gap-filled TA, SW_IN and VPD, optional NEE SD | latitude, longitude, UTC offset |
 
-Set the **site coordinates** (latitude, and for the methods that need them,
-longitude and UTC offset; all default from **Settings ▸ Project settings**). The site
-has to be filled in there first: a method that needs coordinates **refuses to run**
-while Project settings is empty, and says why in the status line. Left to their
-defaults the boxes read 0 / 0 / 0, so the run would partition at latitude 0,
-longitude 0 on UTC and return plausible-looking GPP and RECO for the wrong place. For
-the daytime methods, the **VPD is in kPa** toggle says whether your VPD column is in
-kPa (the diive convention, default) or hPa.
+Daytime / ONEFlux splits day and night on the measured radiation, so it needs no site
+location. Its optional **NEE (gap-filled)** matters only for windows without any
+measured nighttime NEE (for example under the midnight sun): ONEFlux then starts from the
+gap-filled NEE of the year's first record, and with this input diive does the same.
+Left as *(none)*, those windows are not fitted and a console warning lists them. For Daytime /
+REddyProc, leave **NEE SD** as *(none)* to use the method's default uncertainty.
 
-Click **Run partitioning** (it runs in the background; the daytime methods can take
-a while, roughly tens of seconds per year). The preview shows daily-mean NEE, GPP,
-and RECO over time plus their cumulative sums. **Add results to dataset** appends all
-of the method's output columns (GPP, RECO, and the fitted parameters) to your
-variables.
+The **site coordinates** (latitude, and for the variants that need it, longitude)
+default from **Settings ▸ Project settings**. The UTC offset is always the project's,
+shown read-only. The site has to be filled in there first: a variant that needs the
+site location **refuses to run** while Project settings is empty, and says why in the
+status line. Left to their defaults, latitude and longitude read 0 / 0 and the UTC
+offset shows **not set**, so the run would partition at latitude 0, longitude 0 on UTC
+and return plausible-looking GPP and RECO for the wrong place. For the daytime method,
+the **VPD is in kPa** toggle says whether your VPD column is in kPa (the diive
+convention, default) or hPa.
+
+Click **Run partitioning**. It runs in the background, and the daytime method can take
+a while, roughly tens of seconds per year. The preview shows daily-mean NEE, GPP, and
+RECO over time plus their cumulative sums. **Add results to dataset** appends all of
+the variant's output columns (GPP, RECO, and the fitted parameters) to your variables.
+**Copy Python** copies a `dv.flux.partition_nee(...)` call with the same `method=`
+and `mode=`.
+
+Projects saved with the earlier per-variant tabs (for example **Daytime partitioning
+(REddyProc)**) open in this tab, with Method, Mode and the saved column picks set to
+match. The old **Daytime partitioning (ONEFlux)** tab had no gap-filled NEE input, so
+it opens with **NEE (gap-filled, optional)** set to *(none)* and gives the same results
+as before.
 
 > The bundled CH-DAV example already has measured and gap-filled NEE, air
-> temperature, VPD, and radiation columns, so you can try these tabs on it right
-> away.
+> temperature, VPD, and radiation columns, so you can try this tab on it right away.
 
 ### Random uncertainty (PAS20)
 
@@ -1421,21 +1515,43 @@ FLUXNET look-up-table method. Unlike XGBoost and Random Forest, MDS is **not a
 trained regressor**: it has no SHAP importances, no held-out test split, and no
 feature reduction. Instead it fills each gap from records with **similar
 meteorological conditions** using three fixed drivers: shortwave-in radiation, air
-temperature, and VPD.
+temperature, and VPD. **Mode** sets the fill rules and how a fill is averaged.
+**diive (Vekuri 2023 mean)**, the default, follows the rules of ONEFlux's `gf_mds` tool
+and fills daytime gaps in the SWIN look-ups with the symmetric mean of Vekuri et al.
+(2023): the mean of the similar records with less SWIN and the mean of those with more
+SWIN are averaged, which removes a bias when they are spread unevenly.
+**ONEFlux (bit for bit)** uses the plain mean and gives the same values as `gf_mds`.
+**REddyProc** uses the plain mean with REddyProc's windows, as its `sMDSGapFill` does,
+and leaves gaps longer than 60 days unfilled. Projects saved with the old
+**Symmetric mean** box load as diive if it was ticked and as ONEFlux if not.
 
 Pick a **target** (flux) on the left and the **three driver columns** (SWIN / TA /
 VPD combos, auto-seeded by name with ✓ / ✗ markers; gap-filled `_f` versions are
 preferred). Set the **similarity tolerances** (SWIN low/high, TA in °C, VPD in kPa)
 and the minimum number of similar records to average. Driver units matter: TA must be
-in °C and VPD in kPa. diive does not check the units, so a column in the wrong unit
-produces a wrong fill with no warning.
+in °C and VPD in kPa. For VPD in hPa, untick **VPD driver is in kPa**; the VPD
+tolerance is then converted to hPa. diive does not check the units. The tab only warns
+when the VPD column name contains `hPa` or `kPa` and does not match the box. In all
+other cases a column in the wrong unit produces a wrong fill with no warning.
+
+**Driver QC flags (optional)** gives each driver a flag column: 0 = measured, above 0 =
+gap-filled, for example `FLAG_TA_gfXG_ISFILLED` from a diive gap-filling tab or FLUXNET
+`TA_F_QC`. Use it with the gap-filled driver. The record being filled then still uses
+its own driver value, gap-filled or not, but only records with a measured driver value
+(flag 0, or no flag) count as similar conditions. This is how ONEFlux gap-fills NEE.
+It changes the SWIN/TA/VPD look-up, not the mean diurnal cycle. Each combo lists the
+chosen driver's flag columns first; the default **(none)** gives the same fill as
+before. For a separate measured column, first make a flag column that is 1 where the
+measured value is missing.
 
 A **progress bar** tracks the quality levels as the fill runs (higher level = looser
-meteorological match). The **Results** sub-tab shows the configuration, in-sample
-scores, a **per-quality-level breakdown** table and bar plot, a predicted-vs-observed
-scatter, the cumulative sum, and a colour-by-quality time series. The fill flag
-(`FLAG_{var}_gfMDS_ISFILLED`) is 0 for observed and 1+ for the quality level at which
-each gap was filled. **Add results to dataset** appends the gap-filled series and its
+meteorological match). The **Results** sub-tab shows the configuration, the scores
+(in **diive** mode each record is left out of its own prediction, in the other modes
+it stays in its own sample), a **per-quality-level breakdown** table and bar plot, a
+predicted-vs-observed scatter, the cumulative sum, and a colour-by-quality time series. The fill flag
+(`FLAG_{var}_gfMDS_ISFILLED`) is 0 for observed; for a filled gap it is the method
+times 1000 plus the window in days (method 1 = all three drivers, 2 = SWIN only,
+3 = diurnal cycle), so `1014` means "all drivers, 14-day window". **Add results to dataset** appends the gap-filled series and its
 flag; **Copy Python** copies a reproducible script.
 
 ---
@@ -1444,25 +1560,26 @@ flag; **Copy Python** copies a reproducible script.
 
 *Found under **File ▸ Database**.* Read measurement data straight from an
 **InfluxDB** time-series database, screen high-resolution meteo, resample it, and
-merge it into your dataset. These tabs need the optional `db` dependency group (see
-**Install & launch**); without it they show an install notice. The header shows a
+merge it into your dataset. The database tabs are for internal use: the menu only
+appears in an installation with the optional `db` extra or in an internal build of
+the Windows app. The header shows a
 green **Connected** pill once a connection is live.
 
 > **Timezone — important.** The database always stores timestamps in **UTC**, but
 > you normally work in your station's local time (e.g. **UTC+1**, CET). The
-> download converts UTC to a **UTC offset** you choose, and that offset **must
-> match your dataset's timezone** or the merged data land at the wrong time. The
-> offset defaults to your **project timezone** (Project settings), and the tabs
-> warn you if it doesn't match.
+> download converts UTC to the **UTC offset from Project settings**, the same offset
+> every other tab uses, so downloaded data line up with your dataset. If no offset is
+> set there, the field shows **not set** with a red **!** and the download uses
+> UTC+00:00: set the offset in **Settings ▸ Project settings** first.
 
 ### Database connection
 
 Point diive at an InfluxDB and test the connection.
 
 - **Config directory.** Pick the configuration folder (the connection's
-  `url` / `org` / `token` live in its `<dir>_secret` sibling). diive remembers the
-  **directory path only — never the token**.
-- **Test connection** verifies the server is reachable and fills in the resolved
+  `url` / `org` / `token` live in its `<dir>_secret` sibling). A saved project
+  keeps the **directory path, never the token**. Without a project, the field starts empty.
+- **Connect** verifies the server is reachable and fills in the resolved
   URL / org. Once connected, the explorer and the screening tab can use it.
 
 ### Database explorer
@@ -1472,9 +1589,9 @@ Browse what's in the database and pull data out.
 - **Drill down** through the columns: **bucket → data version → measurements →
   fields**. Selecting a field shows a **field overview** — every database tag it
   carries (units, gain, offset, …) plus the **first and last record** timestamps.
-- **Download & plot.** Pick a **start / end** range and a **UTC offset** (see the
-  timezone note above; a line under the controls always tells you the active
-  timezone), then **Download & plot**. **Match dataset time range** sets the range
+- **Download & plot.** Pick a **start / end** range (in the project's UTC offset,
+  see the timezone note above; a line under the controls always tells you the
+  active timezone), then **Download & plot**. **Match dataset time range** sets the range
   so the result lines up with your working dataset (accounting for the
   end-of-period ↔ middle-of-period convention). High-resolution downloads run in
   chunks with a **progress bar and a plot that fills in** as data arrive, and the
@@ -1485,23 +1602,58 @@ Browse what's in the database and pull data out.
 ### Meteo screening (database)
 
 The **full screening experience of the Stepwise screening tab** (outlier-test
-cards, corrections, QCF, the live preview, Copy Python — see
+cards, corrections, QCF, the live preview — see
 [Stepwise screening](#stepwisescreening)) applied to a high-resolution field from
-the database, **plus a Resample step**.
+the database, **plus a Resample step**. Here **Copy Python** copies a
+`StepwiseMeteoScreeningDb` script that downloads the field, screens it, applies
+the corrections and resamples it.
 
 - Receive a field from the explorer, screen it exactly as you would any variable
-  (chain outlier tests, apply corrections, check the QCF).
+  (chain outlier tests, apply corrections, check the QCF). Downloads that mix time
+  resolutions (e.g. 10-minute and 1-minute records in one field) are supported:
+  all records are kept.
+- **Window sizes are record counts.** The Hampel default of 624 records is 13 days
+  only at 30-minute resolution. On 10-minute data 13 days are 1872 records, on
+  1-minute data 18720. Day/night separation is on by default for a new Hampel
+  step when the site coordinates are set, and off for the other tests.
+- **Set to value takes END timestamps**, in the timezone of the download. The
+  plot shows each record at its middle: the 10-minute record ending 10:10 is
+  drawn at 10:05, so type 10:10. A date that matches no record changes nothing,
+  and the status line says so after **Run corrections**.
+- **Status warnings.** Latitude and longitude come from **Settings ▸ Project
+  settings** and apply to the next run; results computed with old values are
+  cleared. The run uses the UTC offset the field was downloaded in, because its
+  timestamps are in that offset. The status line warns when the UTC offset is
+  **not set** (UTC+00:00 is used), and when the offset was **changed after the
+  download**: send the field again from the Database explorer to use the new
+  offset. The warning goes once the offset is set back.
 - **Resample** (extra inspector page). The target resolution **defaults to your
-  working dataset's resolution**, detected automatically; the info line shows the
+  working dataset's resolution**, detected automatically (30 minutes if it cannot
+  be detected); the info line shows the
   source vs. target resolution and whether resampling is needed. **If the data are
   already at the target resolution, no resampling is done** (so already-30MIN data
-  merge straight through).
-- **Add resampled to dataset** appends the screened, resampled column. Its
+  merge straight through). **Min. records (frac)** (default 0.9) is the fraction
+  of each target period the kept records must cover, else the value is missing.
+  For a mean the minimum is rounded down to whole records, and if that leaves
+  fewer than three, one record is enough: 10-minute data resampled to 30 minutes
+  need one record per half-hour. A typed resolution applies once you stop typing.
+- **Add resampled to dataset** appends the screened, resampled column. It is
+  enabled after a run, also after **Run outliers** without an active step: a
+  variable that looks fine and needs no outlier removal is screened too. Its
   timestamps are converted to your dataset's **middle-of-period** convention so it
   aligns on merge, it is **renamed with a suffix** if the name already exists, and
   it is **refused with an explanation** if its time range doesn't overlap your
-  dataset. The new column's history records the database origin and **all its
-  tags** (and the timezone it was downloaded in).
+  dataset, if it is finer than your dataset (e.g. 10 minutes on 30-minute data)
+  or if its timestamps miss your dataset's grid (e.g. 1 hour on 30-minute data).
+  Resample to your dataset's resolution then. A coarser result on the grid
+  (e.g. 30 minutes on 10-minute data) is added, and the status line says that
+  only one record in three holds a value. It also says how many records lie
+  outside your dataset's range. The new column's history records the database origin and **all its
+  tags** (and the timezone it was downloaded in). Its data-version tag is the
+  processed version (`meteoscreening_diive`), not the download's.
+- **Copy Python** also works with corrections alone. The script uses the same
+  coordinates and UTC offset as the run: the offset the field was downloaded in,
+  which is also the offset of its start and stop dates.
 
 ---
 
@@ -1517,9 +1669,16 @@ Settings for the current project:
 - **Site details.** The measurement site's name, latitude, longitude, elevation, and
   UTC offset.
 
-Fill in and **Save**. The site coordinates and UTC offset are reused wherever diive
+All timestamps of the dataset must be in this UTC offset. Which offset you use does
+not matter, for example UTC+01:00 or UTC+02:00, but it must not change within the
+dataset. Convert data whose clock switches between winter and summer time to one
+offset before you load them.
+
+Fill in and click **Save project settings**. The site coordinates and UTC offset are reused wherever diive
 needs them (the Hampel tab's daytime/nighttime split, the flux chain, and so on), so
-you don't retype them per tool. Everything here is **remembered between sessions**
+you don't retype them per tool. The **UTC offset is set only here**: every tab and
+the database download show it read-only. Where it is needed but not set, the tab
+shows **not set** with a red **!**, and its tooltip says to set it here first. Everything here is **remembered between sessions**
 and **saved with the project**, so it travels inside a `.diive` folder.
 
 **Notes wall.** The right side of the tab is a pinboard of **sticky notes** for
@@ -1535,8 +1694,12 @@ Customise the **Studio** look (the GUI's single design: near-white surfaces,
 pill-shaped tabs, a slim header with drop-down menus) with a **live preview**, so
 colours update across the whole app as you change them:
 
-- pill colours, selection and hover colours, time-series line colours;
-- the variable-list **width** (applies to every tab);
+- pill colours, interface colours (hover, accent, list background, input fields,
+  border, selection) and time-series line colours.
+- the **colormap of the preview heatmaps** (combine variables, derived variables,
+  flux chain, gap-filling, screening). The Plot-menu heatmaps keep their own
+  colormap setting, and a heatmap already drawn changes at its next redraw.
+- the variable-list **width** (applies to every tab).
 - **Reset to defaults** to undo.
 
 ---
@@ -1550,7 +1713,7 @@ on) in colour. **Save…** writes the log to a text file; **Clear** empties it.
 
 ## Tips
 
-- **Editable fields are tinted** (light blue) so you can see at a glance what you can
+- **Editable fields are tinted** (light grey) so you can see at a glance what you can
   change; **hover over a setting** for a tooltip describing what it does.
 - **Hover over any plot** to see the value under the cursor in a small box. On line
   plots it snaps to the nearest data point (with a marker); on heatmaps it shows the

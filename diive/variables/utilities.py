@@ -1,8 +1,9 @@
 """
-UTILITIES: TESTING AND SYNTHETIC DATA GENERATION
-=================================================
+UTILITIES: SYNTHETIC DATA AND VARIABLE HELPERS
+==============================================
 
-Generate synthetic time series with noise and add impulse disturbances for testing.
+Generate synthetic time series with noise, add impulse disturbances for testing,
+combine two variables, and render variable calculations as runnable code.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -185,7 +186,7 @@ def generate_noisy_timeseries(
         periods (int): The number of time steps (data points) to generate.
             Defaults to 365.
         freq (str): The frequency string for the time index (e.g., 'D' for daily,
-            'H' for hourly, `30min` for half-hourly). Defaults to 'D'.
+            'h' for hourly, `30min` for half-hourly). Defaults to 'D'.
         trend_slope (float): The slope of the linear trend component.
             Positive values indicate an upward trend; negative values indicate
             a downward trend. Defaults to 0.05.
@@ -195,7 +196,7 @@ def generate_noisy_timeseries(
             distribution used to generate white noise. Defaults to 2.0.
         outlier_fraction (float): The proportion of data points to replace with
             outliers (between 0.0 and 1.0). Outliers are random spikes with
-            magnitude 3x-5x the noise level. Defaults to 0.02 (2%).
+            magnitude 5x-10x the noise level. Defaults to 0.02 (2%).
         random_seed (int): The seed for the random number generator to ensure
             reproducibility. Defaults to 42.
 
@@ -251,9 +252,9 @@ def add_impulse_noise(
     Args:
         series: time series
         factor_low: Low factor for noise creation, defines the lower bound of the noise,
-            calculated as factor_low * min(series).
+            calculated as factor_low * abs(min(series)).
         factor_high: High factor for noise creation, defines the upper bound of the noise,
-            calculated as factor_high * max(series).
+            calculated as factor_high * abs(max(series)).
         contamination: Fraction of *series* to add noise to.
         seed: Random seed.
 

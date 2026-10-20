@@ -1,0 +1,602 @@
+"""
+RUN CHAIN: SINGLE-CALL FLUX POST-PROCESSING DRIVER
+===================================================
+
+Convenience function that drives the full Swiss FluxNet post-processing chain
+(L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1, optionally L4.2) from one ``FluxConfig``.
+
+For custom L3.2 outlier pipelines or custom feature engineering, drop down to
+the composable per-level API documented in the package docstring.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
+
+from __future__ import annotations
+
+from diive.core.utils.console import rule
+from diive.flux.postprocessingchain.container import (
+    DEFAULT_LEVEL2_TEST_SETTINGS,
+    FluxConfig,
+    FluxLevelData,
+)
+from diive.flux.postprocessingchain.levels import (
+    make_level32_detector,
+    run_level2,
+    run_level31,
+    run_level32,
+    run_level33_constant_ustar,
+    run_level33_ustar_detection,
+    run_level41_mds,
+    run_level41_rf,
+    run_level41_xgb,
+    run_level42_daytime_oneflux,
+    run_level42_daytime_reddyproc,
+    run_level42_nighttime_oneflux,
+    run_level42_nighttime_reddyproc,
+)
+
+
+#: L4.2 partitioning: which FluxConfig driver-column fields each variant flag
+#: requires. The nighttime variants also need an L4.1 gap-filled NEE — that is
+#: validated separately against partition_gapfill_method.
+_PARTITION_REQUIRED: dict[str, tuple[str, ...]] = {
+    'partition_nighttime_oneflux': ('partition_ta', 'partition_sw_in', 'partition_ta_f'),
+    'partition_nighttime_reddyproc': ('partition_ta', 'partition_sw_in', 'partition_ta_f'),
+    'partition_daytime_reddyproc': ('partition_ta_f', 'partition_vpd_f', 'partition_sw_in_f'),
+    'partition_daytime_oneflux': ('partition_ta', 'partition_sw_in', 'partition_ta_f',
+                                  'partition_sw_in_f', 'partition_vpd_f'),
+}
+
+def _partition_flags(config: FluxConfig) -> list[str]:
+    """The partition_* flags in effect: those set on ``config`` plus the one
+    ``partition_method`` / ``partition_mode`` select, in the canonical order."""
+    flags = {flag for flag in _PARTITION_REQUIRED if getattr(config, flag)}
+    if config.partition_method is not None:
+        from diive.flux.partitioning.nee import PARTITION_METHODS, PARTITION_MODES
+        if config.partition_method not in PARTITION_METHODS:
+            raise ValueError(f"partition_method must be one of {PARTITION_METHODS} "
+                             f"or None, got {config.partition_method!r}.")
+        if config.partition_mode not in PARTITION_MODES:
+            raise ValueError(f"partition_mode must be one of {PARTITION_MODES}, "
+                             f"got {config.partition_mode!r}.")
+        # The flags are named partition_<method>_<mode>.
+        flags.add(f"partition_{config.partition_method}_{config.partition_mode}")
+    return [flag for flag in _PARTITION_REQUIRED if flag in flags]
+
+
+def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
+    """Drive the full post-processing chain (L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1 -> L4.2).
+
+    Single-call convenience wrapper for the standard FLUXNET-style workflow.
+    Each step is the same composable callable you would otherwise call by hand;
+    this function only routes ``FluxConfig`` fields to the per-level arguments
+    it considers high-level enough to expose.
+
+    **``run_chain`` is intentionally simple.** It picks fixed defaults for
+    every per-level knob that is not on ``FluxConfig``. For full control over
+    detectors, model hyperparameters, MDS tolerances, etc., call the
+    per-level functions directly — they accept the full set of arguments that
+    ``run_chain`` hides.
+
+    Per-level behaviour
+    -------------------
+
+    *Level-2 (quality flags)* — runs the tests listed in
+    ``config.level2_test_settings``; the always-on missing-values test
+    runs regardless. When ``level2_test_settings is None`` (default), the
+    chain applies the universal :data:`DEFAULT_LEVEL2_TEST_SETTINGS`
+    (``ssitc`` + ``gas_completeness`` + ``spectral_correction_factor`` +
+    ``raw_data_screening_vm97`` with spikes + dropout). Setting
+    ``config.signal_strength_col`` adds the analyzer-specific
+    ``signal_strength`` test on top with ``method='discard below'`` /
+    ``threshold=60`` — sensible LI-7200-style defaults.
+
+    *Level-3.1 (storage correction)* — controlled by
+    ``config.set_storage_to_zero`` and ``config.gapfill_storage_term``.
+
+    *Level-3.2 (outlier detection)* — **unconditional in ``run_chain``**
+    because L3.3 USTAR filtering depends on outlier-screened data. Uses a
+    single Hampel filter that ships its own sensible defaults
+    (``window_length=48*13`` records = 13 days at 30-min sampling,
+    Papale 2006; ``n_sigma_daytime=n_sigma_nighttime=5.5``;
+    ``use_differencing=True``; ``separate_day_night=True``;
+    ``repeat=True``). The optional ``config.outlier_window_length`` /
+    ``outlier_sigma_daytime`` / ``outlier_sigma_nighttime`` fields are
+    *overrides* — set them only when you want to deviate from the defaults;
+    leave them ``None`` (the default) to defer to
+    :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`. All
+    other Hampel knobs (``k``, ``use_differencing``, ``repeat``, ...) are
+    fixed at the underlying function's defaults. If you have screened
+    outliers upstream and genuinely want to skip L3.2, use the composable
+    per-level API instead of ``run_chain``.
+
+    *Level-3.3 (USTAR filtering)* — dispatches on
+    ``config.ustar_detection_mode``:
+
+    - ``'constant'`` (default) — apply pre-computed thresholds from
+      ``config.ustar_thresholds`` (e.g. produced by REddyProc externally).
+    - ``'bootstrap'`` — detect thresholds from the data via multi-year
+      bootstrap (FLUXNET standard, Papale et al. 2006). Requires
+      ``config.ustar_bootstrap_ta_col`` / ``..._swin_col``; thresholds and
+      ``CUT_<p>`` labels are generated from
+      ``config.ustar_bootstrap_percentiles`` (default ``(16, 50, 84)``). The
+      fitted :class:`UstarBootstrapThresholds` is attached to
+      ``data.levels.ustar_detection``.
+
+    *Level-4.1 (gap-filling)* — runs only the methods whose
+    ``config.gapfill_*`` flag is ``True``. MDS runs in ``config.mds_mode``
+    (default ``'diive'``) with the optional driver QC columns
+    ``config.mds_*_qc``, and uses the :class:`FluxMDS` defaults for
+    tolerances and ``avg_min_n_vals``. RF and
+    XGBoost are built with a default ``FeatureEngineer`` that ships with
+    the symmetric lag window ``[-2, 2]``, first- and second-order
+    differencing, 4 / 12 / 48-record rolling median + std, and vectorized
+    timestamps (see ``_default_engineer`` for the full rationale). SHAP-based
+    feature reduction is **on by default** (controlled by
+    ``config.gapfill_reduce_features``) — set to ``False`` for a diagnostic
+    run with the raw engineered feature set. Model hyperparameters
+    (``n_estimators``, ``max_depth``, ...) and custom ``FeatureEngineer``
+    configurations remain reachable only via the composable API.
+
+    *Level-4.2 (NEE partitioning)* — off by default. Runs each variant with
+    its ``config.partition_*`` flag set to ``True``, plus the one selected by
+    ``config.partition_method`` / ``config.partition_mode`` (ONEFlux by
+    default). A variant selected both ways runs once.
+
+    What ``run_chain`` does *not* expose
+    ------------------------------------
+
+    The following knobs are reachable only via the composable per-level API.
+    If you need any of them, build the chain step by step with
+    ``run_level2`` / ``run_level31`` / ``make_level32_detector`` +
+    ``run_level32`` / ``run_level33_constant_ustar`` (or
+    ``run_level33_ustar_detection``) / ``run_level41_mds`` /
+    ``run_level41_rf`` / ``run_level41_xgb`` / ``run_level42_partitioning``
+    instead.
+
+    - **L3.2** — non-Hampel detectors (z-score rolling, abslim, LocalSD,
+      manual removal), multi-step pipelines (Hampel + something else with
+      sequential ``addflag()``), and Hampel sub-options
+      (``use_differencing``, ``repeat``, ``k``, ``window_length`` per call).
+    - **L3.3** — diagnostic ``showplot=True`` and ``verbose=True`` (both
+      forced to ``False`` here for non-interactive use), custom
+      ``detector_class`` / ``detector_kwargs`` in bootstrap mode (defaults
+      to ONEFlux moving-point), and VUT (``mode='vut'``).
+    - **L4.1 MDS** — ``swin_tol`` / ``ta_tol`` / ``vpd_tol`` /
+      ``avg_min_n_vals`` (fixed at :class:`FluxMDS` defaults).
+    - **L4.1 RF / XGBoost** — model hyperparameters (``n_estimators``,
+      ``max_depth``, ``learning_rate``, ...) and the ``FeatureEngineer``
+      itself (use ``engineer=`` on the per-level function for the full
+      8-stage configuration). SHAP feature reduction *is* reachable from
+      ``run_chain`` via ``config.gapfill_reduce_features``.
+
+    Contextual field validation
+    ---------------------------
+
+    ``FluxConfig`` makes most fields optional and ``run_chain`` validates
+    that each enabled feature has the fields it needs:
+    ``mds_swin`` / ``mds_ta`` /
+    ``mds_vpd`` are required when ``gapfill_mds=True``;
+    ``gapfilling_features`` is required when ``gapfill_rf`` or
+    ``gapfill_xgb`` is ``True``; ``ustar_thresholds`` is required in
+    ``'constant'`` mode; ``ustar_bootstrap_ta_col`` / ``..._swin_col`` are
+    required in ``'bootstrap'`` mode. Each enabled partitioning variant
+    needs its ``partition_*`` driver columns, and the nighttime variants need
+    the L4.1 method named by ``partition_gapfill_method`` to be on. A single
+    ``ValueError`` lists every missing field.
+
+    Args:
+        data: Initial container from ``init_flux_data()``.
+        config: Per-flux configuration object.
+
+    Returns:
+        New ``FluxLevelData`` with all requested levels populated.
+
+    Raises:
+        ValueError: If ``config.fluxcol`` does not match
+            ``data.meta.fluxcol``, or if any enabled feature is missing the
+            fields it needs (see contextual-validation note above).
+
+    See also:
+        ``examples/flux/postprocessingchain/postprocessingchain_runchain.py``
+        for a runnable end-to-end example.
+
+    Example:
+        >>> import diive as dv
+        >>> cfg = dv.flux.FluxConfig(
+        ...     fluxcol='FC', ustar_thresholds=[0.18], ustar_labels=['CUT_50'],
+        ...     outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+        ...     gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa_1_1_1'],
+        ...     level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+        ...     mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1')
+        >>> data = dv.flux.init_flux_data(df, fluxcol='FC', site_lat=46.6, site_lon=9.8, utc_offset=1)
+        >>> data = dv.flux.run_chain(data, cfg)
+    """
+    if data.meta.fluxcol != config.fluxcol:
+        raise ValueError(
+            f"data.meta.fluxcol={data.meta.fluxcol!r} does not match "
+            f"config.fluxcol={config.fluxcol!r}. Build the FluxLevelData with "
+            f"the same fluxcol as the FluxConfig."
+        )
+
+    # Contextual validation: each conditional field is required only when its
+    # enabling flag is on. Catch all missing fields up front so the caller
+    # gets a single clear error rather than a half-completed pipeline.
+    if config.ustar_detection_mode not in ('constant', 'bootstrap'):
+        raise ValueError(
+            f"ustar_detection_mode must be 'constant' or 'bootstrap'; "
+            f"got {config.ustar_detection_mode!r}."
+        )
+    _missing: list[str] = []
+    if config.ustar_detection_mode == 'constant':
+        if not config.ustar_thresholds:
+            _missing.append(
+                "ustar_thresholds (ustar_detection_mode='constant')"
+            )
+        # When the user supplies more than one threshold, requiring explicit
+        # labels prevents the auto-generated CUT_0/CUT_1/... fallback from
+        # silently labelling percentile-based thresholds with non-percentile
+        # names (a real footgun for FLUXNET-style 16/50/84 workflows).
+        elif len(config.ustar_thresholds) > 1 and not config.ustar_labels:
+            _missing.append(
+                "ustar_labels (required when ustar_thresholds has more than "
+                "one entry, to avoid silently mislabelling percentile-based "
+                "thresholds; e.g. ['CUT_16', 'CUT_50', 'CUT_84'])"
+            )
+    else:  # 'bootstrap'
+        if not config.ustar_bootstrap_ta_col:
+            _missing.append(
+                "ustar_bootstrap_ta_col (ustar_detection_mode='bootstrap')"
+            )
+        if not config.ustar_bootstrap_swin_col:
+            _missing.append(
+                "ustar_bootstrap_swin_col (ustar_detection_mode='bootstrap')"
+            )
+    # L3.2 runs unconditionally in run_chain (L3.3 depends on it), but the
+    # Hampel filter ships its own sensible defaults — window_length=48*13,
+    # n_sigma_daytime/nighttime=5.5, use_differencing=True, day/night split.
+    # The FluxConfig outlier_* fields are pure overrides; we don't require
+    # them.
+    if config.gapfill_mds:
+        if not (config.mds_swin and config.mds_ta and config.mds_vpd):
+            _missing.append("mds_swin / mds_ta / mds_vpd (gapfill_mds=True)")
+    if config.gapfill_rf or config.gapfill_xgb:
+        if not config.gapfilling_features:
+            _missing.append(
+                "gapfilling_features (gapfill_rf=True or gapfill_xgb=True)"
+            )
+    # ----- NEE partitioning (L4.2) -----
+    # Each enabled variant requires its driver-column fields. The nighttime
+    # variants additionally need the chosen L4.1 gap-filling method to be on
+    # (they consume its gap-filled NEE for the GPP residual).
+    partition_enabled = _partition_flags(config)
+    for flag in partition_enabled:
+        reason = (f"{flag}=True" if getattr(config, flag) else
+                  f"partition_method={config.partition_method!r}, "
+                  f"partition_mode={config.partition_mode!r}")
+        for fld in _PARTITION_REQUIRED[flag]:
+            if not getattr(config, fld):
+                _missing.append(f"{fld} ({reason})")
+    if ('partition_nighttime_oneflux' in partition_enabled
+            or 'partition_nighttime_reddyproc' in partition_enabled):
+        _gf_on = {'mds': config.gapfill_mds, 'rf': config.gapfill_rf,
+                  'xgb': config.gapfill_xgb}
+        if config.partition_gapfill_method not in _gf_on:
+            _missing.append(
+                f"partition_gapfill_method must be one of 'mds'/'rf'/'xgb' "
+                f"(got {config.partition_gapfill_method!r})"
+            )
+        elif not _gf_on[config.partition_gapfill_method]:
+            _missing.append(
+                f"gapfill_{config.partition_gapfill_method}=True (required: a "
+                f"nighttime partitioning variant reads its gap-filled NEE from "
+                f"partition_gapfill_method={config.partition_gapfill_method!r})"
+            )
+    if _missing:
+        raise ValueError(
+            "FluxConfig is missing field(s) required by the enabled features:\n"
+            + "\n".join(f"  - {m}" for m in _missing)
+            + "\nEither set them on the FluxConfig, or disable the matching "
+              "flag (gapfill_mds=False / gapfill_rf=False / gapfill_xgb=False). "
+              "L3.2 cannot be disabled from run_chain — use the composable "
+              "per-level API if you genuinely need to skip outlier removal."
+        )
+
+    # Validate that every driver / feature column the chain will read from
+    # data.full_df actually exists there. The per-level functions perform the
+    # same check, but failing here lets the user fix all column-name typos
+    # in one round instead of after each level runs.
+    _column_misses: list[str] = []
+    if config.gapfill_mds:
+        for _fld, _val in (('mds_swin', config.mds_swin),
+                           ('mds_ta', config.mds_ta),
+                           ('mds_vpd', config.mds_vpd),
+                           ('mds_swin_qc', config.mds_swin_qc),
+                           ('mds_ta_qc', config.mds_ta_qc),
+                           ('mds_vpd_qc', config.mds_vpd_qc)):
+            if _fld.endswith('_qc') and _val is None:
+                continue
+            if _val not in data.full_df.columns:
+                _column_misses.append(f"{_fld}={_val!r}")
+    if config.ustar_detection_mode == 'bootstrap':
+        for _fld, _val in (('ustar_bootstrap_ta_col', config.ustar_bootstrap_ta_col),
+                           ('ustar_bootstrap_swin_col', config.ustar_bootstrap_swin_col)):
+            if _val not in data.full_df.columns:
+                _column_misses.append(f"{_fld}={_val!r}")
+    if config.gapfill_rf or config.gapfill_xgb:
+        for _val in (config.gapfilling_features or ()):
+            if _val not in data.full_df.columns:
+                _column_misses.append(f"gapfilling_features entry {_val!r}")
+    # Partitioning driver columns must exist in data.full_df. Dedupe across
+    # variants (they share TA / SW_IN columns) so the error lists each once.
+    _part_misses: dict[str, None] = {}
+    for flag in partition_enabled:
+        for fld in _PARTITION_REQUIRED[flag]:
+            val = getattr(config, fld)
+            if val and val not in data.full_df.columns:
+                _part_misses[f"{fld}={val!r}"] = None
+    if 'partition_daytime_reddyproc' in partition_enabled and config.partition_nee_sd:
+        if config.partition_nee_sd not in data.full_df.columns:
+            _part_misses[f"partition_nee_sd={config.partition_nee_sd!r}"] = None
+    _column_misses.extend(_part_misses)
+    if _column_misses:
+        raise KeyError(
+            "FluxConfig references column(s) not present in data.full_df:\n"
+            + "\n".join(f"  - {m}" for m in _column_misses)
+            + f"\nAvailable columns: {list(data.full_df.columns)}"
+        )
+
+    # Warn when a single threshold is passed without an explicit label —
+    # the underlying function will auto-generate 'CUT_0' (positional index,
+    # not percentile), and that's almost never what a FLUXNET-style user
+    # wants when they supply a real threshold value like 0.18. Same idea as
+    # the multi-threshold error above, just softened to a warning for the
+    # single-threshold case (no risk of *silent mislabelling between*
+    # scenarios — there is only one).
+    if (config.ustar_detection_mode == 'constant'
+            and config.ustar_thresholds
+            and len(config.ustar_thresholds) == 1
+            and not config.ustar_labels):
+        import warnings
+        warnings.warn(
+            f"FluxConfig.ustar_thresholds={config.ustar_thresholds} but "
+            f"ustar_labels is None — the L3.3 scenario will be labelled "
+            f"'CUT_0' (positional index, not percentile). For a "
+            f"percentile-based threshold pass an explicit label like "
+            f"ustar_labels=['CUT_50']; for a non-percentile threshold "
+            f"pass any descriptive name to make the scenario column "
+            f"self-documenting.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    # Resolve effective Level-2 test settings.
+    #   - ``level2_test_settings is None``  -> use the chain defaults
+    #     (ssitc, gas_completeness, spectral_correction_factor,
+    #     raw_data_screening_vm97 with spikes + dropout).
+    #   - ``level2_test_settings == {}``    -> user explicitly opted out
+    #     of every test; warn loudly because the resulting L2 QCF then
+    #     flags only fully-missing records.
+    #   - ``level2_test_settings`` is a non-empty dict -> use as-is.
+    # The optional ``signal_strength_col`` field opts in to the analyzer-
+    # specific signal-strength test on top, with sensible LI-7200-style
+    # method='discard below' / threshold=60 defaults. If the user already
+    # supplied their own 'signal_strength' entry, that wins (with a
+    # warning).
+    import copy
+    import warnings
+    if config.level2_test_settings is None:
+        effective_l2 = copy.deepcopy(DEFAULT_LEVEL2_TEST_SETTINGS)
+    else:
+        effective_l2 = copy.deepcopy(config.level2_test_settings)
+        if not effective_l2:
+            warnings.warn(
+                "FluxConfig.level2_test_settings={} — Level-2 will run only "
+                "the always-on missing-values test, so the L2 QCF will accept "
+                "essentially every record where the flux is non-NaN. This is "
+                "almost certainly not what you want for a production chain; "
+                "either omit the field to use the chain defaults "
+                "(ssitc + gas_completeness + spectral_correction_factor + "
+                "raw_data_screening_vm97), or supply your own dict.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    if config.signal_strength_col:
+        if 'signal_strength' in effective_l2:
+            warnings.warn(
+                "FluxConfig.signal_strength_col is set but "
+                "level2_test_settings already contains a 'signal_strength' "
+                "entry — the explicit entry in level2_test_settings wins; "
+                "signal_strength_col is ignored. To use the convenience "
+                "field, drop the 'signal_strength' key from "
+                "level2_test_settings.",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            effective_l2['signal_strength'] = {
+                'apply': True,
+                'signal_strength_col': config.signal_strength_col,
+                'method': 'discard below',
+                'threshold': 60,
+            }
+
+    rule(f"run_chain: full pipeline for {config.fluxcol}")
+
+    # ---------------------------------------------------------------- Level-2
+    data = run_level2(data, **effective_l2)
+
+    # -------------------------------------------------------------- Level-3.1
+    data = run_level31(
+        data,
+        gapfill_storage_term=config.gapfill_storage_term,
+        set_storage_to_zero=config.set_storage_to_zero,
+    )
+
+    # -------------------------------------------------------------- Level-3.2
+    # Single Hampel filter. Unconditional — L3.3 USTAR filtering depends on
+    # outlier-screened data, so the chain cannot skip this step. Users who
+    # need a non-Hampel detector, a multi-step pipeline, or want to skip
+    # L3.2 entirely must call the composable per-level API directly.
+    #
+    # Only forward the kwargs the user explicitly overrode on FluxConfig —
+    # the Hampel filter ships sensible defaults of its own (window_length=
+    # 48*13 records = 13 days at 30-min sampling, n_sigma_daytime/nighttime
+    # =5.5, use_differencing=True, separate_day_night=True,
+    # repeat=True), and the run_chain contract is that this is the simple
+    # path: don't pass parameters that would just duplicate the underlying
+    # defaults.
+    hampel_kwargs: dict = {'showplot': False, 'verbose': False}
+    if config.outlier_window_length is not None:
+        hampel_kwargs['window_length'] = config.outlier_window_length
+    if config.outlier_sigma_daytime is not None:
+        hampel_kwargs['n_sigma_daytime'] = config.outlier_sigma_daytime
+    if config.outlier_sigma_nighttime is not None:
+        hampel_kwargs['n_sigma_nighttime'] = config.outlier_sigma_nighttime
+
+    data, sod = make_level32_detector(data)
+    sod.flag_outliers_hampel_test(**hampel_kwargs)
+    sod.addflag()
+    data = run_level32(data, outlier_detector=sod)
+
+    # -------------------------------------------------------------- Level-3.3
+    if config.ustar_detection_mode == 'constant':
+        data = run_level33_constant_ustar(
+            data,
+            thresholds=list(config.ustar_thresholds),
+            threshold_labels=(list(config.ustar_labels)
+                              if config.ustar_labels is not None else None),
+            showplot=False,
+            verbose=False,
+        )
+    else:  # 'bootstrap' — detect thresholds from the data via multi-year
+        # bootstrap. Slower than constant mode but follows the FLUXNET-standard
+        # workflow. The fitted UstarBootstrapThresholds is attached to
+        # data.levels.ustar_detection for post-hoc inspection.
+        data = run_level33_ustar_detection(
+            data,
+            ta_col=config.ustar_bootstrap_ta_col,
+            swin_col=config.ustar_bootstrap_swin_col,
+            n_iter=config.ustar_bootstrap_n_iter,
+            n_jobs=config.ustar_bootstrap_n_jobs,
+            percentiles=tuple(config.ustar_bootstrap_percentiles),
+            showplot=False,
+            verbose=False,
+        )
+
+    # -------------------------------------------------------------- Level-4.1
+    if config.gapfill_mds:
+        data = run_level41_mds(
+            data,
+            swin=config.mds_swin,
+            ta=config.mds_ta,
+            vpd=config.mds_vpd,
+            mode=config.mds_mode,
+            swin_qc=config.mds_swin_qc,
+            ta_qc=config.mds_ta_qc,
+            vpd_qc=config.mds_vpd_qc,
+        )
+
+    if config.gapfill_rf or config.gapfill_xgb:
+        engineer = _default_engineer(config.gapfilling_features)
+        if config.gapfill_rf:
+            data = run_level41_rf(
+                data,
+                features=list(config.gapfilling_features),
+                engineer=engineer,
+                reduce_features=config.gapfill_reduce_features,
+            )
+        if config.gapfill_xgb:
+            data = run_level41_xgb(
+                data,
+                features=list(config.gapfilling_features),
+                engineer=engineer,
+                reduce_features=config.gapfill_reduce_features,
+            )
+
+    # -------------------------------------------------------------- Level-4.2
+    # NEE partitioning. Each enabled variant runs once per USTAR scenario. The
+    # nighttime variants read their gap-filled NEE from the L4.1 method named by
+    # config.partition_gapfill_method (validated above to be enabled). Daytime
+    # ONEFlux uses it too when that method ran, and works without it.
+    if 'partition_nighttime_oneflux' in partition_enabled:
+        data = run_level42_nighttime_oneflux(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            gapfill_method=config.partition_gapfill_method,
+        )
+    if 'partition_nighttime_reddyproc' in partition_enabled:
+        data = run_level42_nighttime_reddyproc(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            gapfill_method=config.partition_gapfill_method,
+        )
+    if 'partition_daytime_reddyproc' in partition_enabled:
+        data = run_level42_daytime_reddyproc(
+            data,
+            ta_f=config.partition_ta_f,
+            vpd_f=config.partition_vpd_f,
+            sw_in_f=config.partition_sw_in_f,
+            nee_sd=config.partition_nee_sd,
+            vpd_in_kpa=config.partition_vpd_in_kpa,
+        )
+    if 'partition_daytime_oneflux' in partition_enabled:
+        data = run_level42_daytime_oneflux(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            sw_in_f=config.partition_sw_in_f,
+            vpd_f=config.partition_vpd_f,
+            vpd_in_kpa=config.partition_vpd_in_kpa,
+            gapfill_method=config.partition_gapfill_method,
+        )
+
+    return data
+
+
+def _default_engineer(features: list[str]):
+    """Build the default FeatureEngineer for run_chain's ML gap-filling.
+
+    Stages enabled:
+
+    - **Lag**: symmetric two-record window ``[-2, 2]``. For 30-min EC data
+      this gives the four neighbouring records (±30 min, ±60 min) around
+      each target. Future lags are legitimate here because gap-FILLING
+      (unlike forecasting) operates on records bracketed by valid
+      neighbours on both sides — matches the MDS / Reichstein 2005 spirit
+      of using a symmetric time window.
+    - **Differencing**: first- and second-order. Inherently causal; gives
+      the ML model autocorrelation structure that raw lags can't fully
+      capture.
+    - **Rolling**: median and std over 4 / 12 / 48-record windows
+      (2 h / 6 h / 24 h at 30 min).
+    - **Vectorized timestamps**: encodes seasonal / diurnal structure.
+
+    Other 8-stage knobs (EMA, polynomial, STL, ...) are off — supply a
+    custom ``FeatureEngineer`` to ``run_level41_rf`` / ``run_level41_xgb``
+    directly if you need them.
+    """
+    from diive.core.ml.feature_engineer import FeatureEngineer
+    return FeatureEngineer(
+        target_col='_target_',  # placeholder; ignored by run_level41_*
+        # Symmetric lag window: features at t-2, t-1, t+1, t+2 around the
+        # target. Future lags are NOT data leakage in a gap-filling context
+        # — the gap is by definition bordered by valid records and we can
+        # legitimately use them, just like MDS does. Switch to past-only
+        # (e.g. [-2, -1]) by building your own FeatureEngineer via the
+        # composable API if you prefer a strictly causal model.
+        features_lag=[-2, 2],
+        features_lag_stepsize=1,
+        # First- and second-order differencing — autocorrelation structure
+        # that lag features alone don't expose. Strictly causal.
+        features_diff=[1, 2],
+        features_rolling=[4, 12, 48],
+        features_rolling_stats=['median', 'std'],
+        vectorize_timestamps=True,
+    )

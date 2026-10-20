@@ -36,8 +36,8 @@ import pandas as pd
 
 import diive as dv
 
-LAT = 47.286417  # Davos, decimal degrees north
-LON = 7.733750  # decimal degrees east
+LAT = 46.81533  # CH-DAV (Davos), decimal degrees north
+LON = 9.85591  # decimal degrees east
 UTC_OFFSET = 1  # local standard time, CET (UTC+1)
 
 # Load example data, single year
@@ -91,8 +91,8 @@ for month, peak in peak_by_month.items():
 # The daily curve is centred on true solar noon, not on 12:00 local clock time.
 # Two effects separate the two:
 #
-# - Longitude. The site is at 7.73 degrees east while CET is referenced to
-#   15 degrees east, which puts solar noon roughly half an hour late.
+# - Longitude. The site is at 9.86 degrees east while CET is referenced to
+#   15 degrees east, which puts solar noon about 20 minutes late.
 # - The equation of time. Earth's elliptical orbit and axial tilt shift solar
 #   noon by up to about a quarter of an hour either way over the year.
 #

@@ -13,7 +13,7 @@ import unittest
 class TestFluxCodegen(unittest.TestCase):
 
     def test_chain_to_code(self):
-        from diive.flux.fluxprocessingchain import chain_to_code
+        from diive.flux.postprocessingchain import chain_to_code
         code = chain_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             config_kwargs=dict(
@@ -33,7 +33,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("gapfill_xgb=True", code)        # non-default kept
 
     def test_chain_to_code_omits_init_defaults(self):
-        from diive.flux.fluxprocessingchain import chain_to_code
+        from diive.flux.postprocessingchain import chain_to_code
         code = chain_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1,
                              nighttime_threshold=20,   # equals default -> omitted
@@ -45,7 +45,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("site_lat=46.6", code)
 
     def test_level2_to_code(self):
-        from diive.flux.fluxprocessingchain import level2_to_code
+        from diive.flux.postprocessingchain import level2_to_code
         code = level2_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={
@@ -58,7 +58,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("ssitc={'apply': True", code)
 
     def test_level31_to_code(self):
-        from diive.flux.fluxprocessingchain import level31_to_code
+        from diive.flux.postprocessingchain import level31_to_code
         code = level31_to_code(
             init_kwargs=dict(fluxcol="LE", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -71,7 +71,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertNotIn("gapfill_storage_term", code)
 
     def test_level32_to_code(self):
-        from diive.flux.fluxprocessingchain import level32_to_code
+        from diive.flux.postprocessingchain import level32_to_code
         code = level32_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -94,7 +94,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("sod.flag_missingvals_test()", code)
 
     def test_level33_to_code(self):
-        from diive.flux.fluxprocessingchain import level33_to_code
+        from diive.flux.postprocessingchain import level33_to_code
         code = level33_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -109,7 +109,7 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("threshold_labels=['CUT_50']", code)
 
     def test_level41_to_code(self):
-        from diive.flux.fluxprocessingchain import level41_to_code
+        from diive.flux.postprocessingchain import level41_to_code
         code = level41_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -134,8 +134,35 @@ class TestFluxCodegen(unittest.TestCase):
         # Only the requested method's functions are imported.
         self.assertIn("make_level41_engineer", code)
 
+    def test_level41_to_code_mds_driver_qc(self):
+        from diive.flux.postprocessingchain import level41_to_code
+        kw = dict(init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+                  level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+                  level31_kwargs={},
+                  level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+                  level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]})
+        code = level41_to_code(**kw, level41_cfg={
+            "methods": ["mds"],
+            "mds": {"swin": "SW_IN_F", "ta": "TA_F", "vpd": "VPD_F",
+                    "swin_qc": "SW_IN_F_QC", "ta_qc": "TA_F_QC", "vpd_qc": None}})
+        compile(code, "<gen>", "exec")
+        self.assertIn("swin_qc='SW_IN_F_QC'", code)
+        self.assertIn("ta_qc='TA_F_QC'", code)
+        self.assertNotIn("vpd_qc", code)            # None -> omitted
+
+    def test_chain_to_code_mds_driver_qc(self):
+        from diive.flux.postprocessingchain import chain_to_code
+        code = chain_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            config_kwargs=dict(fluxcol="FC", ustar_thresholds=[0.18], ustar_labels=["CUT_50"],
+                               mds_swin="SW_IN_F", mds_ta="TA_F", mds_vpd="VPD_F",
+                               mds_swin_qc="SW_IN_F_QC", mds_ta_qc=None))
+        compile(code, "<gen>", "exec")
+        self.assertIn("mds_swin_qc='SW_IN_F_QC'", code)
+        self.assertNotIn("mds_ta_qc", code)         # default None -> omitted
+
     def test_level41_to_code_mds_only_omits_engineer(self):
-        from diive.flux.fluxprocessingchain import level41_to_code
+        from diive.flux.postprocessingchain import level41_to_code
         code = level41_to_code(
             init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
             level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
@@ -150,6 +177,50 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertNotIn("run_level41_rf(", code)
         self.assertNotIn("run_level41_xgb(", code)
         self.assertIn("run_level41_mds(", code)
+
+    def test_level42_to_code_writes_none_when_default_differs(self):
+        """gapfill_method=None (daytime ONEFlux without nee_f) must reach the script (L350).
+
+        Dropping it made the script run the default 'mds'. Values equal to the
+        function default and unset drivers stay out of the script.
+        """
+        from diive.flux.postprocessingchain import level42_to_code
+        kw = dict(init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+                  level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+                  level31_kwargs={},
+                  level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+                  level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]},
+                  level41_cfg={"methods": ["mds"],
+                               "mds": {"swin": "SW_IN", "ta": "TA", "vpd": "VPD"}})
+        drivers = {"ta": "TA", "sw_in": "SW_IN", "ta_f": "TA_F", "sw_in_f": "SW_IN_F",
+                   "vpd_f": "VPD_F"}
+
+        # Through run_level42_partitioning and through the per-variant function
+        for cfg in ({"method": "daytime", "mode": "oneflux"}, {"variants": ["dt_of"]}):
+            with self.subTest(cfg=cfg):
+                code = level42_to_code(**kw, level42_cfg={
+                    **cfg, **drivers, "gapfill_method": None, "nee_sd": None})
+                compile(code, "<gen>", "exec")
+                l42 = code[code.index("run_level42_"):]
+                self.assertIn("gapfill_method=None,", l42)
+                self.assertNotIn("nee_sd", l42)
+
+        # Default values are still left out
+        code = level42_to_code(**kw, level42_cfg={
+            "method": "daytime", "mode": "oneflux", **drivers,
+            "gapfill_method": "mds", "vpd_in_kpa": True})
+        l42 = code[code.index("run_level42_partitioning("):]
+        self.assertNotIn("gapfill_method", l42)
+        self.assertNotIn("vpd_in_kpa", l42)
+        self.assertIn("ta='TA',", l42)
+
+        # A driver without a default is not written as None
+        code = level42_to_code(**kw, level42_cfg={
+            "variants": ["nt_of"], "ta": "TA", "sw_in": None, "ta_f": "TA_F",
+            "gapfill_method": "rf"})
+        l42 = code[code.index("data = run_level42_nighttime_oneflux("):]
+        self.assertNotIn("sw_in", l42)
+        self.assertIn("gapfill_method='rf',", l42)
 
 
 if __name__ == "__main__":

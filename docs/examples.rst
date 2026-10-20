@@ -25,11 +25,11 @@ Jupyter notebook.
 Categories
 ==========
 
-- **analysis** — correlation, decomposition, gap statistics, harmonic analysis
+- **analysis** — correlation, decomposition, gap statistics, harmonic analysis, optimum range
 - **events** — event markers and their overlays on plots
 - **features** — the 8-stage feature engineering pipeline
-- **fits** — curve fitting and optimum-range detection
-- **flux** — processing chain, u* threshold detection, NEE partitioning, uncertainty
+- **fits** — binned curve fitting with confidence and prediction bands
+- **flux** — post-processing chain, u* threshold detection, NEE partitioning, uncertainty
 - **gapfilling** — Random Forest, XGBoost, MDS, linear interpolation, long-term filling
 - **io** — reading and writing the supported file formats
 - **preprocessing** — outlier detection, corrections, stepwise screening

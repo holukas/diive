@@ -1,6 +1,6 @@
 """
 DRIVERANALYSIS: EVIDENCE-TRIANGULATION DRIVER ATTRIBUTION
-========================================================
+=========================================================
 
 Attribute a flux time series to its candidate drivers and organize every output
 by *epistemic level* — association, temporal prediction, causation — rather than
@@ -14,8 +14,8 @@ is the actual scientific signal.
 
 Hard rules honored here:
   - SHAP and ALE are association-level diagnostics and are NEVER labeled causal.
-  - All train/test splits are time-aware (no shuffling) to avoid the leakage that
-    diive recently fixed in its gap-fillers and OptimizeParamsTS.
+  - Train/test splits are time-aware (no shuffling) by default
+    (``time_aware_split=True``).
   - Model scores are held-out (out-of-sample), never in-sample.
 
 Part of the diive library: https://github.com/holukas/diive
@@ -23,7 +23,7 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -31,8 +31,12 @@ from pandas import DataFrame, Series
 
 from diive.analysis.driveranalysis.ale import (
     AleCurve, Ale2DResult, accumulated_local_effects, accumulated_local_effects_2d,
+    _reject_flat_title,
 )
 from diive.core.utils.console import info, warn, success, rule, detail
+
+if TYPE_CHECKING:
+    from diive.core.plotting.styles.format import FormatStyle
 
 # Material Design palette (CLAUDE.md plotting conventions).
 _MD = {
@@ -71,10 +75,9 @@ _RANDOM_COL = '.RANDOM'
 def _stl_components(series: Series, period: int, robust: bool = True):
     """STL trend/seasonal/residual via statsmodels with an explicit period.
 
-    ``SeasonalTrendDecomposition`` infers the period from the index frequency,
-    which statsmodels cannot do for sub-daily (e.g. 30-min) eddy-covariance data.
-    Passing ``period`` explicitly (records per seasonal cycle — a daily cycle by
-    default) makes STL reliable here.
+    statsmodels cannot infer the period of sub-daily (e.g. 30-min)
+    eddy-covariance data from the index, so ``period`` (records per seasonal
+    cycle, a daily cycle by default) is passed explicitly.
 
     Gaps are interpolated *only* so STL can run (statsmodels has no NaN handling)
     and are masked back out of all three components before returning: a gap in
@@ -101,7 +104,8 @@ def _stl_components(series: Series, period: int, robust: bool = True):
 def _mean_abs_shap(model, X: DataFrame) -> Series:
     """Mean |SHAP| per feature for a fitted tree model."""
     import numpy as _np
-    import shap
+    from diive.core.ml.shap_import import import_shap
+    shap = import_shap()
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X)
     if isinstance(shap_values, list):
@@ -511,7 +515,8 @@ class DriverAnalysis:
             warn("SHAP interactions skipped: not defined per-driver with a FeatureEngineer.",
                  verbose=self.verbose)
             return None
-        import shap
+        from diive.core.ml.shap_import import import_shap
+        shap = import_shap()
         X = self._X
         # Interaction values are O(n_features^2 * trees) per row, so subsample.
         sample = X.sample(min(len(X), 150), random_state=self.random_state).sort_index()
@@ -620,6 +625,12 @@ class DriverAnalysis:
         A driver important at the daily/monthly scale but not half-hourly (or
         confined to one STL component) responds on a different timescale than its
         raw importance suggests.
+
+        Args:
+            scales: Any of ``'stl'`` (trend, seasonal and residual of the target),
+                ``'halfhourly'`` (the native resolution of the data), ``'daily'``
+                and ``'monthly'`` (means). The native resolution is added
+                automatically when ``'daily'`` or ``'monthly'`` is requested.
         """
         cols = {}  # column name (scale) -> per-driver importance Series
         baselines = {}  # column name (scale) -> that fit's own .RANDOM floor
@@ -1151,8 +1162,19 @@ class DriverAnalysis:
         console.print("  [dim]Association (SHAP/ALE) is never causal. "
                       "Diverging rows (yellow) are where the science is.[/dim]")
 
-    def plot_importance(self, ax=None, title: str = None, showplot: bool = False):
-        """Horizontal SHAP importance bars, colored by relevance vs ``.RANDOM``."""
+    def plot_importance(self, ax=None, format_style: FormatStyle = None,
+                        showplot: bool = False, **legacy):
+        """Horizontal SHAP importance bars, colored by relevance vs ``.RANDOM``.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid, legend). The title defaults to
+                ``"SHAP importance"``. Without a style the legend sits lower right.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_importance')
+        from diive.core.plotting.styles.format import FormatStyle
         shap_df = self._result.shap_importance
         if shap_df is None:
             self.shap()
@@ -1168,13 +1190,11 @@ class DriverAnalysis:
         if self._random_baseline is not None:
             ax.axvline(self._random_baseline, color=_MD['grey'], ls='--',
                        label='.RANDOM baseline', zorder=4)
-            ax.legend(loc='lower right', fontsize=10)
-        ax.set_xlabel('mean |SHAP| (association level — not causal)')
-        ax.set_title(title or 'SHAP importance')
-        if created:
-            ax.grid(True, axis='x', ls='--', alpha=0.4, zorder=0)
-            if showplot:
-                fig.show()
+        (format_style or FormatStyle(legend_loc='lower right')).apply(
+            ax=ax, default_title='SHAP importance',
+            default_xlabel='mean |SHAP| (association level — not causal)')
+        if created and showplot:
+            fig.show()
         return ax
 
     def plot_ale(self, feature: str, ax=None, **kw):
@@ -1182,9 +1202,21 @@ class DriverAnalysis:
         curve = self._result.ale.get(feature) or self.ale(feature)
         return curve.plot(ax=ax, **kw)
 
-    def plot_lagged(self, ax=None, cmap: str = 'viridis', title: str = None,
-                    showplot: bool = False):
-        """Driver x lag importance heatmap → per-driver response-timescale fingerprint."""
+    def plot_lagged(self, ax=None, format_style: FormatStyle = None, cmap: str = 'viridis',
+                    showplot: bool = False, **legacy):
+        """Driver x lag importance heatmap → per-driver response-timescale fingerprint.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid). The title defaults to
+                ``"Lagged importance (response timescale)"``. Without a style the
+                grid is off.
+            cmap: Colormap of the heatmap.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_lagged')
+        from diive.core.plotting.styles.format import FormatStyle
         li = self._result.lagged_importance
         if li is None:
             raise ValueError("No lagged importance; pass lags=... and run the temporal layer.")
@@ -1199,15 +1231,27 @@ class DriverAnalysis:
         ax.figure.colorbar(mesh, ax=ax, label='SHAP importance')
         ax.set_yticks(range(len(li.index)))
         ax.set_yticklabels(li.index)
-        ax.set_xlabel('lag (records; negative = past)')
-        ax.set_title(title or 'Lagged importance (response timescale)')
+        (format_style or FormatStyle(show_grid=False)).apply(
+            ax=ax, default_title='Lagged importance (response timescale)',
+            default_xlabel='lag (records; negative = past)')
         if created and showplot:
             fig.show()
         return ax
 
-    def plot_scale_resolved(self, ax=None, cmap: str = 'magma', title: str = None,
-                            showplot: bool = False):
-        """Driver x scale importance heatmap (STL components / aggregations)."""
+    def plot_scale_resolved(self, ax=None, format_style: FormatStyle = None,
+                            cmap: str = 'magma', showplot: bool = False, **legacy):
+        """Driver x scale importance heatmap (STL components / aggregations).
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid). The title defaults to
+                ``"Scale-resolved importance"``. Without a style the grid is off.
+            cmap: Colormap of the heatmap.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_scale_resolved')
+        from diive.core.plotting.styles.format import FormatStyle
         sr = self._result.scale_resolved
         if sr is None:
             raise ValueError("No scale-resolved result; run the temporal layer.")
@@ -1223,18 +1267,30 @@ class DriverAnalysis:
         ax.set_xticklabels(sr.columns, rotation=30, ha='right')
         ax.set_yticks(np.arange(len(sr.index)) + 0.5)
         ax.set_yticklabels(sr.index)
-        ax.set_title(title or 'Scale-resolved importance')
+        (format_style or FormatStyle(show_grid=False)).apply(
+            ax=ax, default_title='Scale-resolved importance')
         if created and showplot:
             fig.show()
         return ax
 
-    def plot_convergence(self, ax=None, title: str = None, showplot: bool = False):
+    def plot_convergence(self, ax=None, format_style: FormatStyle = None,
+                         showplot: bool = False, **legacy):
         """Headline plot: per-driver x per-method relevance grid.
 
         Green = relevant, grey = weak, red = not relevant; direction glyphs (+/-)
         annotate signed methods. Divergence across a row is the scientific signal.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid). The title defaults to
+                ``"Convergence grid (green=yes, grey=weak, red=no)"``. Without a
+                style the grid is off.
+            showplot: Call ``fig.show()`` when a new figure was created.
         """
+        _reject_flat_title(legacy, 'DriverAnalysis.plot_convergence')
         from matplotlib.colors import ListedColormap, BoundaryNorm
+        from diive.core.plotting.styles.format import FormatStyle
         conv = self._result.convergence
         if conv is None:
             raise ValueError("Nothing to plot; call run() first.")
@@ -1269,7 +1325,8 @@ class DriverAnalysis:
             if 'ale' in methods and adir in ('+', '-', '∩', '∪'):
                 j = methods.index('ale')
                 ax.text(j, i, adir, ha='center', va='center', color='white', fontsize=12)
-        ax.set_title(title or 'Convergence grid (green=yes, grey=weak, red=no)')
+        (format_style or FormatStyle(show_grid=False)).apply(
+            ax=ax, default_title='Convergence grid (green=yes, grey=weak, red=no)')
         if created and showplot:
             fig.show()
         return ax

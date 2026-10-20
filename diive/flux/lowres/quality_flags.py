@@ -49,7 +49,7 @@ class FluxQualityFlagsEddyPro:
         idstr (str): Suffix appended to generated flag column names for identification.
             Validated for usage within flags.
         fluxbasevar (str): Name of the base variable used to calculate the flux, such
-            as 'CO2_CONC' for CO2 flux calculations.
+            as 'CO2' for CO2 flux calculations.
         _results (DataFrame): Internal dataframe used to store the original flux
             column and all generated flag columns.
         """
@@ -112,6 +112,8 @@ class FluxQualityFlagsEddyPro:
             application_dates (list | None): A list of specific dates for which the angle
                 of attack test should be applied. If None, the test is applied to
                 all available dates.
+            aoacol (str | None): Name of the EddyPro angle-of-attack flag column.
+                If None, ``'VM97_AOA_HF'`` is used.
 
         Returns:
             None: This function does not return a value. It updates the instance's
@@ -129,6 +131,10 @@ class FluxQualityFlagsEddyPro:
 
         This test identifies periods where the horizontal wind is not stationary,
         which violates assumptions of eddy covariance.
+
+        Args:
+            nshwcol (str | None): Name of the EddyPro nonstationary horizontal wind
+                flag column. If None, ``'VM97_NSHW_HF'`` is used.
 
         Returns:
             None: This method does not return a value. The evaluation result is stored internally
@@ -178,6 +184,8 @@ class FluxQualityFlagsEddyPro:
                 high-frequency data.
             discont_sf (bool): If True, applies discontinuity test for
                 low-frequency data.
+            vm97col (str | None): Name of the EddyPro VM97 test column. If None,
+                ``'<fluxbasevar>_VM97_TEST'`` is used.
 
         Returns:
             None: Modifies the `_results` attribute in-place.
@@ -261,6 +269,8 @@ class FluxQualityFlagsEddyPro:
                 Default is 2.
             thres_ok (int, optional): Threshold value below which the data quality is considered ok,
                 but above the `thres_good`. Default is 4.
+            scfcol (str, optional): Name of the spectral correction factor column.
+                If None, ``'<fluxcol>_SCF'`` is used.
 
         Returns:
             None: Modifies the `_results` attribute in-place.
@@ -296,6 +306,8 @@ class FluxQualityFlagsEddyPro:
         Args:
             setflag_timeperiod (dict, optional): A dictionary defining specific
                 time periods where the flag should be set manually. Defaults to None.
+            flagcol (str, optional): Name of the EddyPro SSITC flag column. If
+                None, ``'<fluxcol>_SSITC_TEST'`` is used.
 
         Returns:
             None: Modifies the `_results` attribute in-place.

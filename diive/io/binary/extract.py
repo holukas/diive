@@ -101,7 +101,7 @@ def get_encoded_value_series(
      n_bits: The total number of bits in the integer (default is 8).
 
     Returns:
-     Series of the converted and scaled values as a floats.
+     Series of the converted and scaled values. Missing values stay NaN.
 
     See Also:
         get_encoded_value_from_int : Extract bits from a single integer value.
@@ -111,7 +111,8 @@ def get_encoded_value_series(
     """
     missing = int_series.isnull()
     available = ~missing
-    int_series.loc[missing] = 0
+    # where() returns a new series, so the caller's series keeps its NaNs
+    int_series = int_series.where(available, 0)
     int_series = int_series.astype(int)
 
     if available.sum() > 0:

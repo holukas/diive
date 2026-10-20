@@ -37,6 +37,7 @@ from diive.core.metadata import (
     MAX_DESCRIPTION_WORDS,
     MODIFIED,
     ORIGINAL,
+    MetadataStore,
 )
 from diive.gui import metadata_store, theme
 from diive.gui.tabs.base import DiiveTab
@@ -185,7 +186,13 @@ class MetadataExplorerTab(DiiveTab):
             self._detail_layout.addStretch(1)
             return
 
-        md = metadata_store.manager.store.get(name)
+        # `peek`, not `get`: `get` creates a record, and a rebuild can still
+        # name a variable that was just deleted. A record left behind under
+        # that name blocked a later rename to it (L337). A variable without a
+        # record shows the baseline a new one would get, built in a throwaway
+        # store.
+        md = (metadata_store.manager.store.peek(name)
+              or MetadataStore().get(name))
 
         title = QLabel(str(name))
         f = title.font(); f.setPointSizeF(f.pointSizeF() + 4); f.setBold(True)
@@ -310,6 +317,10 @@ class MetadataExplorerTab(DiiveTab):
 
     def _on_desc_changed(self) -> None:
         """Re-enable the save button (with its default label) on any edit."""
+        # Typing is the one place a note may create the variable's record:
+        # `_flush_description` only writes to an existing one.
+        if self._desc_var is not None:
+            metadata_store.manager.store.get(self._desc_var)
         self._update_desc_count()
         if self._desc_save is not None:
             self._desc_save.setText("Save note")
@@ -330,6 +341,8 @@ class MetadataExplorerTab(DiiveTab):
         edit, var = self._desc_edit, self._desc_var
         if edit is None or var is None:
             return
+        if metadata_store.manager.store.peek(var) is None:
+            return  # deleted (or never edited): don't create a record (L337)
         try:
             text = edit.toPlainText()
         except RuntimeError:  # underlying C++ widget already deleted
@@ -340,7 +353,8 @@ class MetadataExplorerTab(DiiveTab):
         self._flush_description()
         # Reflect any word-cap truncation back into the editor (this fires
         # textChanged -> _on_desc_changed, which re-enables the button)...
-        stored = metadata_store.manager.store.get(self._desc_var).description
+        md = metadata_store.manager.store.peek(self._desc_var)
+        stored = md.description if md is not None else ""
         if self._desc_edit is not None and self._desc_edit.toPlainText() != stored:
             self._desc_edit.setPlainText(stored)
         self._update_desc_count()

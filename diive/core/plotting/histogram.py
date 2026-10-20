@@ -57,8 +57,11 @@ class HistogramPlot:
     Visualize data distribution with optional z-score overlay and peak bin highlighting.
 
     Args:
-        series: Series to plot
-        method: Binning method (e.g., 'n_bins')
+        series: Series to plot. Missing values (NaN) and infinite values (+inf,
+            -inf) are left out of the bins and the statistics.
+        method: Name of the binning method, shown in the info box. With 'n_bins'
+            the box also lists the bin count and the peak bin range. It does not
+            change the binning.
         n_bins: Number of bins for histogram. An int (or None for the matplotlib
             default) lets the edges follow this series' own range; a sequence is
             used as the explicit bin edges. Passing the same sequence to two
@@ -89,8 +92,10 @@ class HistogramPlot:
         if series is None:
             raise ValueError("HistogramPlot requires `series`.")
 
-        self.series = series
-        self.s = series  # internal alias retained for backwards compatibility
+        # Infinite values have no bin and make the bin range infinite (L353).
+        finite, self.n_infinite = pf.drop_infinite(series)
+        self.series = finite
+        self.s = finite  # internal alias retained for backwards compatibility
         self.method = method
         self.n_bins = n_bins
         self.ignore_fringe_bins = ignore_fringe_bins
@@ -190,9 +195,8 @@ class HistogramPlot:
         # instead -- this is reached from the outlier detectors' own diagnostic
         # plot, where a traceback would kill the detector run over one empty panel.
         if self.s.dropna().empty:
-            self.ax.text(0.5, 0.5, f"{self.s.name}: no data",
-                         size=16, color="black", transform=self.ax.transAxes,
-                         horizontalalignment='center', verticalalignment='center')
+            note = "no finite values" if self.n_infinite else "no data"
+            pf.no_values_note(self.ax, f"{self.s.name}: {note}")
             style.apply(ax=self.ax, default_title=self._default_title(),
                         default_xlabel="", default_ylabel="Counts")
             if showplot:

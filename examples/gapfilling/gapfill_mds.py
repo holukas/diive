@@ -36,16 +36,37 @@ References:
 # - No overfitting risk
 # - Widely used in FLUXNET, ICOS, REddyProc
 #
-# How it works:
+# How it works (a port of the ONEFlux ``gf_mds`` cascade):
 # 1. For each gap, look for similar meteorological conditions
 # 2. Similarity defined by: radiation (Rg), temperature (Ta), VPD
-# 3. Hierarchical approach: start strict (7 days), relax to 140+ days
+# 3. Relax step by step: all three drivers in a 14-day, then a 28-day window;
+#    Rg only in 14 days; the mean diurnal cycle (same time of day +/- 1 h)
+#    over 1-5 days; the drivers again in windows up to 154 days; finally the
+#    diurnal cycle in ever wider windows
 # 4. Fill gap with mean flux from similar periods
 #
-# Quality levels (1-26):
-# - Levels 1-3: High quality (7-14 days, all 3 variables)
-# - Levels 4-5: Diurnal cycle (1-2 hours)
-# - Levels 6+: Progressively lower quality as window expands
+# Three modes:
+#
+# - ``mode='diive'`` (default): ONEFlux's windows, tolerances and order of
+#   methods, but methods 1 and 2 (the ones that match on Rg) fill with the
+#   symmetric mean of Vekuri et al. (2023). The similar records are split into
+#   those with less and those with more Rg than the gap record, and the fill is
+#   the mean of the two group means. This removes a bias that appears when Rg
+#   is spread unevenly inside the tolerance. It applies to daytime records only
+#   (Rg >= 20 W m-2), as in the paper.
+# - ``mode='oneflux'``: the plain mean of the similar records. This reproduces
+#   ONEFlux's ``gf_mds`` bit for bit. Use it when results must match ONEFlux,
+#   for example in a comparison with FLUXNET or ICOS data products.
+# - ``mode='reddyproc'``: the plain mean with REddyProc's windows. This
+#   reproduces REddyProc's ``sMDSGapFill``. Gaps longer than 60 days stay
+#   unfilled.
+#
+# Flag and quality:
+# - The gap-fill flag is method * 1000 + window in days (0 = measured), with
+#   method 1 = Rg+Ta+VPD, 2 = Rg only, 3 = diurnal cycle. For example, 1014
+#   means all three drivers in a 14-day window.
+# - The ONEFlux quality (1-3, 1 = best) condenses method and window; the
+#   report lists both.
 
 import time
 
@@ -53,6 +74,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import diive as dv
+from diive.gapfilling.mds import mds_quality_description
 
 # %%
 # Load and prepare data
@@ -131,6 +153,7 @@ mds = dv.gapfilling.FluxMDS(
     ta_tol=ta_tol,
     vpd_tol=vpd_tol,
     avg_min_n_vals=avg_min_n_vals,
+    mode='diive',  # the default, written out here
     verbose=1
 )
 
@@ -152,10 +175,12 @@ mds.report()
 # %%
 # Results: Performance scores
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Scores computed by cross-validation on measured flux data
-# (estimate of gap-filling accuracy)
+# Scores compare MDS predictions at measured records with the measured values.
+# In the default mode='diive' each measured record is left out of its own
+# prediction, so the scores are out-of-sample. In mode='oneflux' and
+# mode='reddyproc' they are in-sample and usually higher.
 
-print("\nPerformance Scores (from cross-validation):")
+print("\nPerformance Scores (out-of-sample):")
 print(f"  R2: {mds.scores_['r2']:.4f}")
 print(f"  RMSE: {mds.scores_['rmse']:.4f} (root mean squared error)")
 print(f"  MAE: {mds.scores_['mae']:.4f} (mean absolute error)")
@@ -166,7 +191,8 @@ print(f"  Mean quality flag: {mds.scores_['mean_quality_flag_gap_predictions']:.
 # %%
 # Results: Quality flag analysis
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Understand how many gaps were filled at each quality level
+# Understand how many gaps were filled at each flag value
+# (method * 1000 + window in days, see above)
 
 gf_df = mds.gapfilling_df_
 flag_col = [c for c in gf_df.columns if 'FLAG' in c and 'FILLED' in c][0]
@@ -177,7 +203,7 @@ for quality_level, count in quality_counts.items():
     if quality_level == 0:
         label = "Measured (not gap-filled)"
     else:
-        label = f"Quality level {int(quality_level)}"
+        label = mds_quality_description(quality_level)
     percent = 100 * count / len(gf_df)
     print(f"  {label:.<40} {count:>6} ({percent:>5.1f}%)")
 
@@ -239,5 +265,38 @@ hm_gapfilled.plot(
 
 plt.tight_layout()
 fig.show()
+
+# %%
+# Compare the two modes on one year
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Fill the full year 2022 once with each mode, with ONEFlux's default
+# tolerances. Only gaps filled by method 1 or 2 during daytime can differ.
+# VPD is still in hPa in ``df_full_year``, so ``vpd_in_kpa=False`` tells
+# FluxMDS to scale its tolerance instead of the data.
+
+filled = {}
+for mode in ['diive', 'oneflux']:
+    m = dv.gapfilling.FluxMDS(df=df_full_year, flux=flux_col, ta=ta_col, swin=swin_col,
+                              vpd=vpd_col, vpd_in_kpa=False, mode=mode, verbose=0)
+    m.run()
+    filled[mode] = m.gapfilling_df_[m.target_gapfilled]
+
+isgap = df_full_year[flux_col].isna()
+diff = (filled['diive'] - filled['oneflux'])[isgap]
+differs = diff.abs() > 0
+
+# umol CO2 m-2 s-1 per half-hour -> g C m-2: 1800 s * 12.011 g C mol-1 * 1e-6
+to_gc = 1800 * 12.011e-6
+sum_diive = filled['diive'].sum() * to_gc
+sum_oneflux = filled['oneflux'].sum() * to_gc
+
+print("\nMDS mode 'diive' vs 'oneflux' (2022):")
+print(f"  Gap records: {isgap.sum()}")
+print(f"  Filled values that differ: {differs.sum()} ({100 * differs.sum() / isgap.sum():.1f}% of gaps)")
+print(f"  Mean difference where they differ: {diff[differs].mean():.3f} umol m-2 s-1")
+print(f"  Largest absolute difference: {diff.abs().max():.3f} umol m-2 s-1")
+print(f"  Annual NEE, mode='diive':   {sum_diive:.1f} g C m-2")
+print(f"  Annual NEE, mode='oneflux': {sum_oneflux:.1f} g C m-2")
+print(f"  Difference (diive - oneflux): {sum_diive - sum_oneflux:.1f} g C m-2")
 
 print("\n[OK] MDS gap-filling demonstration complete")

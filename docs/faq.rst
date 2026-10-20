@@ -17,31 +17,21 @@ A: Python 3.12 and 3.13. Check your version:
 
 **Q: I get "ModuleNotFoundError: No module named 'diive'"**
 
-A: Install the package:
-
-   .. code-block:: bash
-
-      pip install diive
-
-   Or with uv:
-
-   .. code-block:: bash
-
-      uv pip install diive
-
-   For development, clone the repository and sync:
-
-   .. code-block:: bash
-
-      git clone https://github.com/holukas/diive.git
-      cd diive
-      uv sync
-
-   If you installed into a conda environment, activate it first:
+A: diive is not installed in the active environment. If you installed it into a
+   conda environment, activate it first:
 
    .. code-block:: bash
 
       conda activate diive
+
+   Otherwise, install the package:
+
+   .. code-block:: bash
+
+      python -m pip install diive
+
+   :doc:`installation` describes all ways to install diive, including the
+   development setup.
 
 **Q: Which version of diive am I using?**
 
@@ -59,15 +49,19 @@ A: Yes. The installation steps are the same on all three.
 
 **Q: Is there a graphical user interface?**
 
-A: Yes, a PySide6 desktop app. It ships as the optional ``gui`` extra:
+A: Yes, a PySide6 desktop app. Install it with the optional ``gui`` extra and
+   start it with ``diive-gui``:
 
    .. code-block:: bash
 
-      uv sync --extra gui
-      uv run diive-gui
+      python -m pip install "diive[gui]"
+      diive-gui
 
-   The 3D surface tabs need a second extra, ``gui3d``. The GUI only calls into
-   the library, so anything you can do there can also be scripted.
+   On Windows, each release also includes the app as a download that runs
+   without Python. See :doc:`installation`.
+
+   The GUI only calls into the library, so anything you can do there can also
+   be scripted.
 
 Data and loading
 ================
@@ -108,7 +102,9 @@ A: A pandas DataFrame with:
 
    - a ``DatetimeIndex`` named ``TIMESTAMP_START``, ``TIMESTAMP_MIDDLE`` or
      ``TIMESTAMP_END``,
-   - a regular frequency (30 min, hourly, daily, whatever your data is),
+   - a regular time resolution of one day or finer (for example 30 min, hourly or
+     daily; monthly, weekly and yearly records are not supported yet),
+   - the same UTC offset for every timestamp (see below),
    - string column names and numeric values.
 
    ``TimestampSanitizer`` gets your index into that shape. It sorts, removes
@@ -126,6 +122,23 @@ A: A pandas DataFrame with:
 
       df = dv.times.TimestampSanitizer(data=df, nominal_freq='30min').get()
       print(df.index.name)  # TIMESTAMP_MIDDLE
+
+**Q: Which UTC offset do the timestamps need?**
+
+A: Any offset, as long as every timestamp of the dataset uses it. diive uses the
+   timestamps as they are and takes the offset from you: ``utc_offset`` in the
+   functions that need it (for example the day/night split and potential
+   radiation), or **Settings > Project settings** in the desktop app. Set it to
+   the offset of your data, for example 1 for UTC+01:00 or 2 for UTC+02:00.
+
+   Timestamps whose offset changes within the dataset, for example from a logger
+   clock that switches between winter and summer time, do not fit one regular
+   time grid. Convert them to one offset first:
+
+   .. code-block:: python
+
+      # Time-zone-aware index, e.g. Europe/Zurich, to UTC+01:00 throughout
+      df.index = (df.index.tz_convert('UTC') + pd.Timedelta(hours=1)).tz_localize(None)
 
 **Q: How do I load diive's example data?**
 
@@ -149,7 +162,7 @@ A: The loaders live in ``diive.configs.exampledata``. Two of them are
 
    The two used most often are ``load_exampledata_parquet`` (CH-DAV half-hourly
    fluxes and meteo) and ``load_exampledata_parquet_lae_level1_30MIN`` (CH-LAE
-   EddyPro output, the input the flux processing chain expects).
+   EddyPro output, the input the flux post-processing chain expects).
 
 **Q: My data has gaps (NaN values). Should I fill them before outlier detection?**
 
@@ -180,7 +193,10 @@ A: They differ in whether they train a model and in what they need as input:
 
    All of them live in ``dv.gapfilling``. Start with Random Forest. MDS is the
    right choice when you need output comparable to FLUXNET or ONEFlux
-   processing, since it is a faithful port of that algorithm.
+   processing: with ``mode='oneflux'`` it reproduces ONEFlux gap-filling bit for
+   bit, and ``mode='reddyproc'`` follows REddyProc. The default
+   ``mode='diive'`` uses ONEFlux's rules with the symmetric mean of Vekuri et
+   al. (2023) in daytime.
 
 **Q: How do I choose feature engineering parameters?**
 
@@ -438,12 +454,14 @@ A: Titles, labels, units, fonts, colors, grid and legend all go through
       ts.plot(ax=ax, format_style=style.merged(title='Zoom'))
 
    A bare ``FormatStyle()`` is the house style, every unset field falls back to
-   the standard theme. You can still reach for matplotlib on the axes afterwards.
+   the standard theme. ``TimeSeries.plot()`` called without ``format_style`` uses
+   its own default look instead (white, open frame, light horizontal gridlines,
+   left title). You can still reach for matplotlib on the axes afterwards.
 
 Flux processing
 ===============
 
-**Q: What is the flux processing chain?**
+**Q: What is the flux post-processing chain?**
 
 A: The Swiss FluxNet post-processing workflow for eddy covariance data, in six
    levels:
@@ -461,7 +479,7 @@ A: The Swiss FluxNet post-processing workflow for eddy covariance data, in six
    .. code-block:: python
 
       from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-      from diive.flux.fluxprocessingchain import (
+      from diive.flux.postprocessingchain import (
           init_flux_data, run_level2, run_level31,
           make_level32_detector, run_level32,
           run_level33_constant_ustar, run_level41_mds,
@@ -494,7 +512,7 @@ A: The Swiss FluxNet post-processing workflow for eddy covariance data, in six
       final_df = data.fpc_df
 
    The full pipeline including partitioning is in
-   ``examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py``.
+   ``examples/flux/postprocessingchain/postprocessingchain_composable.py``.
 
    An older ``FluxProcessingChain`` class with methods such as
    ``level2_qualityflags()`` has been removed. The functions above replace it.
@@ -507,7 +525,7 @@ A: Yes. Put the per-flux decisions into a ``FluxConfig`` and hand it to
    .. code-block:: python
 
       from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-      from diive.flux.fluxprocessingchain import FluxConfig, init_flux_data, run_chain
+      from diive.flux.postprocessingchain import FluxConfig, init_flux_data, run_chain
 
       df = load_exampledata_parquet_lae_level1_30MIN().loc['2024-07':'2024-07']
       df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
@@ -585,6 +603,31 @@ A: ``data.fpc_df`` is the working dataframe, everything the chain produced is a
    ``data.levels.level41_mds['CUT_50']``. After Level 3.3 ``data.filteredseries``
    is ``None``, because with several USTAR scenarios there is no single filtered
    series. Access those per scenario.
+
+**Q: How do I partition NEE into GPP and RECO?**
+
+A: ``dv.flux.PartitioningNEE`` selects one of four ports with two switches:
+   ``method='nighttime'`` (Reichstein et al. 2005) or ``'daytime'`` (Lasslop et
+   al. 2010), and ``mode='oneflux'`` (the default, as used by ICOS and
+   FLUXNET2015) or ``'reddyproc'``. Each combination needs its own inputs.
+   ``dv.flux.partitioning.partitioning_inputs(method, mode)`` lists them:
+
+   .. code-block:: python
+
+      import diive as dv
+
+      df = dv.load_exampledata_parquet()
+      part = dv.flux.PartitioningNEE(
+          nee=df['NEE_CUT_REF_orig'], method='daytime', mode='oneflux',
+          ta=df['Tair_orig'], sw_in=df['Rg_orig'], ta_f=df['Tair_f'],
+          sw_in_f=df['Rg_f'], vpd=df['VPD_f'], vpd_in_kpa=False)  # VPD_f in hPa
+      part.run()
+      gpp = part.gpp  # GPP_DT_OF, part.results holds all columns
+
+   Inside the chain, ``run_level42_partitioning`` does the same per USTAR
+   scenario, and ``FluxConfig(partition_method=..., partition_mode=...)``
+   switches it on in ``run_chain``. The nighttime method needs a gap-filled NEE
+   from Level 4.1.
 
 Debugging and performance
 =========================

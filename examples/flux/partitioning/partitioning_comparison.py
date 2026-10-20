@@ -24,6 +24,11 @@ other and against the bundled REddyProc reference columns (``Reco_CUT_REF`` /
 ``GPP_DT_CUT_REF`` for the daytime methods).
 
 Best for: choosing a partitioning method, or seeing how much the choice matters.
+
+The four classes can also be reached through one entry point,
+:class:`~diive.flux.PartitioningNEE`, with ``method='nighttime'`` or
+``'daytime'`` and ``mode='oneflux'`` (default, the ICOS and FLUXNET2015
+approach) or ``'reddyproc'``.
 """
 
 # %%
@@ -45,12 +50,12 @@ print("Comparing 2 NIGHTTIME methods (*_NT_OF, *_NT_RP) and 2 DAYTIME methods (*
 print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} records)")
 
 # %%
-# Run all three ports on identical inputs
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# All three share the measured/gap-filled NEE and air temperature plus incoming
-# shortwave radiation. The REddyProc ports additionally need longitude and the
-# UTC offset (solar-time day/night split); the daytime port additionally needs
-# VPD (the light-response curve's VPD term).
+# Run all four ports on identical inputs
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# All four take NEE, air temperature and incoming shortwave radiation, measured
+# or gap-filled as each method requires. The REddyProc ports additionally need
+# longitude and the UTC offset (solar-time day/night split); the daytime ports
+# additionally need VPD (the light-response curve's VPD term).
 
 of = dv.flux.NighttimePartitioningOneFlux(
     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
@@ -65,14 +70,14 @@ nt = dv.flux.NighttimePartitioningReddyProc(
 
 dt = dv.flux.DaytimePartitioningReddyProc(
     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_f'], vpd=df['VPD_f'], sw_in=df['Rg_f'],
-    lat=46.815, lon=9.855, utc_offset=1,
+    lat=46.815, lon=9.855, utc_offset=1, vpd_in_kpa=False,  # VPD_f is in hPa
 ).run().results
 
 # The ONEFlux daytime method uses ONEFlux's measured-radiation day/night split
 # (no latitude) and needs both the measured and gap-filled drivers.
 dt_of = dv.flux.DaytimePartitioningOneFlux(
     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
-    ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'],
+    ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'], vpd_in_kpa=False,
 ).run().results
 
 # Reference columns: nighttime methods share the NT reference, the daytime methods
@@ -83,7 +88,7 @@ reco_ref_dt, gpp_ref_dt = df['Reco_DT_CUT_REF'], df['GPP_DT_CUT_REF']
 # %%
 # Numerical comparison
 # ^^^^^^^^^^^^^^^^^^^^^
-# Each port vs its own bundled reference, and the three ports against each other.
+# Each port vs its own bundled reference, and pairs of ports against each other.
 
 
 def _r(a, b):

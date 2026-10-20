@@ -9,9 +9,12 @@ Four faithful, vectorized ports are available: two nighttime methods (Reichstein
 et al. 2005, fitting the temperature response of nighttime NEE) and two daytime
 methods (Lasslop et al. 2010, fitting a light-response curve to daytime NEE).
 Each method is a port of a different reference implementation, so they do not
-produce identical numbers. Output columns carry a token after the ``_NT``
-(nighttime) / ``_DT`` (daytime) suffix - ``_OF`` (ONEFlux) and ``_RP``
-(REddyProc) - so all four can coexist in one dataframe:
+produce identical numbers. ``PartitioningNEE`` / ``partition_nee`` select one
+of them with two switches, ``method`` (``'nighttime'`` / ``'daytime'``) and
+``mode`` (``'oneflux'``, the default, or ``'reddyproc'``). Output columns
+carry a token after the ``_NT`` (nighttime) / ``_DT`` (daytime) suffix -
+``_OF`` (ONEFlux) and ``_RP`` (REddyProc) - so all four can coexist in one
+dataframe:
 
 - Nighttime method ONEFlux (Reichstein et al. 2005),
   ``NighttimePartitioningOneFlux`` / ``partition_nee_nighttime_oneflux`` - a
@@ -36,7 +39,9 @@ produce identical numbers. Output columns carry a token after the ``_NT``
   port of ONEFlux's ``flux_part_gl2010`` (FLUXNET2015); per-window LRC fit with a
   measured-radiation day/night split (no latitude) and an internal NEE-uncertainty
   look-up. Emits ``*_DT_OF`` columns (including the GPP standard error
-  ``SE_GPP_DT_OF``).
+  ``SE_GPP_DT_OF``). ``partition_nee_daytime_oneflux_scenarios`` partitions
+  several u* scenarios that share the days removed after failed fits, as
+  ONEFlux does.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -53,6 +58,10 @@ from diive.flux.partitioning.daytime_reddyproc import DaytimePartitioningReddyPr
 from diive.flux.partitioning.daytime_reddyproc import partition_nee_daytime_reddyproc
 from diive.flux.partitioning.daytime_oneflux import DaytimePartitioningOneFlux
 from diive.flux.partitioning.daytime_oneflux import partition_nee_daytime_oneflux
+from diive.flux.partitioning.daytime_oneflux import partition_nee_daytime_oneflux_scenarios
+from diive.flux.partitioning.nee import PartitioningNEE
+from diive.flux.partitioning.nee import partition_nee
+from diive.flux.partitioning.nee import partitioning_inputs, partitioning_optional_inputs
 
 __all__ = [
     "NighttimePartitioningOneFlux",
@@ -67,4 +76,9 @@ __all__ = [
     "partition_nee_daytime_reddyproc",
     "DaytimePartitioningOneFlux",
     "partition_nee_daytime_oneflux",
+    "partition_nee_daytime_oneflux_scenarios",
+    "PartitioningNEE",
+    "partition_nee",
+    "partitioning_inputs",
+    "partitioning_optional_inputs",
 ]

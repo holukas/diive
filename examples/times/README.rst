@@ -80,6 +80,7 @@ Use Cases
        sort_ascending=False,             # Don't sort
        remove_duplicates=False,          # Don't remove
        regularize=False,                 # Don't fill gaps
+       output_middle_timestamp=False,    # Don't shift the timestamp
        verbose=True
    )
 
@@ -126,31 +127,38 @@ The ``TimestampSanitizer`` applies 10 configurable steps in sequence:
 9. **Regularize gaps** — Fill missing periods with NaN rows
 10. **Convert to mid-period** — Shift to middle-of-period timestamps
 
-Each step is optional and can be disabled.
+Steps 1-5, 9 and 10 each have their own switch. Step 6 runs only when sorting is on,
+step 8 only when ``nominal_freq`` is given. Step 7 always runs.
 
 Frequency Detection
 -------------------
 
-The ``TimestampSanitizer`` detects frequency using 3 methods and reports confidence:
+The ``TimestampSanitizer`` detects frequency with ``DetectFrequency``, which runs 3
+methods: pandas ``infer_freq`` on the full index, the most frequent time step, and
+``infer_freq`` on chunks at the start and end of the index. The result is taken from
+the first row below that applies:
 
 .. list-table::
    :header-rows: 1
 
    * - Method
      - When Used
-     - Strength
+     - Confidence
    * - **all_methods_agree**
-     - All 3 methods find same frequency
-     - Highest confidence (100%)
+     - All 3 methods find the same frequency
+     - 1.0
    * - **full_dataset**
-     - Majority of intervals match most common frequency
-     - High confidence (85-99%)
-   * - **start_end_chunks**
-     - First/last chunk frequencies agree
-     - Medium confidence (70-84%)
+     - ``infer_freq`` finds a frequency on the full index
+     - 0.95
    * - **timedelta**
-     - Fallback if others fail
-     - Low confidence (<70%)
+     - The most frequent time step occurs in more than 50% of the intervals
+     - Share of intervals with that time step
+   * - **start_end_chunks**
+     - Only the chunks at the start and end give a frequency
+     - 0.70
+
+If no method finds a frequency, ``DetectFrequency`` raises ``RuntimeError``. The
+frequencies found by the other methods are listed in ``frequency_alternatives``.
 
 **Example output:**
 
@@ -158,8 +166,8 @@ The ``TimestampSanitizer`` detects frequency using 3 methods and reports confide
 
    Detected frequency: 30min (confidence: 95%)
      Detection method: full_dataset
-     Intervals matching: 99.5%
-     Alternatives: [15min (2%), 60min (<1%)]
+     Intervals matching: 100.0%
+     Alternatives: ['15min']
 
 Status Tracking
 ---------------
@@ -221,7 +229,7 @@ Automatically detects time resolution (e.g., 30-minute, hourly) using 3 independ
 3. Diel Cycles
 ~~~~~~~~~~~~~~
 
-Extracts time-of-day patterns by grouping data by hour and calculating statistics for each. Shows seasonal variation (monthly diel cycles) and anomaly detection.
+Extracts time-of-day patterns by grouping data by time of day and calculating the mean and SD for each. Shows seasonal variation (monthly diel cycles).
 
 **Use when:** Understanding ecosystem processes with daily cycles (photosynthesis, evapotranspiration), identifying unusual daily patterns.
 
@@ -288,6 +296,6 @@ diive examples use 30-minute timestamps (typical for flux tower data):
 - No gaps (fully regularized)
 - No duplicates
 - Strictly monotonic (increasing)
-- UTC timezone (assumed)
+- Timezone-naive, in local standard time (CH-DAV: UTC+01:00, so the examples pass ``utc_offset=1``)
 
 Use ``TimestampSanitizer`` to prepare raw data to match these expectations.

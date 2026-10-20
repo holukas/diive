@@ -2,7 +2,7 @@
 GUI.WIDGETS.CONSOLE_PANEL: LIVE LIBRARY OUTPUT CONSOLE
 ======================================================
 
-A dockable panel that mirrors diive's Rich console output into the GUI. It
+A panel (shown in the Log tab) that mirrors diive's Rich console output into the GUI. It
 registers a Rich mirror `Console` (via `add_console_sink`) that renders to an
 in-memory stream as ANSI; a small SGR parser turns that into coloured text in a
 read-only `QTextEdit`.

@@ -334,9 +334,10 @@ class WindRosePlot:
         """Render the wind rose on a polar axis (Phase 2 of the two-phase design).
 
         Args:
-            ax: Polar matplotlib axes. If None, a new polar figure is created.
-                The title then goes on this axes, not on the figure, so the rose can
-                be one panel of a caller's multi-panel figure.
+            ax: Polar matplotlib axes. If None, a new polar figure is created and
+                the title goes on the figure. With a given axes the title goes on
+                that axes, not on the figure, so the rose can be one panel of a
+                caller's multi-panel figure.
             format_style: Shared :class:`~diive.plotting.FormatStyle`. This is a polar
                 plot, so only the fields that describe something the rose actually
                 draws are honoured: ``title`` (+ ``title_fontsize``,
@@ -383,6 +384,9 @@ class WindRosePlot:
             sector_label_fontsize: Compass-label font size (default theme value).
             sector_label_pad: Radial gap (points) between the outer ring and the
                 compass labels (default 14), so labels clear the plotting area.
+
+        Returns:
+            The polar matplotlib axes the rose was drawn on.
         """
         style = format_style or FormatStyle()
 

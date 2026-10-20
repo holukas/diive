@@ -30,7 +30,7 @@ from diive.io.binary.extract import get_encoded_value_series
 
 # The namespace submodules are imported on first attribute access (PEP 562).
 # Importing them eagerly pulls in sklearn, xgboost, shap and statsmodels, which
-# costs ~1.7 s of the ~2.3 s import even for a script that only reads a parquet
+# costs ~1.3 s of the ~2.3 s import even for a script that only reads a parquet
 # file. Note for packaging: a frozen build cannot see these edges statically —
 # they are pinned in packaging/diive_gui.spec via hiddenimports.
 _LAZY_SUBMODULES = frozenset({
@@ -78,7 +78,7 @@ try:
     __version__ = version("diive")
 except PackageNotFoundError:
     # Package not installed (e.g. running from a source tree without an install).
-    __version__ = "0.91.2"
+    __version__ = "0.92.0"
 
 __all__ = [
     '__version__',

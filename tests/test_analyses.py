@@ -182,12 +182,12 @@ class TestAnalyses(unittest.TestCase):
         nee_series = data_df['NEE_CUT_REF_f'].copy()
         # Calculate potential radiation SW_IN_POT to use as reference
         reference = potrad(timestamp_index=rg_series.index,
-                           lat=47.286417,
-                           lon=7.733750,
+                           lat=46.81533,
+                           lon=9.85591,
                            utc_offset=1)
         # Calculate daily correlation between Rg_f and SW_IN_POT
         daycorrs = daily_correlation(s1=rg_series, s2=reference, mincorr=0.8).result
-        self.assertEqual(daycorrs.sum(), 337.89242341368663)
+        self.assertEqual(daycorrs.sum(), 337.45649543346656)
         # Calculate daily correlation between Tair_f and NEE_CUT_REF_f
         daycorrs = daily_correlation(s1=ta_series, s2=nee_series).result
         self.assertEqual(daycorrs.sum(), -167.25042524807637)
@@ -229,14 +229,23 @@ class TestAnalyses(unittest.TestCase):
         results = hist.results
         bin_starts = hist.results['BIN_START_INCL'].copy()
         self.assertEqual(bin_starts.iloc[0], -39.817)
-        self.assertEqual(bin_starts.iloc[-1], 22.276)
-        self.assertEqual(bin_starts.mean(), -3.605244071740962)
-        self.assertEqual(bin_starts.count(), 24923)
+        self.assertEqual(bin_starts.iloc[-1], 23.234)
+        self.assertEqual(bin_starts.mean(), -3.6041672283742576)
+        self.assertEqual(bin_starts.count(), 24924)
         checkix = results.index[results['BIN_START_INCL'] == -8.062].tolist()
         self.assertEqual(len(checkix), 1)
         checkix = int(checkix[0])
         self.assertEqual(results.iloc[checkix]['COUNTS'], 7)
-        self.assertEqual(hist.peakbins, [1.148, 1.241, 1.929, 1.324, 1.632])
+        # 0.765, 1.632 and 1.324 tie at 111 counts, the sort picks two of them
+        self.assertEqual(hist.peakbins, [1.148, 1.241, 1.929, 0.765, 1.632])
+
+    def test_histogram_uniques_gives_the_largest_value_its_own_bin(self):
+        # np.histogram closes only its last bin. With the unique values as the
+        # only edges, the two largest values used to share one bin.
+        import pandas as pd
+        hist = Histogram(series=pd.Series([1., 2., 2., 3., 4., 4., 4.]), method='uniques')
+        self.assertEqual(hist.results['BIN_START_INCL'].tolist(), [1., 2., 3., 4.])
+        self.assertEqual(hist.results['COUNTS'].tolist(), [1, 2, 1, 3])
 
     def test_profile_dataframe(self):
         import numpy as np
@@ -567,6 +576,22 @@ class TestStratifiedAnalysisKeepsItsData(unittest.TestCase):
                                 n_bins_z=60, n_bins_x=3).run()
         self.assertEqual(len(sa.binaggs), 60)
         self.assertEqual(len(set(sa.binaggs.keys())), 60)
+
+    def test_saveplot_with_a_caller_axes_saves_its_figure(self):
+        # With a caller-supplied ax, `fig` was never assigned and saveplot raised.
+        import os
+        import tempfile
+        from matplotlib.figure import Figure
+        from diive.analysis.decoupling import StratifiedAnalysis
+        sa = StratifiedAnalysis(df=self._frame(), zvar='z', xvar='x', yvar='y',
+                                n_bins_z=4, n_bins_x=3).run()
+        ax = Figure().add_subplot()
+        with tempfile.TemporaryDirectory() as path:
+            sa.showplot_decoupling_sbm(ax=ax, saveplot=True, title='sbm', path=path)
+            saved = os.listdir(path)
+        self.assertEqual(len(saved), 1)
+        self.assertTrue(saved[0].startswith('sbm_'))
+        self.assertTrue(ax.lines)
 
 
 class TestHarmonicDecomposePicksDistinctComponents(unittest.TestCase):

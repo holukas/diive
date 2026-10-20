@@ -85,6 +85,31 @@ class TestCorrections(unittest.TestCase):
         self.assertEqual(winddir_corrected.max(), 359.9)
         self.assertEqual(winddir_corrected.min(), 0)
 
+    def test_winddiroffset_passes_verbose_to_the_year_lines(self):
+        """`verbose` must win over the module default in both directions."""
+        from diive.core.utils.console import (console, get_verbosity, set_verbosity,
+                                              VERBOSE_DEBUG, VERBOSE_PROGRESS, VERBOSE_SILENT)
+        from diive.preprocessing.corrections import WindDirOffset
+        idx = pd.date_range("2021-01-01", "2022-12-31", freq="1D")
+        winddir = pd.Series(np.linspace(0, 359, len(idx)), index=idx, name="WD")
+        kwargs = dict(winddir=winddir, hist_ref_years=[2021],
+                      offset_start=-2, offset_end=2, hist_n_bins=36)
+
+        def _output(default, verbose):
+            set_verbosity(default)
+            with console.capture() as cap:
+                WindDirOffset(**kwargs, verbose=verbose)
+            return cap.get()
+
+        saved = get_verbosity()
+        try:
+            self.assertNotIn("Working on year", _output(VERBOSE_DEBUG, VERBOSE_SILENT))
+            self.assertIn("Working on year", _output(VERBOSE_PROGRESS, VERBOSE_DEBUG))
+            # None keeps following the module default
+            self.assertIn("Working on year", _output(VERBOSE_DEBUG, None))
+        finally:
+            set_verbosity(saved)
+
 
 class TestCorrectionsDoNotMutateTheInput(unittest.TestCase):
     """A correction must not touch the Series the caller handed it.
@@ -194,6 +219,70 @@ class TestSettoCorrections(unittest.TestCase):
         setto_value(series=self.series, dates=[str(self.idx[0])], value=-9.0)
         pd.testing.assert_series_equal(self.series, original)
 
+    # L307: an InfluxDB integer field arrives as int64, and pandas 3 raises when
+    # a decimal value is assigned into it.
+    def _int_series(self):
+        return pd.Series([1, 5, 10, 15, 20, 25], index=self.idx, name="TA", dtype="int64")
+
+    def test_setto_threshold_decimal_on_int64_returns_float(self):
+        from diive.preprocessing.corrections import setto_threshold
+        out = setto_threshold(series=self._int_series(), threshold=12.5, type="max")
+        pd.testing.assert_series_equal(
+            out, pd.Series([1.0, 5.0, 10.0, 12.5, 12.5, 12.5],
+                           index=self.idx, name="TA"))
+        out = setto_threshold(series=self._int_series(), threshold=12.5, type="min")
+        pd.testing.assert_series_equal(
+            out, pd.Series([12.5, 12.5, 12.5, 15.0, 20.0, 25.0],
+                           index=self.idx, name="TA"))
+
+    def test_setto_threshold_integer_on_int64_keeps_int64(self):
+        from diive.preprocessing.corrections import setto_threshold
+        out = setto_threshold(series=self._int_series(), threshold=12, type="max")
+        pd.testing.assert_series_equal(
+            out, pd.Series([1, 5, 10, 12, 12, 12], index=self.idx, name="TA", dtype="int64"))
+
+    def test_setto_value_decimal_on_int64_returns_float(self):
+        from diive.preprocessing.corrections import setto_value
+        series = self._int_series()
+        original = series.copy()
+        out = setto_value(series=series, dates=[[str(self.idx[3]), str(self.idx[4])]], value=3.7)
+        pd.testing.assert_series_equal(
+            out, pd.Series([1.0, 5.0, 10.0, 3.7, 3.7, 25.0], index=self.idx, name="TA"))
+        pd.testing.assert_series_equal(series, original)
+
+    def test_setto_value_integer_on_int64_keeps_int64(self):
+        from diive.preprocessing.corrections import setto_value
+        out = setto_value(series=self._int_series(), dates=[str(self.idx[0])], value=3)
+        pd.testing.assert_series_equal(
+            out, pd.Series([3, 5, 10, 15, 20, 25], index=self.idx, name="TA", dtype="int64"))
+
+    def test_setto_float32_series_keeps_its_dtype(self):
+        from diive.preprocessing.corrections import setto_threshold, setto_value
+        series = self.series.astype("float32")
+        out = setto_threshold(series=series, threshold=12.5, type="max")
+        self.assertEqual(out.dtype, np.float32)
+        out = setto_value(series=series, dates=[str(self.idx[0])], value=3.7)
+        self.assertEqual(out.dtype, np.float32)
+
+    def test_setto_value_works_on_an_unsorted_index(self):
+        # L351: label slicing on an unsorted index raised KeyError for a
+        # timestamp that is not in the index, and also for a bare date.
+        from diive.preprocessing.corrections import setto_value
+        idx = pd.date_range("2021-01-01", periods=96, freq="30min")
+        series = pd.Series(np.arange(96.0), index=idx, name="TA")
+        shuffled = series.iloc[np.random.default_rng(7).permutation(96)]
+        self.assertFalse(shuffled.index.is_monotonic_increasing)
+        dates = ["2021-01-02",                                     # bare date: whole day
+                 str(idx[3]),                                      # existing timestamp
+                 "2021-01-01 05:10",                               # not in the index
+                 ["2021-01-01 07:10", "2021-01-01 09:00"]]         # range, start not in index
+        out = setto_value(series=shuffled, dates=dates, value=-9.0)
+        expected = setto_value(series=series, dates=dates, value=-9.0)
+        # Same records changed, in the caller's order.
+        self.assertTrue(out.index.equals(shuffled.index))
+        pd.testing.assert_series_equal(out.sort_index(), expected, check_freq=False)
+        self.assertEqual(int((expected == -9.0).sum()), 48 + 1 + 4)
+
 
 class TestOffsetCorrections(unittest.TestCase):
     """`remove_relativehumidity_offset` and `MeasurementOffsetFromReplicate`."""
@@ -229,6 +318,71 @@ class TestOffsetCorrections(unittest.TestCase):
         self.assertAlmostEqual(float(corr.get_offset()), 5.0, places=6)
         np.testing.assert_allclose(corr.get_corrected_measurement().to_numpy(),
                                    replicate.to_numpy(), atol=1e-9)
+
+    def test_measurement_offset_from_replicate_passes_verbose_to_the_scan_lines(self):
+        """`verbose` must win over the module default in both directions.
+
+        The per-offset line is a `detail` call. Without `verbose=` it followed
+        only the level set with `set_verbosity()`, so a caller could neither
+        silence nor show it.
+        """
+        from diive.core.utils.console import (console, get_verbosity, set_verbosity,
+                                              VERBOSE_DEBUG, VERBOSE_PROGRESS, VERBOSE_SILENT)
+        from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
+        idx = pd.date_range("2021-01-01", periods=20, freq="30min")
+        replicate = pd.Series(np.linspace(0, 2, 20), index=idx, name="TA_REF")
+        measurement = (replicate - 1.0).rename("TA")
+        kwargs = dict(measurement=measurement, replicate=replicate,
+                      offset_start=-2, offset_end=2, offset_stepsize=1)
+
+        def _scan_output(default, verbose):
+            set_verbosity(default)
+            with console.capture() as cap:
+                MeasurementOffsetFromReplicate(**kwargs, verbose=verbose)
+            return cap.get()
+
+        saved = get_verbosity()
+        try:
+            self.assertNotIn("trying with offset", _scan_output(VERBOSE_DEBUG, VERBOSE_SILENT))
+            self.assertIn("trying with offset", _scan_output(VERBOSE_PROGRESS, VERBOSE_DEBUG))
+            # None keeps following the module default
+            self.assertIn("trying with offset", _scan_output(VERBOSE_DEBUG, None))
+        finally:
+            set_verbosity(saved)
+
+    def test_measurement_offset_without_overlap_raises(self):
+        # L340: without a common record every summed difference was 0, and the
+        # first candidate (offset_start) was added to the whole series.
+        from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
+        idx = pd.date_range("2021-01-01", periods=200, freq="30min")
+        measurement = pd.Series(np.linspace(0, 20, 200), index=idx, name="TA")
+        every_other = measurement.where(np.arange(200) % 2 == 0)
+        cases = {
+            "all NaN": (measurement, pd.Series(np.nan, index=idx, name="TA_REF")),
+            "other timestamps": (measurement, pd.Series(
+                np.linspace(0, 20, 200), name="TA_REF",
+                index=pd.date_range("2022-01-01", periods=200, freq="30min"))),
+            "values never at the same time": (every_other,
+                                              every_other.shift(1).rename("TA_REF")),
+        }
+        for label, (m, replicate) in cases.items():
+            with self.subTest(label):
+                with self.assertRaisesRegex(ValueError, "no timestamp at which both"):
+                    MeasurementOffsetFromReplicate(measurement=m, replicate=replicate,
+                                                   offset_start=-5, offset_end=5,
+                                                   offset_stepsize=0.5, verbose=0)
+
+    def test_measurement_offset_with_partial_overlap(self):
+        from diive.preprocessing.corrections import MeasurementOffsetFromReplicate
+        idx = pd.date_range("2021-01-01", periods=200, freq="30min")
+        replicate = pd.Series(np.linspace(0, 20, 200), index=idx, name="TA_REF")
+        replicate.iloc[:150] = np.nan
+        measurement = (pd.Series(np.linspace(0, 20, 200), index=idx) - 5.0).rename("TA")
+        measurement.iloc[190:] = np.nan
+        corr = MeasurementOffsetFromReplicate(measurement=measurement, replicate=replicate,
+                                              offset_start=-10, offset_end=10,
+                                              offset_stepsize=0.5, verbose=0)
+        self.assertAlmostEqual(float(corr.get_offset()), 5.0, places=6)
 
 
 class TestNighttimeZeroOffset(unittest.TestCase):
@@ -300,6 +454,241 @@ class TestNighttimeZeroOffset(unittest.TestCase):
                 self.assertTrue(getattr(result, field).index.equals(self.series.index))
         self.assertEqual(result.n_night, int((result.nighttime_flag == 1).sum()))
         self.assertLess(result.n_night, len(self.series))  # daytime exists too
+
+
+class TestNighttimeZeroOffsetPlot(unittest.TestCase):
+    """The diagnostic figure of the nighttime zero-offset correction."""
+
+    def setUp(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    def tearDown(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    @staticmethod
+    def _result(series, **kwargs):
+        import diive as dv
+        return dv.corrections.nighttime_zero_offset_diagnostics(
+            series=series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET, **kwargs)
+
+    @staticmethod
+    def _summary(fig) -> dict:
+        ax = fig.axes[5]
+        texts = [t.get_text() for t in ax.texts]
+        return dict(zip(texts[::2], texts[1::2], strict=True))
+
+    def test_panels_and_title(self):
+        import diive as dv
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(_radiation_series())).plot(showplot=False)
+        titles = [ax.get_title(loc='left') for ax in fig.axes[1:]]
+        self.assertEqual(titles, ['Series', 'Daily offset  ·  steps 1-2', 'Diel cycle near zero  ·  steps 3-5',
+                                  'Night values  ·  step 3', 'Summary'])
+        self.assertEqual(fig._suptitle.get_text(), 'Nighttime zero offset: SW_IN')
+        steps = [t.get_text() for t in fig.axes[0].texts]
+        for number, name in enumerate(['Find night', 'Daily offset', 'Subtract', 'Night to 0', 'Clamp'], 1):
+            self.assertIn(str(number), steps)
+            self.assertIn(name, steps)
+
+    def test_offset_is_drawn_constant_per_day(self):
+        import diive as dv
+        plot = dv.corrections.NighttimeZeroOffsetPlot(self._result(_radiation_series()))
+        fig = plot.plot(showplot=False)
+        line = next(l for l in fig.axes[2].get_lines() if l.get_label().startswith('daily offset'))
+        x = np.asarray(line.get_xdata(), dtype='datetime64[ns]')
+        y = np.asarray(line.get_ydata(), dtype=float)
+        # Two points per day, from midnight to midnight, at the same value
+        self.assertEqual(len(x), 2 * len(plot.daily))
+        np.testing.assert_array_equal(y[::2], y[1::2])
+        self.assertTrue((x[1::2] - x[::2] == np.timedelta64(1, 'D')).all())
+
+    def test_clamp_step_count(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        series.iloc[np.where(series.to_numpy() > 100.0)[0][:5]] = 1.0
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(series)).plot(showplot=False)
+        self.assertIn('5 records', [t.get_text() for t in fig.axes[0].texts])
+        kept = dv.corrections.NighttimeZeroOffsetPlot(
+            self._result(series, clamp_negatives=False)).plot(showplot=False)
+        texts = [t.get_text() for t in kept.axes[0].texts]
+        self.assertIn('Negatives kept', texts)
+        self.assertIn('5 records below 0', texts)
+
+    def test_summary_matches_the_result(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        daytime = np.where(series.to_numpy() > 100.0)[0][:5]
+        series.iloc[daytime] = 1.0  # below the offset, clamped after the correction
+        result = self._result(series)
+        rows = self._summary(dv.corrections.NighttimeZeroOffsetPlot(result).plot(showplot=False))
+        self.assertEqual(rows['Records'], f"{len(series):,}")
+        self.assertEqual(rows['Day records clamped to 0'], '5')
+        self.assertEqual(rows['Offset median'], '3.00')
+        self.assertEqual(rows['Below zero after'], '0 (night 0)')
+        self.assertTrue(rows['Days'].endswith('0 without night data'))
+
+    def test_day_without_night_data_is_marked(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        result = self._result(series)
+        day3 = series.index.normalize() == series.index.normalize().unique()[3]
+        series[day3 & (result.nighttime_flag == 1)] = np.nan
+        plot = dv.corrections.NighttimeZeroOffsetPlot(self._result(series))
+        fig = plot.plot(showplot=False)
+        self.assertEqual(int((plot.daily['n_night'] == 0).sum()), 1)
+        labels = fig.axes[2].get_legend_handles_labels()[1]
+        self.assertIn('no night data, median used', labels)
+        self.assertTrue(self._summary(fig)['Days'].endswith('1 without night data'))
+
+    def test_records_mask_keeps_empty_slots_out_of_the_lines(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        records = pd.Series(True, index=series.index)
+        records.iloc[1::2] = False
+        series[~records] = np.nan  # empty slots between records
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(series), records=records).plot(showplot=False)
+        measured, corrected = fig.axes[1].get_lines()[:2]
+        self.assertEqual(len(measured.get_xdata()), int(records.sum()))
+        self.assertEqual(int(np.isnan(np.asarray(measured.get_ydata(), float)).sum()), 0)
+
+    def test_no_nighttime_values_still_draws(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        result = self._result(series)
+        series[result.nighttime_flag == 1] = np.nan
+        fig = dv.corrections.NighttimeZeroOffsetPlot(self._result(series)).plot(showplot=False)
+        fig.canvas.draw()
+        self.assertIn('no nighttime values', [t.get_text() for t in fig.axes[4].texts])
+
+    def test_showplot_draws_the_figure(self):
+        import matplotlib.pyplot as plt
+        import diive as dv
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # Agg cannot show
+            dv.corrections.remove_nighttime_zero_offset(
+                series=_radiation_series(), lat=LAT, lon=LON, utc_offset=UTC_OFFSET, showplot=True)
+        self.assertEqual(len(plt.get_fignums()), 1)
+        self.assertEqual(plt.gcf()._suptitle.get_text(), 'Nighttime zero offset: SW_IN')
+
+
+def _rh_series(offset: float = 3.0, days: int = 20, name: str = "RH"):
+    """Relative humidity with a daily cycle that saturates at night, plus a sensor offset."""
+    idx = pd.date_range("2021-06-01", periods=48 * days, freq="30min", name="TIMESTAMP_MIDDLE")
+    true = np.clip(80 + 25 * np.cos(2 * np.pi * np.arange(len(idx)) / 48), None, 100)
+    return pd.Series(true + offset, index=idx, name=name)
+
+
+class TestRelativeHumidityOffsetDiagnostics(unittest.TestCase):
+    """`relativehumidity_offset_diagnostics` and the result dataclass."""
+
+    def test_corrected_equals_the_plain_correction(self):
+        import diive as dv
+        for offset in (0.0, -5.0, 3.0):
+            with self.subTest(offset=offset):
+                series = _rh_series(offset)
+                out = dv.corrections.remove_relativehumidity_offset(series.copy())
+                result = dv.corrections.relativehumidity_offset_diagnostics(series.copy())
+                pd.testing.assert_series_equal(out, result.corrected)
+
+    def test_fields(self):
+        import diive as dv
+        series = _rh_series(3.0)
+        result = dv.corrections.relativehumidity_offset_diagnostics(series)
+        self.assertEqual(result.n_above_100_before, int((series > 100).sum()))
+        self.assertEqual(int(result.above_100.sum()), result.n_above_100_before)
+        pd.testing.assert_series_equal(result.corrected_by_offset, (series - result.offset).rename("corrected_by_offset"))
+        self.assertEqual(result.n_capped, int((result.corrected_by_offset > 100).sum()))
+        self.assertLessEqual(float(result.corrected.max()), 100)
+        # Every day saturates, so every day has its own offset, constant within the day
+        per_day = result.daily_offset.groupby(series.index.normalize())
+        self.assertTrue((per_day.nunique() == 1).all())
+
+    def test_no_value_above_100_gives_offset_zero(self):
+        import diive as dv
+        result = dv.corrections.relativehumidity_offset_diagnostics(_rh_series(-5.0))
+        self.assertEqual(result.n_above_100_before, 0)
+        self.assertTrue(result.daily_offset.isna().all())
+        self.assertTrue((result.offset == 0).all())
+
+
+class TestRelativeHumidityOffsetPlot(unittest.TestCase):
+    """The diagnostic figure of the relative humidity offset correction."""
+
+    def setUp(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    def tearDown(self):
+        import matplotlib.pyplot as plt
+        plt.close('all')
+
+    @staticmethod
+    def _fig(series, **kwargs):
+        import diive as dv
+        result = dv.corrections.relativehumidity_offset_diagnostics(series)
+        return dv.corrections.RelativeHumidityOffsetPlot(result, **kwargs).plot(showplot=False)
+
+    @staticmethod
+    def _summary(fig) -> dict:
+        texts = [t.get_text() for t in fig.axes[5].texts]
+        return dict(zip(texts[::2], texts[1::2], strict=True))
+
+    def test_panels_steps_and_title(self):
+        fig = self._fig(_rh_series(3.0))
+        titles = [ax.get_title(loc='left') for ax in fig.axes[1:]]
+        self.assertEqual(titles, ['Series', 'Offset  ·  steps 1-3', 'Near 100 %  ·  steps 4-5',
+                                  'Daily maximum', 'Summary'])
+        self.assertEqual(fig._suptitle.get_text(), 'Relative humidity offset: RH')
+        steps = [t.get_text() for t in fig.axes[0].texts]
+        for number, name in enumerate(['Find > 100 %', 'Daily offset', 'Other days', 'Subtract',
+                                       'Cap at 100 %'], 1):
+            self.assertIn(str(number), steps)
+            self.assertIn(name, steps)
+
+    def test_summary_matches_the_result(self):
+        import diive as dv
+        series = _rh_series(3.0)
+        result = dv.corrections.relativehumidity_offset_diagnostics(series)
+        rows = self._summary(self._fig(series))
+        self.assertEqual(rows['Records'], f"{len(series):,}")
+        self.assertEqual(rows['Above 100 %'], f"{result.n_above_100_before:,} on 20 days")
+        self.assertEqual(rows['Capped at 100 %'], f"{result.n_capped:,}")
+
+    def test_no_value_above_100(self):
+        fig = self._fig(_rh_series(-5.0))
+        steps = [t.get_text() for t in fig.axes[0].texts]
+        self.assertIn('none: offset 0', steps)
+        self.assertIn('no value above 100 %, so the offset is 0', [t.get_text() for t in fig.axes[2].texts])
+        self.assertEqual(self._summary(fig)['Offset'], '0 (no value above 100 %)')
+
+    def test_a_cap_just_below_100_is_not_shown_as_100(self):
+        series = pd.Series(np.r_[np.full(100, 99.998), np.full(100, 50.0)],
+                           index=pd.date_range('2021-06-01', periods=200, freq='30min'), name='RH')
+        rows = self._summary(self._fig(series))
+        self.assertEqual(rows['At exactly 100 %'], '0')
+        self.assertEqual(rows['From 99.9 to 100 %'], '100')
+        self.assertTrue(rows['Max before → after'].startswith('99.998'))
+
+    def test_records_mask_keeps_empty_slots_out_of_the_lines(self):
+        series = _rh_series(3.0)
+        records = pd.Series(True, index=series.index)
+        records.iloc[1::2] = False
+        series[~records] = np.nan
+        fig = self._fig(series, records=records)
+        measured = fig.axes[1].get_lines()[0]
+        self.assertEqual(len(measured.get_xdata()), int(records.sum()))
+
+    def test_showplot_draws_the_figure(self):
+        import matplotlib.pyplot as plt
+        import warnings
+        import diive as dv
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')  # Agg cannot show
+            dv.corrections.remove_relativehumidity_offset(_rh_series(3.0), showplot=True)
+        self.assertEqual(len(plt.get_fignums()), 1)
+        self.assertEqual(plt.gcf()._suptitle.get_text(), 'Relative humidity offset: RH')
 
 
 class TestApplyCorrections(unittest.TestCase):
@@ -509,3 +898,418 @@ class TestWindDirOffsetCircularBinning(unittest.TestCase):
         self.assertEqual(len(counts), 36)
         self.assertEqual(counts.sum(), 500)
         self.assertEqual(counts[20:].sum(), 0, "no counts above 200 deg expected")
+
+
+class TestWindDirOffsetWithoutValidCorrelation(unittest.TestCase):
+    """L339: with only NaN correlations the first candidate offset was taken,
+    so every year was rotated by offset_start."""
+
+    N_PER_YEAR = TestWindDirOffsetCircularBinning.N_PER_YEAR
+    PLANTED_OFFSET = TestWindDirOffsetCircularBinning.PLANTED_OFFSET
+    _winddir = TestWindDirOffsetCircularBinning._winddir
+    _detect = TestWindDirOffsetCircularBinning._detect
+
+    def test_reference_years_without_data_raise(self):
+        import re
+        from diive.preprocessing.corrections import WindDirOffset
+        winddir = self._winddir(centre=90.0)
+        for ref_years in ([2019], [2018, 2019]):
+            with self.subTest(ref_years=ref_years):
+                with self.assertRaisesRegex(ValueError, re.escape(str(ref_years))):
+                    WindDirOffset(winddir=winddir, offset_start=-20, offset_end=20,
+                                  hist_ref_years=ref_years, hist_n_bins=36, verbose=0)
+        # A reference year with only missing values has no data either.
+        winddir.loc[winddir.index.year == 2020] = np.nan
+        with self.assertRaisesRegex(ValueError, "have no wind direction data"):
+            WindDirOffset(winddir=winddir, offset_start=-20, offset_end=20,
+                          hist_ref_years=[2020], hist_n_bins=36, verbose=0)
+
+    def test_year_with_only_nan_correlations_is_not_corrected(self):
+        from diive.core.utils.console import console
+        from diive.preprocessing.corrections import WindDirOffset
+        winddir = self._winddir(centre=90.0)
+        # 2022: one direction in each 10-degree bin. Every shift keeps one count
+        # per bin, so the histogram has no variance and every correlation is NaN.
+        flat = pd.Series(np.arange(5.0, 360.0, 10.0), name='WD',
+                         index=pd.date_range('2022-01-01', periods=36, freq='1h',
+                                             name='TIMESTAMP_MIDDLE'))
+        with console.capture() as cap:
+            wds = WindDirOffset(winddir=pd.concat([winddir, flat]), offset_start=-60,
+                                offset_end=60, hist_ref_years=[2020], hist_n_bins=36,
+                                verbose=1)
+        off = wds.get_yearly_offsets().set_index('YEAR')['OFFSET']
+        self.assertTrue(np.isnan(off[2022]))
+        self.assertIn("year 2022", cap.get())
+        corrected = wds.get_corrected_wind_directions()
+        pd.testing.assert_series_equal(corrected.loc['2022'], flat, check_freq=False)
+
+        # The other years are unchanged by the added year.
+        ref, ref_off = self._detect(winddir, n_bins=36)
+        self.assertEqual(off[2020], ref_off[2020])
+        self.assertEqual(off[2021], -self.PLANTED_OFFSET)
+        pd.testing.assert_series_equal(corrected.loc[:'2021'],
+                                       ref.get_corrected_wind_directions())
+
+
+# Abisko-like site in polar day in June. potrad's solar-noon shift there vacates
+# the last ~17 minutes of each calendar day, which potrad sets to 0 (L244).
+POLAR_LAT, POLAR_LON, POLAR_UTC = 68.35, 19.05, 1
+
+
+def _polar_series(start="2026-06-10", days=4, freq="10min", offset=2.0,
+                  lat=POLAR_LAT, lon=POLAR_LON, utc_offset=POLAR_UTC):
+    """Radiation with a sensor offset, on TIMESTAMP_MIDDLE, ending at midnight.
+
+    The true signal is potential radiation with potrad's midnight zeros replaced
+    by their neighbours, because the sky is not dark at midnight in polar day.
+    """
+    import diive as dv
+    step = pd.Timedelta(freq)
+    idx = pd.date_range(start, periods=int(pd.Timedelta(days=days) / step), freq=freq) + step / 2
+    idx.name = "TIMESTAMP_MIDDLE"
+    pr = dv.variables.potrad(timestamp_index=idx, lat=lat, lon=lon, utc_offset=utc_offset)
+    true = pr.where(pr > 0.001).interpolate().bfill().ffill()
+    measured = pd.Series(0.7 * true.to_numpy() + offset, index=idx, name="SW_IN")
+    return measured, 0.7 * true, pr
+
+
+def _true_night(index, lat, lon, utc_offset, period_min):
+    """Night where potential radiation is below 0.001 W m-2 with the minutes
+    potrad's solar-noon shift vacates taken from the neighbouring day's curve."""
+    from diive.variables.radiation import _noaa_solar_noon_minutes, _oneflux_daily_rpot
+    starts = index - pd.Timedelta(minutes=period_min / 2)
+    epoch = starts.min().normalize() - pd.Timedelta(days=1)
+    off = np.floor((starts - epoch) / pd.Timedelta(minutes=1) + 0.5).astype(np.int64)
+    dates = pd.date_range(epoch, periods=int((off.max() + period_min) // 1440) + 3, freq="D")
+    shifts = np.array([_noaa_solar_noon_minutes(d.year, d.month, d.day, -lon, -utc_offset) - 720
+                       for d in dates])
+    rows = np.array([d.dayofyear - 1 for d in dates])
+    total = np.zeros(len(index))
+    for k in range(period_min):
+        minute = off + k
+        day = minute // 1440
+        i = (minute % 1440) - shifts[day]
+        day = np.where(i < 0, day - 1, np.where(i >= 1440, day + 1, day))
+        i = np.mod(i, 1440)
+        total += _oneflux_daily_rpot(lat, rows[day] + i / 1440.0 + 1.0, i / 60.0)
+    return total / period_min < 0.001
+
+
+class TestNighttimeZeroOffsetPolarDay(unittest.TestCase):
+    """potrad's midnight zeros in polar day are not nighttime (L244)."""
+
+    def _diag(self, series, lat=POLAR_LAT, lon=POLAR_LON, utc_offset=POLAR_UTC, **kwargs):
+        import diive as dv
+        return dv.corrections.nighttime_zero_offset_diagnostics(
+            series=series, lat=lat, lon=lon, utc_offset=utc_offset, **kwargs)
+
+    def test_10min_midnight_zeros_are_not_zeroed_or_used_as_offset(self):
+        measured, true, pr = _polar_series(freq="10min")
+        # Precondition: potrad has one zero record per day, the last day's at
+        # the very end of the series.
+        self.assertEqual(int((pr <= 0.001).sum()), 4)
+        self.assertTrue(pr.iloc[-1] <= 0.001)
+        result = self._diag(measured.copy())
+        self.assertEqual(result.n_night, 0)
+        # No night, so no offset can be estimated and none is removed. Before
+        # the fix the real values at the zero records (17-19 W m-2) were the offset.
+        np.testing.assert_allclose(result.offset.to_numpy(), 0.0)
+        pd.testing.assert_series_equal(result.corrected, measured)
+        self.assertAlmostEqual(float((result.corrected - true).mean()), 2.0, places=9)
+
+    def test_1min_midnight_zero_runs_are_not_nighttime(self):
+        measured, _, pr = _polar_series(freq="1min", days=2)
+        self.assertGreater(int((pr <= 0.001).sum()), 20)  # one run of ~17 per day
+        result = self._diag(measured.copy())
+        self.assertEqual(result.n_night, 0)
+        pd.testing.assert_series_equal(result.corrected, measured)
+
+    def test_no_nighttime_at_all_leaves_the_offset_at_zero(self):
+        # 30-min polar day has no zero record, so no nighttime at all. The offset
+        # used to be NaN there, which made every corrected record NaN.
+        measured, _, pr = _polar_series(freq="30min")
+        self.assertFalse(bool((pr <= 0.001).any()))
+        result = self._diag(measured.copy())
+        self.assertEqual(result.n_night, 0)
+        self.assertFalse(result.corrected.isna().any())
+        pd.testing.assert_series_equal(result.corrected, measured)
+
+    def test_real_nights_next_to_the_midnight_zeros_stay_nighttime(self):
+        # Utqiagvik in early May: the shift vacates 00:00-01:27, the real night
+        # lasts from about 00:10 to 02:45. Records of the real night stay
+        # nighttime, the vacated records before it with the sun up do not (L266).
+        lat, lon, utc = 71.29, -156.79, -9
+        measured, _, pr = _polar_series(start="2026-05-10", days=4, lat=lat, lon=lon,
+                                        utc_offset=utc)
+        result = self._diag(measured.copy(), lat=lat, lon=lon, utc_offset=utc)
+        truth = _true_night(measured.index, lat, lon, utc, period_min=10)
+        self.assertGreater(int(truth.sum()), 50)
+        self.assertGreater(int(((pr <= 0.001) & ~truth).sum()), 0)  # precondition
+        np.testing.assert_array_equal(result.nighttime_flag.to_numpy() == 1, truth)
+
+    def test_late_solar_noon_follows_the_sun_across_midnight(self):
+        # L266: where solar noon is late, nights mixing the midnight zeros with a
+        # real night kept sunlit records as nighttime (10-min), and the old
+        # length tolerance made short real nights daytime (hourly).
+        for lat, lon, utc, freq in ((69.0, -30.0, 0, "10min"), (71.3, -156.6, -9, "10min"),
+                                    (67.0, -110.0, -6, "60min"), (69.0, -30.0, 0, "60min")):
+            with self.subTest(lon=lon, freq=freq):
+                step = pd.Timedelta(freq)
+                idx = pd.date_range("2023-01-01", "2024-01-01", freq=freq, inclusive="left") + step / 2
+                series = pd.Series(1.0, index=idx, name="SW_IN")
+                result = self._diag(series, lat=lat, lon=lon, utc_offset=utc)
+                truth = _true_night(idx, lat, lon, utc, period_min=int(step / pd.Timedelta("1min")))
+                np.testing.assert_array_equal(result.nighttime_flag.to_numpy() == 1, truth)
+
+    def test_normal_latitudes_keep_the_potrad_night(self):
+        # Bit-identity guard: away from polar day the night flag is potrad's own.
+        import diive as dv
+        from diive.variables import daytime_nighttime_flag_from_swinpot
+        for freq in ("30min", "10min", "1min"):
+            with self.subTest(freq=freq):
+                step = pd.Timedelta(freq)
+                idx = pd.date_range("2021-06-01", periods=int(pd.Timedelta(days=3) / step),
+                                    freq=freq) + step / 2
+                pr = dv.variables.potrad(timestamp_index=idx, lat=LAT, lon=LON,
+                                         utc_offset=UTC_OFFSET)
+                series = pd.Series(np.where(pr > 0.001, 0.7 * pr, 0.0) + 3.0, index=idx,
+                                   name="SW_IN")
+                _, raw_night = daytime_nighttime_flag_from_swinpot(pr, nighttime_threshold=0.001)
+                result = self._diag(series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET)
+                pd.testing.assert_series_equal(result.nighttime_flag, raw_night)
+                self.assertAlmostEqual(float(result.offset.median()), 3.0, places=9)
+
+    def test_night_next_to_an_index_gap_stays_nighttime(self):
+        # The evening night of 1 June ends at midnight because the records
+        # 00:00-06:00 of 2 June are missing. It is a real night.
+        series = _radiation_series(offset=3.0, days=3)
+        gap = (series.index >= "2021-06-02 00:00") & (series.index < "2021-06-02 06:00")
+        series = series[~gap]
+        result = self._diag(series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET)
+        evening = (series.index >= "2021-06-01 22:00") & (series.index < "2021-06-02 00:00")
+        self.assertTrue((result.nighttime_flag[evening] == 1).all())
+        self.assertTrue((result.corrected[evening] == 0).all())
+
+
+class TestNighttimeZeroOffsetSwinPot(unittest.TestCase):
+    """The `swin_pot` parameter replaces the computed potential radiation."""
+
+    def test_swin_pot_from_potrad_gives_the_default_result(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0)
+        swin_pot = dv.variables.potrad(timestamp_index=series.index, lat=LAT, lon=LON,
+                                       utc_offset=UTC_OFFSET)
+        default = dv.corrections.nighttime_zero_offset_diagnostics(
+            series=series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET)
+        given = dv.corrections.nighttime_zero_offset_diagnostics(
+            series=series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET, swin_pot=swin_pot)
+        for field in ("offset", "corrected_by_offset", "corrected", "nighttime_flag"):
+            with self.subTest(field=field):
+                pd.testing.assert_series_equal(getattr(given, field), getattr(default, field))
+        pd.testing.assert_series_equal(
+            dv.corrections.remove_nighttime_zero_offset(
+                series=series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET, swin_pot=swin_pot),
+            default.corrected)
+
+    def test_swin_pot_with_one_extra_record_per_end_matches_the_default_in_polar_day(self):
+        import diive as dv
+        measured, _, _ = _polar_series(freq="10min")
+        step = pd.Timedelta("10min")
+        wider = pd.DatetimeIndex([measured.index[0] - step]).append(measured.index).append(
+            pd.DatetimeIndex([measured.index[-1] + step]))
+        swin_pot = dv.variables.potrad(timestamp_index=wider, lat=POLAR_LAT, lon=POLAR_LON,
+                                       utc_offset=POLAR_UTC)
+        default = dv.corrections.nighttime_zero_offset_diagnostics(
+            series=measured, lat=POLAR_LAT, lon=POLAR_LON, utc_offset=POLAR_UTC)
+        given = dv.corrections.nighttime_zero_offset_diagnostics(
+            series=measured, lat=POLAR_LAT, lon=POLAR_LON, utc_offset=POLAR_UTC,
+            swin_pot=swin_pot)
+        pd.testing.assert_series_equal(given.corrected, default.corrected)
+        pd.testing.assert_series_equal(given.nighttime_flag, default.nighttime_flag)
+
+    def test_swin_pot_on_the_series_index_finds_the_zero_record_at_the_series_end(self):
+        # Each record is judged on its own window, so no record beyond the end is needed
+        import diive as dv
+        measured, _, _ = _polar_series(freq="10min")
+        swin_pot = dv.variables.potrad(timestamp_index=measured.index, lat=POLAR_LAT,
+                                       lon=POLAR_LON, utc_offset=POLAR_UTC)
+        result = dv.corrections.nighttime_zero_offset_diagnostics(
+            series=measured, lat=POLAR_LAT, lon=POLAR_LON, utc_offset=POLAR_UTC,
+            swin_pot=swin_pot)
+        self.assertEqual(result.n_night, 0)
+
+    def test_swin_pot_on_a_finer_grid_uses_each_record_period(self):
+        # Meteo screening's mixed grids: 10-min records at their END slot of a
+        # 1-min grid (slot = END - 30 s), the slots in between empty (NaN).
+        import diive as dv
+        lat, lon, utc = 69.0, -30.0, 0
+        ends = pd.date_range("2023-06-10 00:10", "2023-06-20 00:00", freq="10min")
+        middles = ends - pd.Timedelta("5min")
+        pr = dv.variables.potrad(timestamp_index=middles, lat=lat, lon=lon, utc_offset=utc)
+        slots = pd.date_range(ends[0], ends[-1], freq="1min") - pd.Timedelta("30s")
+        swin_pot = pd.Series(np.nan, index=slots)
+        swin_pot.loc[ends - pd.Timedelta("30s")] = pr.to_numpy()
+        series = pd.Series(1.0, index=ends - pd.Timedelta("30s"), name="SW_IN")
+        result = dv.corrections.nighttime_zero_offset_diagnostics(
+            series=series, lat=lat, lon=lon, utc_offset=utc, swin_pot=swin_pot)
+        truth = _true_night(middles, lat, lon, utc, period_min=10)
+        self.assertGreater(int(((pr <= 0.001).to_numpy() & ~truth).sum()), 0)  # precondition
+        np.testing.assert_array_equal(result.nighttime_flag.to_numpy() == 1, truth)
+
+    @staticmethod
+    def _coarse_then_fine(t_end, lat, lon, utc):
+        """10-min records up to END *t_end*, then 1-min records, on a 1-min slot grid."""
+        import diive as dv
+        ends10 = pd.date_range(t_end - pd.Timedelta("1D"), t_end, freq="10min")
+        ends1 = pd.date_range(t_end + pd.Timedelta("1min"), periods=600, freq="1min")
+        m10, m1 = ends10 - pd.Timedelta("5min"), ends1 - pd.Timedelta("30s")
+        slots = pd.date_range(ends10[0], ends1[-1], freq="1min") - pd.Timedelta("30s")
+        swin_pot = pd.Series(np.nan, index=slots)
+        swin_pot.loc[ends10 - pd.Timedelta("30s")] = dv.variables.potrad(
+            timestamp_index=m10, lat=lat, lon=lon, utc_offset=utc).to_numpy()
+        swin_pot.loc[m1] = dv.variables.potrad(
+            timestamp_index=m1, lat=lat, lon=lon, utc_offset=utc).to_numpy()
+        record_slots = ends10.append(ends1) - pd.Timedelta("30s")
+        period_sec = pd.Series(np.r_[np.full(len(ends10), 600.0), np.full(len(ends1), 60.0)],
+                               index=record_slots)
+        truth = np.r_[_true_night(m10, lat, lon, utc, period_min=10),
+                      _true_night(m1, lat, lon, utc, period_min=1)]
+        return pd.Series(1.0, index=record_slots, name="SW_IN"), swin_pot, period_sec, truth
+
+    def test_swin_pot_period_sec_gives_the_last_coarse_record_its_own_window(self):
+        # L278: without periods the 10-min record ending 00:20, just before the
+        # 1-min block, got a 1-min window (the spacing to its nearer neighbour).
+        # Utqiagvik in May: the real night begins inside the minutes potrad vacates.
+        import diive as dv
+        lat, lon, utc = 71.29, -156.79, -9
+        t_end = pd.Timestamp("2026-05-12 00:20")
+        series, swin_pot, period_sec, truth = self._coarse_then_fine(t_end, lat, lon, utc)
+        kwargs = dict(series=series, lat=lat, lon=lon, utc_offset=utc, swin_pot=swin_pot)
+        spacing = dv.corrections.nighttime_zero_offset_diagnostics(**kwargs)
+        own = dv.corrections.nighttime_zero_offset_diagnostics(**kwargs, swin_pot_period_sec=period_sec)
+        last_coarse = series.index.get_loc(t_end - pd.Timedelta("30s"))
+        wrong = np.flatnonzero((spacing.nighttime_flag.to_numpy() == 1) != truth)
+        np.testing.assert_array_equal(wrong, [last_coarse])  # precondition
+        np.testing.assert_array_equal(own.nighttime_flag.to_numpy() == 1, truth)
+
+    def test_swin_pot_period_sec_falls_back_to_the_spacing(self):
+        # NaN or missing periods use the spacing, so all-NaN periods change nothing
+        import diive as dv
+        lat, lon, utc = 71.29, -156.79, -9
+        series, swin_pot, period_sec, _ = self._coarse_then_fine(
+            pd.Timestamp("2026-05-12 00:20"), lat, lon, utc)
+        kwargs = dict(series=series, lat=lat, lon=lon, utc_offset=utc, swin_pot=swin_pot)
+        spacing = dv.corrections.nighttime_zero_offset_diagnostics(**kwargs)
+        for periods in (period_sec * np.nan, period_sec.iloc[:0]):
+            with self.subTest(n=len(periods)):
+                given = dv.corrections.nighttime_zero_offset_diagnostics(
+                    **kwargs, swin_pot_period_sec=periods)
+                pd.testing.assert_series_equal(given.nighttime_flag, spacing.nighttime_flag)
+                pd.testing.assert_series_equal(given.corrected, spacing.corrected)
+
+    def test_swin_pot_is_used_instead_of_the_coordinates(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0, days=2)
+        # All zero: every record is nighttime, so everything is zeroed.
+        swin_pot = pd.Series(0.0, index=series.index)
+        out = dv.corrections.remove_nighttime_zero_offset(
+            series=series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET, swin_pot=swin_pot)
+        np.testing.assert_allclose(out.to_numpy(), 0.0)
+
+    def test_swin_pot_must_cover_the_series(self):
+        import diive as dv
+        series = _radiation_series(offset=3.0, days=2)
+        swin_pot = pd.Series(0.0, index=series.index[1:])
+        with self.assertRaises(ValueError):
+            dv.corrections.remove_nighttime_zero_offset(
+                series=series, lat=LAT, lon=LON, utc_offset=UTC_OFFSET, swin_pot=swin_pot)
+
+
+class TestRelativeHumidityOffsetCarry(unittest.TestCase):
+    """Documented: the daily offset is interpolated and carried to all days (L247)."""
+
+    def test_one_foggy_day_lowers_every_record(self):
+        from diive.preprocessing.corrections import remove_relativehumidity_offset
+        idx = pd.date_range("2026-03-01 00:05", periods=144 * 10, freq="10min")
+        hour = idx.hour + idx.minute / 60
+        rh = np.asarray(75 + 20 * np.cos(2 * np.pi * (hour - 4) / 24), dtype=float)
+        rh[(idx.day == 1) & (hour >= 3) & (hour < 5)] = 103.0
+        series = pd.Series(rh, index=idx, name="RH")
+        out = remove_relativehumidity_offset(series=series.copy())
+        np.testing.assert_allclose((series - out).to_numpy(), 3.0)
+
+
+class TestSetExactValuesToMissingTolerance(unittest.TestCase):
+    """float32 storage must still match the value shown (L249)."""
+
+    def test_float32_value_matches(self):
+        from diive.preprocessing.corrections import set_exact_values_to_missing
+        values = np.array([np.float32(0.1), 0.1, 0.1000002, 5.0, np.float32(23.7)], dtype=float)
+        series = pd.Series(values, name="TA")
+        out = set_exact_values_to_missing(series=series, values=[0.1, 23.7], verbose=0)
+        # float32 0.1 and 23.7 match, 0.1000002 (2e-6 relative) does not
+        self.assertEqual(out.isna().tolist(), [True, True, False, False, True])
+
+    def test_zero_and_missing_code_match_exactly(self):
+        from diive.preprocessing.corrections import set_exact_values_to_missing
+        series = pd.Series([0.0, 1e-12, -1e-30, -9999.0, -9998.0, np.float32(-9999.0)], name="TA")
+        out = set_exact_values_to_missing(series=series, values=[0, -9999], verbose=0)
+        self.assertEqual(out.isna().tolist(), [True, False, False, True, False, True])
+
+    def test_non_numeric_values_raise_a_clear_error(self):
+        # L267: these raised TypeError/DTypePromotionError from np.isclose
+        from diive.preprocessing.corrections import set_exact_values_to_missing
+        series = pd.Series([-9999.0, 1.0], name="TA")
+        for values in ([None], ["-9999"], [pd.NA], [-9999, True], "-9999", -9999):
+            with self.subTest(values=values):
+                with self.assertRaisesRegex(ValueError, "values must be"):
+                    set_exact_values_to_missing(series=series, values=values, verbose=0)
+
+    def test_numpy_numbers_and_nan_are_accepted(self):
+        from diive.preprocessing.corrections import set_exact_values_to_missing
+        series = pd.Series([-9999.0, 1.0, np.nan], name="TA")
+        out = set_exact_values_to_missing(series=series, values=[np.int64(-9999), np.nan],
+                                          verbose=0)
+        self.assertEqual(out.isna().tolist(), [True, False, True])
+
+
+class TestSettoVerbose(unittest.TestCase):
+    """`verbose` reaches the reports of the set-to corrections (L252)."""
+
+    def _output(self, func, default, **kwargs):
+        from diive.core.utils.console import console, set_verbosity
+        set_verbosity(default)
+        with console.capture() as cap:
+            func(**kwargs)
+        return cap.get()
+
+    def test_set_exact_values_to_missing(self):
+        from diive.core.utils.console import (get_verbosity, set_verbosity,
+                                              VERBOSE_DEBUG, VERBOSE_PROGRESS)
+        from diive.preprocessing.corrections import set_exact_values_to_missing
+        kwargs = dict(series=pd.Series([0.0, 1.0], name="TA"), values=[0])
+        func = set_exact_values_to_missing
+        saved = get_verbosity()
+        try:
+            self.assertEqual(self._output(func, VERBOSE_DEBUG, verbose=0, **kwargs), "")
+            # The default prints the report as before
+            out = self._output(func, VERBOSE_PROGRESS, **kwargs)
+            self.assertIn("Number of records set to missing: 1", out)
+            self.assertNotIn("Locations", out)
+            self.assertIn("Locations", self._output(func, VERBOSE_PROGRESS, verbose=VERBOSE_DEBUG,
+                                                    **kwargs))
+        finally:
+            set_verbosity(saved)
+
+    def test_setto_threshold(self):
+        from diive.core.utils.console import (get_verbosity, set_verbosity,
+                                              VERBOSE_DEBUG, VERBOSE_PROGRESS)
+        from diive.preprocessing.corrections import setto_threshold
+        kwargs = dict(series=pd.Series([1.0, 20.0], name="TA"), threshold=10.0, type="max")
+        saved = get_verbosity()
+        try:
+            self.assertEqual(self._output(setto_threshold, VERBOSE_DEBUG, verbose=0, **kwargs), "")
+            self.assertIn("QA/QC set to threshold value",
+                          self._output(setto_threshold, VERBOSE_PROGRESS, **kwargs))
+        finally:
+            set_verbosity(saved)

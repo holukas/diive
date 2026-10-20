@@ -6,58 +6,69 @@ This guide covers development setup, running tests, and contributing code.
 
 ### Prerequisites
 
-- Python 3.12 or 3.13
-- Git
-- **uv** (modern, fast package manager) - [Install uv](https://docs.astral.sh/uv/getting-started/)
+- Python 3.12 or 3.13 (uv installs it itself)
+- [Git](https://git-scm.com/downloads)
+- Either [uv](https://docs.astral.sh/uv/getting-started/installation/), or a conda or venv environment
+  with pip 25.1 or newer
 
-### Setup Steps with uv (Recommended)
+### Getting the code
 
-1. **Clone the repository:**
+Fork the repository on GitHub if you plan to open a pull request, then clone it. New work starts
+from the `indev` branch, and pull requests target `indev`.
 
 ```bash
-git clone https://github.com/holukas/diive.git
+git clone https://github.com/holukas/diive.git   # or the URL of your fork
 cd diive
+git checkout indev
 ```
 
-2. **Install dependencies and development tools:**
+### Setup with uv (recommended)
 
 ```bash
-uv sync                              # Core dependencies + the 'dev' group (synced by default)
-uv sync --all-extras --all-groups    # Everything: 'gui'/'gui3d' extras + 'db'/'dev'/'build' groups
+uv sync --all-extras
 ```
 
-The optional pieces are split across two uv mechanisms, so `--all-extras` alone is not "everything":
+uv creates the environment in `.venv` with a matching Python, installs diive in editable mode and
+adds the `dev` group (tests, linting, docs, Jupyter), which it syncs by default. Run commands
+through `uv run`, for example `uv run pytest tests/test_gapfilling.py -v` or `uv run diive-gui`.
 
-| Kind | Name | Pulls in | Install |
-|---|---|---|---|
-| extra | `gui` | PySide6 desktop GUI | `uv sync --extra gui` |
-| extra | `gui3d` | PyVista/VTK 3D surface tabs | `uv sync --extra gui3d` |
-| extra + group | `db` | `influxdb-client` (InfluxDB engine) | `uv sync --group db` |
-| group | `dev` | test/lint/docs/notebook tooling | synced by default |
-| group | `build` | PyInstaller (standalone GUI build) | `uv sync --group build` |
+| Kind  | Name    | Adds                                            | Command                 |
+|-------|---------|-------------------------------------------------|-------------------------|
+| extra | `gui`   | PySide6 desktop app with 3-D tabs               | `uv sync --extra gui`   |
+| extra | `db`    | `influxdb-client` (internal use)                | `uv sync --extra db`    |
+| extra | `all`   | `gui`, `db` and JupyterLab                      | `uv sync --extra all`   |
+| group | `dev`   | Test, lint, docs and notebook tools             | included in `uv sync`   |
+| group | `build` | PyInstaller (standalone Windows app)            | `uv sync --group build` |
 
-3. **Verify installation:**
+`uv sync --all-extras` installs all extras, and `uv sync --all-extras --all-groups` also adds the
+`build` group. For a smaller setup, pick extras, e.g. `uv sync --extra gui`.
+
+### Setup with pip (conda or venv)
+
+Activate an environment with Python 3.12 or 3.13, then install diive in editable mode together
+with the `dev` group:
 
 ```bash
-uv run pytest tests/ -v
+python -m pip install --upgrade pip              # --group needs pip 25.1 or newer
+python -m pip install -e ".[all]" --group dev
 ```
 
-All tests should pass.
+For a smaller setup, use fewer extras (e.g. `".[gui]"`). `--group build` adds PyInstaller.
 
-### Alternative Setup with pip and venv
-
-`uv` is the supported path. If you use pip instead, note that the development
-tooling lives in dependency groups (a PEP 735 feature), not in an extra, so
-`pip install -e .[dev]` does not exist. Install the package, then the test
-tooling by hand:
+### Verify the setup
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e .          # Add extras if needed, e.g. pip install -e '.[gui]'
-pip install pytest
-pytest tests/ -v
+uv run pytest tests/test_gapfilling.py -v   # with pip: pytest tests/test_gapfilling.py -v
 ```
+
+See [Running Tests](#running-tests) for the full suite.
+
+### Standalone Windows app
+
+To build the desktop app as a Windows program that runs without Python, run
+`uv sync --extra gui --group build` and then `.\packaging\build_gui.ps1 -Clean` in PowerShell. The
+internal build with the database tabs uses `uv sync --extra all --group build` and `-WithDb`.
+Details: [packaging/README.md](packaging/README.md).
 
 ## Running Tests
 
@@ -83,7 +94,8 @@ Or directly with pytest (if environment is activated):
 pytest tests/ -v
 ```
 
-The GUI tests (`tests/test_gui.py`) run offscreen and skip themselves unless the
+The GUI tests (`tests/test_gui.py`, `tests/test_gui_config.py`,
+`tests/test_gui_meteo_screening.py`) run offscreen and skip themselves unless the
 `gui` extra is installed (`uv sync --extra gui`).
 
 `pytest-cov` is in the `dev` group, so coverage works out of the box:
@@ -96,21 +108,21 @@ uv run pytest tests/ --cov=diive --cov-report=term-missing
 uv run pytest tests/ --cov=diive --cov-context=test --cov-report=html
 ```
 
-Note that `tests/test_gui.py` drives a lot of library code on its way through
-the widgets, so it inflates the library figure. To see what the library tests
-cover on their own, deselect it:
+Note that the GUI tests drive a lot of library code on their way through
+the widgets, so they inflate the library figure. To see what the library tests
+cover on their own, deselect them:
 
 ```bash
-uv run pytest tests/ --ignore=tests/test_gui.py --cov=diive --cov-report=term-missing
+uv run pytest tests/ --ignore-glob='tests/test_gui*.py' --cov=diive --cov-report=term-missing
 ```
 
-Omitting `diive/gui` from the *report* is not the same thing — it hides those
-lines but still counts the coverage `test_gui.py` contributes elsewhere.
+Omitting `diive/gui` from the *report* is not the same thing: it hides those
+lines but still counts the coverage the GUI tests contribute elsewhere.
 
 [devnotes/COVERAGE_GAPS.md](devnotes/COVERAGE_GAPS.md) tracks what is still uncovered and why —
 worth a look before writing new tests, so you pick something that matters.
 
-The suite runs real models on real data (gap-filling, the flux processing chain,
+The suite runs real models on real data (gap-filling, the flux post-processing chain,
 the partitioning ports), so expect it to take minutes rather than seconds. Use
 `-k` or a single test file while iterating.
 
@@ -142,7 +154,7 @@ Let exceptions propagate unless you can recover. Be specific about what you catc
 try:
     result = operation()
 except FileNotFoundError:
-    logger.info("Using default fallback")
+    info("Using default fallback", verbose=self.verbose)  # diive.core.utils.console
     return default_value
 
 # Bad: too broad
@@ -184,11 +196,15 @@ import pandas as pd
 class FeatureEngineer:
     """Extract and engineer features from time series data."""
 
-    def fit_transform(
+    def __init__(
         self,
-        df: pd.DataFrame,
         target_col: str,
-    ) -> pd.DataFrame:
+        features_lag: Optional[list] = None,
+    ):
+        self.target_col = target_col
+        self.features_lag = features_lag
+
+    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Engineer features and return enriched dataframe."""
         ...
 ```
@@ -218,17 +234,18 @@ result.to_csv('output.csv')
 5. Update docstring with new parameter
 6. Add example in `examples/features/` if applicable
 
-### Adding a Gap-Filling Method to the Flux Processing Chain
+### Adding a Gap-Filling Method to the Flux Post-Processing Chain
 
-The chain uses composable per-level callables (`diive.flux.fluxprocessingchain`), not
+The chain uses composable per-level callables (`diive.flux.postprocessingchain`), not
 a monolithic class. To add an L4.1 gap-filling method:
 
 1. Add a `run_level41_newmethod(data, ...)` callable that builds the model and stores
    results in `data.levels.level41_newmethod` (keyed by ustar_scenario), returning a new
    `data` via `dataclasses.replace` — never mutate the input
 2. Build a `FeatureEngineer`, train the model, gap-fill
-3. Wire it into `run_chain` behind a `FluxConfig` flag and update `codegen.py`
-4. Update tests (`tests/test_fluxprocessingchain.py`) and add an example
+3. Wire it into `run_chain` behind a `FluxConfig` flag and update
+   `diive/flux/postprocessingchain/codegen.py`
+4. Update tests (`tests/test_postprocessingchain.py`) and add an example
 
 ### Adding an Outlier Detection Method
 
@@ -318,39 +335,47 @@ examples/
 
 **Example structure:**
 
+Examples are rendered by Sphinx-Gallery. The module docstring starts with an rst
+title, and `# %%` comment blocks split the script into cells, each with its own
+heading and text. See `examples/preprocessing/outlier_detection/outlier_hampel.py`.
+
 ```python
 """
-Title: What This Example Shows
+=========================
+What This Example Shows
+=========================
 
-Description of 2-3 sentences explaining the use case and key concepts.
-See diive.classname for API details.
+Two or three sentences on the use case and the key concepts.
 """
 
+# %%
+# Load data
+# ^^^^^^^^^
+#
+# One year of the bundled example data.
+
 import diive as dv
-import matplotlib.pyplot as plt
 
-# Load example data
 df = dv.load_exampledata_parquet()
+df = df.loc['2020'].copy()
 
-# Example 1: Basic usage
-def example_basic_usage():
-    """Description of this example."""
-    model = dv.gapfilling.RandomForestTS(
-        input_df=df,
-        target_col='NEE',
-    )
-    model.trainmodel()
-    return model
+# %%
+# Basic usage
+# ^^^^^^^^^^^
+#
+# What this step shows and why.
 
-# Example 2: Advanced usage
-def example_advanced_usage():
-    """Description of this example."""
-    ...
-
-if __name__ == '__main__':
-    model = example_basic_usage()
-    print(f"R² score: {model.scores_traintest_['r2']:.3f}")
+model = dv.gapfilling.RandomForestTS(
+    input_df=df[['NEE_CUT_REF_orig', 'Tair_f', 'VPD_f', 'Rg_f']],
+    target_col='NEE_CUT_REF_orig',
+)
+model.trainmodel()
+model.fillgaps()
+print(model.get_gapfilled_target().describe())
 ```
+
+A new example is registered in `examples/run_all_examples.py` and
+`examples/CATALOG.md`, and listed in its category's `README.rst`.
 
 ## Documentation
 
@@ -464,6 +489,17 @@ git push origin feature/my-new-feature
 - Docstrings are complete
 - Example works (if applicable)
 
+## Releasing
+
+1. Bump the version in `pyproject.toml` and the fallback `__version__` in
+   `diive/__init__.py`.
+2. Update `CHANGELOG.md`. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
+   with the sections Added, Changed, Deprecated, Removed and Fixed.
+3. Push a `vX.Y.Z` tag.
+
+`.github/workflows/publish.yml` checks that the tag and both version strings match,
+builds the package and publishes it to PyPI via trusted publishing.
+
 ## Debugging Tips
 
 **SHAP importance fluctuates:**
@@ -476,7 +512,7 @@ Reduce `shap_threshold_factor` in gap-filling config (default 0.5).
 Check that imports work: `python -c "from diive.module import Class"`
 
 **Examples fail during doc build:**
-Set `'abort_on_example_error': False` in `docs/conf.py`. Check build logs.
+The build continues past a failing example (`docs/conf.py` sets `'abort_on_example_error': False`) and lists the failures in the build log. Run the failing example on its own to debug it: `MPLBACKEND=Agg uv run python examples/<category>/<example>.py`.
 
 ## Getting Help
 

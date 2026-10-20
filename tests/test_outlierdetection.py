@@ -107,8 +107,8 @@ class TestOutlierDetection(unittest.TestCase):
             lower_limit=10,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         trm.calc()
@@ -116,29 +116,30 @@ class TestOutlierDetection(unittest.TestCase):
         frame = {'s_noise': s_noise, 'flag': flag}
         checkdf = pd.DataFrame.from_dict(frame)
 
-        # Counts encode the potrad day/night split (ONEFlux/FLUXNET parity), which
-        # classifies these 1488 July records; the twilight edges decide a handful of
-        # them, and two land on the day side, so trim_nighttime does not trim them.
+        # Counts encode the potrad day/night split (ONEFlux/FLUXNET parity) at the
+        # CH-DAV coordinates: 184 nighttime records are below 10, so TrimLow flags
+        # them plus the 184 highest nighttime values (368). Records at the twilight
+        # edges decide the split, so the counts change with the site coordinates.
         # Checks on bad data
         badmean = checkdf.loc[checkdf.flag == 2, 's_noise'].mean()
-        self.assertEqual(badmean, 19.914995180241654)
+        self.assertEqual(badmean, 20.160679858072996)
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 338.9234661966423)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -12.230067031003944)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 376)
+        self.assertEqual(baddata_stats.loc['count']['flag'], 368)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 376)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 368)
 
         # Checks on good data
         goodmean = checkdf.loc[checkdf.flag == 0, 's_noise'].mean()
-        self.assertEqual(goodmean, 17.82873128107376)
+        self.assertEqual(goodmean, 17.762908200494664)
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
         self.assertEqual(gooddata_stats.loc['max']['s_noise'], 338.3652327597214)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -40.33549755756406)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1112)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1120)
 
     def test_hampel_filter_daytime_nighttime(self):
         df = ed.load_exampledata_parquet()
@@ -164,8 +165,8 @@ class TestOutlierDetection(unittest.TestCase):
             separate_day_night=True,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         ham.calc(repeat=True)
@@ -177,18 +178,32 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 92)
+        # L239: median and MAD per period catch 3 more of the 104 planted spikes
+        # (all 95 rejections are planted spikes), incl. the -11.8 one.
+        self.assertEqual(baddata_stats.loc['count']['flag'], 95)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 92)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 95)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
         self.assertEqual(gooddata_stats.loc['max']['s_noise'], 33.72896422933141)
-        self.assertEqual(gooddata_stats.loc['min']['s_noise'], -11.769722879346313)
+        self.assertEqual(gooddata_stats.loc['min']['s_noise'], 5.049)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1396)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1393)
+
+    def test_hampel_int_nighttime_float_daytime_threshold(self):
+        """An int nighttime threshold used to make the threshold Series int64,
+        which then rejected the float daytime value with a TypeError."""
+        s = ed.load_exampledata_parquet()['Tair_f'].loc['2018-07']
+        kwargs = dict(series=s, window_length=48 * 3, separate_day_night=True,
+                      lat=46.81533, lon=9.85591, utc_offset=1)
+        ham_int = HampelDaytimeNighttime(n_sigma_daytime=5.5, n_sigma_nighttime=4, **kwargs)
+        ham_int.calc(repeat=False)
+        ham_float = HampelDaytimeNighttime(n_sigma_daytime=5.5, n_sigma_nighttime=4.0, **kwargs)
+        ham_float.calc(repeat=False)
+        pd.testing.assert_series_equal(ham_int.get_flag(), ham_float.get_flag())
 
     def test_hampel_filter_daytime_nighttime_doublediff(self):
         df = ed.load_exampledata_parquet()
@@ -214,8 +229,8 @@ class TestOutlierDetection(unittest.TestCase):
             separate_day_night=True,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         ham.calc(repeat=True)
@@ -227,18 +242,25 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 227)
+        # L226: records removed by an earlier iteration end a run, so repeat=True
+        # no longer takes the good records two steps from a spike pair.
+        # L239: median and MAD per period (223 -> 225).
+        # L255: edge tests with the central sign, differences inside one period
+        # (225 -> 220: the same 89 of 104 spikes, 5 fewer good records).
+        self.assertEqual(baddata_stats.loc['count']['flag'], 220)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 227)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 220)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
+        # L255: at n_sigma=100 one borderline spike (+34 degC) stays and another
+        # (+19 degC) goes, so the largest kept value changed (was 51.98).
         self.assertEqual(gooddata_stats.loc['max']['s_noise'], 53.93064794948049)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -24.68608044400628)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1261)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1268)
 
     def test_hampel_filter_basic(self):
         df = ed.load_exampledata_parquet()
@@ -264,8 +286,8 @@ class TestOutlierDetection(unittest.TestCase):
             separate_day_night=False,
             showplot=False,
             verbose=False,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1
         )
         ham.calc(repeat=True)
@@ -350,8 +372,8 @@ class TestOutlierDetection(unittest.TestCase):
         zdn = zScore(
             series=s_noise,
             separate_day_night=True,
-            lat=47.286417,
-            lon=7.733750,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1,
             thres_zscore=4,
             showplot=False,
@@ -434,8 +456,8 @@ class TestOutlierDetection(unittest.TestCase):
             winsize_daytime=48 * 2,
             winsize_nighttime=48 * 1,
             constant_sd=False,
-            lat=46.0,
-            lon=11.0,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1,
             showplot=False,
             verbose=False
@@ -460,21 +482,21 @@ class TestOutlierDetection(unittest.TestCase):
         good_dt_stats = good_dt.describe()
         self.assertEqual(good_dt_stats.loc['max']['s_noise'], 31.87658379873561)
         self.assertEqual(good_dt_stats.loc['min']['s_noise'], 4.3238046734031155)
-        self.assertEqual(good_dt_stats.loc['count']['s_noise'], 766)
+        self.assertEqual(good_dt_stats.loc['count']['s_noise'], 772)
         good_nt_stats = good_nt.describe()
         self.assertEqual(good_nt_stats.loc['max']['s_noise'], 17.073)
         self.assertEqual(good_nt_stats.loc['min']['s_noise'], 5.262)
-        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 376)
+        self.assertEqual(good_nt_stats.loc['count']['s_noise'], 377)
 
         # Checks on bad data
         bad_dt_stats = bad_dt.describe()
         self.assertEqual(bad_dt_stats.loc['max']['s_noise'], 231.78475439289213)
         self.assertEqual(bad_dt_stats.loc['min']['s_noise'], -38.52634400343396)
-        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 168)
+        self.assertEqual(bad_dt_stats.loc['count']['s_noise'], 167)
         bad_nt_stats = bad_nt.describe()
         self.assertEqual(bad_nt_stats.loc['max']['s_noise'], 224.8390630344748)
         self.assertEqual(bad_nt_stats.loc['min']['s_noise'], -36.84146979488223)
-        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 178)
+        self.assertEqual(bad_nt_stats.loc['count']['s_noise'], 172)
 
     def test_localsd_with_constantsd(self):
         df = ed.load_exampledata_parquet()
@@ -660,8 +682,8 @@ class TestOutlierDetection(unittest.TestCase):
         nighttime_minmax = [-5.0, 10.0]
         al = AbsoluteLimitsDaytimeNighttime(
             series=s_noise,
-            lat=46.815333,
-            lon=9.855972,
+            lat=46.81533,
+            lon=9.85591,
             utc_offset=1,
             minval_daytime=daytime_minmax[0],
             maxval_daytime=daytime_minmax[1],
@@ -845,3 +867,330 @@ class TestRenamedParamsRejected(unittest.TestCase):
         with self.assertRaises(TypeError) as ctx:
             zScore(series=self._series(), thres_zscoer=4)
         self.assertIn('unexpected keyword argument', str(ctx.exception))
+
+
+class TestStepwiseOutlierDetection(unittest.TestCase):
+    COORDS = dict(site_lat=47.286417, site_lon=7.733750, utc_offset=1)
+
+    def _sod(self, n=500):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        index = pd.date_range('2022-06-01 00:15', periods=n, freq='30min', name='TIMESTAMP_MIDDLE')
+        values = 10 + np.random.default_rng(1).normal(0, 1, n)
+        values[20] = 100
+        df = pd.DataFrame({'TA': values}, index=index)
+        return StepwiseOutlierDetection(dfin=df, col='TA', **self.COORDS)
+
+    def test_addflag_twice_is_a_noop(self):
+        sod = self._sod()
+        sod.flag_outliers_abslim_test(minval=0, maxval=50)
+        sod.addflag()
+        sod.addflag()
+        self.assertEqual(list(sod.flags.columns), ['FLAG_TA_OUTLIER_ABSLIM_TEST'])
+        # A re-run is still added under a new name.
+        sod.flag_outliers_abslim_test(minval=0, maxval=40)
+        sod.addflag()
+        self.assertEqual(len(sod.flags.columns), 2)
+
+    def test_lof_auto_neighbors_below_200_records(self):
+        sod = self._sod(n=150)
+        sod.flag_outliers_lof_test(repeat=False)
+        self.assertEqual(len(sod.last_flag), 150)
+
+    def test_rebase_series_keeps_committed_removals(self):
+        sod = self._sod()
+        sod.flag_outliers_abslim_test(minval=0, maxval=50)
+        sod.addflag()
+        corrected = sod.series_hires_orig.clip(upper=12).rename('corrected')
+        sod.rebase_series(corrected)
+        cleaned = sod.series_hires_cleaned
+        self.assertEqual(cleaned.name, 'TA')
+        self.assertTrue(np.isnan(cleaned.iloc[20]))
+        self.assertEqual(cleaned.isna().sum(), 1)
+        self.assertLessEqual(cleaned.max(), 12)
+
+    def test_zscore_per_period_threshold_is_passed_through(self):
+        sod = self._sod()
+        sod.flag_outliers_zscore_test(thres_zscore=100, thres_zscore_daytime=2,
+                                      separate_day_night=True, repeat=False)
+        n_default = int((sod.last_flag == 2).sum())
+        sod.flag_outliers_zscore_test(thres_zscore=100, separate_day_night=True, repeat=False)
+        self.assertGreater(n_default, int((sod.last_flag == 2).sum()))
+
+
+class TestTimeSpanWindows(unittest.TestCase):
+    """A rolling window given as a time span must flag exactly what the
+    equivalent record count flags. 10-minute and 1-minute data convert the same
+    span to different counts, which a unit mix-up would not survive."""
+
+    COORDS = dict(lat=47.478333, lon=8.364389, utc_offset=1)
+
+    @staticmethod
+    def _spiky(freq: str, days: int = 3) -> pd.Series:
+        idx = pd.date_range('2022-06-01', periods=int(pd.Timedelta(f'{days}D') / pd.Timedelta(freq)),
+                            freq=freq, name='TIMESTAMP_MIDDLE')
+        rng = np.random.default_rng(7)
+        values = 15 + 5 * np.sin(np.arange(len(idx)) * 2 * np.pi / (len(idx) / days))
+        values = values + rng.normal(0, 0.3, len(idx))
+        values[rng.choice(len(idx), 20, replace=False)] += rng.choice([-1, 1], 20) * 15
+        return pd.Series(values, index=idx, name='TA')
+
+    def _assert_same_flags(self, make, span: str, records: int, attr: str):
+        """`make(window)` builds a detector; span and records must agree."""
+        by_span = make(span)
+        by_records = make(records)
+        self.assertEqual(getattr(by_span, attr), records)
+        by_span.calc(repeat=False)
+        by_records.calc(repeat=False)
+        self.assertGreater(int((by_records.overall_flag == 2).sum()), 0)
+        pd.testing.assert_series_equal(by_span.overall_flag, by_records.overall_flag)
+
+    def test_hampel(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        for freq, records in [('10min', 72), ('1min', 720)]:
+            for separate in (False, True):
+                with self.subTest(freq=freq, separate_day_night=separate):
+                    s = self._spiky(freq)
+                    self._assert_same_flags(
+                        lambda w: Hampel(series=s, window_length=w, separate_day_night=separate,
+                                         **self.COORDS),
+                        span='12h', records=records, attr='window_length')
+
+    def test_localsd(self):
+        for freq, records in [('10min', 72), ('1min', 720)]:
+            s = self._spiky(freq)
+            with self.subTest(freq=freq):
+                self._assert_same_flags(lambda w: LocalSD(series=s, n_sd=3, winsize=w),
+                                        span='12h', records=records, attr='winsize')
+            with self.subTest(freq=freq, period='nighttime override'):
+                # Day/night subsets have no regular frequency, so the per-period
+                # span is converted from the full series.
+                self._assert_same_flags(
+                    lambda w: LocalSD(series=s, n_sd=3, winsize=records * 2, winsize_nighttime=w,
+                                      separate_day_night=True, **self.COORDS),
+                    span='12h', records=records, attr='winsize_nighttime')
+
+    def test_zscore_rolling(self):
+        for freq, records in [('10min', 72), ('1min', 720)]:
+            with self.subTest(freq=freq):
+                s = self._spiky(freq)
+                self._assert_same_flags(lambda w: zScoreRolling(series=s, thres_zscore=3, winsize=w),
+                                        span='12h', records=records, attr='winsize')
+
+    def test_span_not_a_multiple_of_the_frequency_raises(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s = self._spiky('10min')
+        for make in (lambda: Hampel(series=s, window_length='25min', separate_day_night=False),
+                     lambda: LocalSD(series=s, winsize='25min'),
+                     lambda: LocalSD(series=s, winsize=72, winsize_daytime='25min'),
+                     lambda: zScoreRolling(series=s, winsize='25min')):
+            with self.assertRaisesRegex(ValueError, 'whole multiple'):
+                make()
+
+    def test_zscore_rolling_minimum_applies_to_converted_span(self):
+        with self.assertRaisesRegex(ValueError, 'at least 3 records'):
+            zScoreRolling(series=self._spiky('10min'), winsize='20min')
+
+    def test_index_without_fixed_frequency_raises(self):
+        from diive.preprocessing.outlier_detection.common import window_to_records
+        irregular = pd.Series(0.0, index=pd.DatetimeIndex(
+            ['2022-06-01 00:00', '2022-06-01 00:07', '2022-06-01 00:30', '2022-06-01 01:10']))
+        with self.assertRaisesRegex(ValueError, 'no regular frequency'):
+            window_to_records('1h', irregular)
+        # A calendar frequency survives FlagBase but has no fixed duration.
+        monthly = pd.Series(np.arange(24, dtype=float),
+                            index=pd.date_range('2020-01-01', periods=24, freq='MS'))
+        with self.assertRaisesRegex(ValueError, 'calendar frequency'):
+            LocalSD(series=monthly, winsize='90D')
+
+    def test_int_windows_pass_through_unchanged(self):
+        from diive.preprocessing.outlier_detection.common import window_to_records
+        s = self._spiky('10min')
+        self.assertEqual(window_to_records(37, s), 37)
+        self.assertIsNone(window_to_records(None, s))
+        self.assertEqual(LocalSD(series=s).winsize, int(len(s) / 20))
+
+    def test_stepwise_wrappers_pass_the_span_through(self):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        s = self._spiky('10min')
+        sod = StepwiseOutlierDetection(dfin=s.to_frame(), col='TA', site_lat=self.COORDS['lat'],
+                                       site_lon=self.COORDS['lon'], utc_offset=1)
+        results = {}
+        for window in ('12h', 72):
+            sod.flag_outliers_hampel_test(window_length=window, separate_day_night=False, repeat=False)
+            hampel = sod.last_flag
+            sod.flag_outliers_localsd_test(n_sd=3, winsize=window, repeat=False)
+            localsd = sod.last_flag
+            sod.flag_outliers_zscore_rolling_test(thres_zscore=3, winsize=window, repeat=False)
+            results[window] = (hampel, localsd, sod.last_flag)
+        for by_span, by_records in zip(results['12h'], results[72]):
+            pd.testing.assert_series_equal(by_span, by_records)
+
+
+class TestRepeatStops(unittest.TestCase):
+    """Repeated runs must stop, and LOF must default to one pass.
+
+    L316: AbsoluteLimits day/night tested the input series on every pass, so
+    repeat=True found the same outliers forever. L317: LocalOutlierFactor
+    repeated by default, and every pass flagged the contamination fraction of
+    the remaining records again.
+    """
+
+    COORDS = dict(lat=46.815333, lon=9.855972, utc_offset=1)
+    MAX_PASSES = 5
+
+    @staticmethod
+    def _diel_series(periods: int = 48 * 10):
+        idx = pd.date_range('2024-06-01', periods=periods, freq='30min')
+        hours = idx.hour + idx.minute / 60
+        rng = np.random.default_rng(0)
+        return pd.Series(12 * np.sin((hours - 6) / 24 * 2 * np.pi) + 8
+                         + rng.normal(0, 1.5, periods), index=idx, name='TA')
+
+    def _calc_capped(self, detector, repeat):
+        """Run calc, failing the test instead of hanging when it does not stop."""
+        passes = []
+
+        def cb(iteration, n_outliers, filteredseries):
+            passes.append(n_outliers)
+            if iteration > self.MAX_PASSES:
+                raise RuntimeError(f"no convergence, outliers per pass: {passes}")
+
+        detector.calc(repeat=repeat, progress_callback=cb)
+        return passes
+
+    def test_absolutelimits_daytime_nighttime_repeat_stops(self):
+        s = self._diel_series()
+        kw = dict(minval_daytime=4.0, maxval_daytime=20.0,
+                  minval_nighttime=-2.0, maxval_nighttime=10.0, **self.COORDS)
+        once = AbsoluteLimits(series=s.copy(), **kw)
+        self._calc_capped(once, repeat=False)
+        repeated = AbsoluteLimits(series=s.copy(), **kw)
+        passes = self._calc_capped(repeated, repeat=True)
+
+        n_once = int((once.overall_flag == 2).sum())
+        self.assertGreater(n_once, 0)
+        # Fixed limits: the second pass on the cleaned series finds nothing.
+        self.assertEqual(passes, [n_once, 0])
+        pd.testing.assert_series_equal(repeated.overall_flag, once.overall_flag)
+        pd.testing.assert_series_equal(repeated.filteredseries, once.filteredseries,
+                                       check_names=False)
+
+    def test_absolutelimits_global_unchanged_by_repeat(self):
+        s = self._diel_series()
+        once = AbsoluteLimits(series=s.copy(), minval=-2.0, maxval=18.0)
+        self._calc_capped(once, repeat=False)
+        repeated = AbsoluteLimits(series=s.copy(), minval=-2.0, maxval=18.0)
+        passes = self._calc_capped(repeated, repeat=True)
+        self.assertEqual(len(passes), 1)
+        self.assertGreater(int((once.overall_flag == 2).sum()), 0)
+        pd.testing.assert_series_equal(repeated.overall_flag, once.overall_flag)
+
+    def test_lof_default_is_one_pass(self):
+        import inspect
+        from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
+        self.assertIs(inspect.signature(LocalOutlierFactor.calc).parameters['repeat'].default,
+                      False)
+        s = self._diel_series()
+        lof = LocalOutlierFactor(series=s.copy(), n_neighbors=20, contamination=0.01)
+        passes = []
+        lof.run(progress_callback=lambda i, n, fs: passes.append(n))
+        self.assertEqual(len(passes), 1)
+        single = LocalOutlierFactor(series=s.copy(), n_neighbors=20, contamination=0.01)
+        single.calc(repeat=False)
+        pd.testing.assert_series_equal(lof.overall_flag, single.overall_flag)
+        # About 1 % of the records, not most of the series.
+        self.assertLess(int((lof.overall_flag == 2).sum()), 0.02 * s.count())
+
+    def test_lof_codegen_keeps_repeat(self):
+        from diive.preprocessing.outlier_detection.codegen import (
+            absolutelimits_to_code, lof_to_code)
+        # Generated code must run what the GUI ran, whatever the calc default.
+        self.assertIn(").run()", lof_to_code({}, repeat=False))
+        self.assertIn(").run(repeat=True)", lof_to_code({}, repeat=True))
+        self.assertIn(").run()", absolutelimits_to_code({}, repeat=False))
+        self.assertIn(").run(repeat=True)", absolutelimits_to_code({}, repeat=True))
+
+
+class TestLOFTooFewValues(unittest.TestCase):
+    """L354: LocalOutlierFactor raised a scikit-learn ValueError on an all-NaN
+    series, and with separate_day_night=True on a period without values. Records
+    with n_neighbors values or fewer are now left untested with a warning."""
+
+    COORDS = dict(lat=46.815333, lon=9.855972, utc_offset=1)
+
+    @staticmethod
+    def _series():
+        idx = pd.date_range('2024-06-01 00:15', periods=48 * 5, freq='30min')
+        rng = np.random.default_rng(0)
+        return pd.Series(rng.normal(0, 1, len(idx)), index=idx, name='X')
+
+    def _run(self, s, **kwargs):
+        from diive.core.utils.console import console
+        from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
+        with console.capture() as cap:
+            lof = LocalOutlierFactor(series=s, n_neighbors=20, contamination=0.01,
+                                     verbose=True, **kwargs).run()
+        # Join the lines the console wrapped.
+        return lof, ' '.join(cap.get().split())
+
+    def test_all_nan(self):
+        s = self._series() * np.nan
+        for kwargs in ({}, dict(separate_day_night=True, **self.COORDS)):
+            lof, out = self._run(s.copy(), **kwargs)
+            self.assertEqual(int(lof.overall_flag.notna().sum()), 0)
+            self.assertEqual(int(lof.filteredseries.count()), 0)
+            self.assertIn('did not test', out)
+
+    def test_fewer_values_than_n_neighbors(self):
+        s = self._series() * np.nan
+        s.iloc[20:25] = [1.0, 2.0, 3.0, 4.0, 50.0]
+        lof, out = self._run(s.copy())
+        self.assertEqual(int((lof.overall_flag == 2).sum()), 0)
+        self.assertEqual(int((lof.overall_flag == 0).sum()), 5)
+        pd.testing.assert_series_equal(lof.filteredseries, s, check_names=False, check_freq=False)
+        self.assertIn('did not test all records', out)
+        self.assertIn('5 value(s)', out)
+
+    def test_daytime_without_values(self):
+        from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+        s = self._series()
+        s.iloc[100] = 30.0
+        _, _, is_daytime, is_nighttime = create_daytime_nighttime_flags(
+            timestamp_index=s.index, **self.COORDS)
+        s[is_daytime] = np.nan
+        lof, out = self._run(s.copy(), separate_day_night=True, **self.COORDS)
+        self.assertEqual(int(lof.overall_flag[is_daytime].notna().sum()), 0)
+        # The nighttime records are still tested.
+        self.assertEqual(int(lof.overall_flag[is_nighttime].notna().sum()), int(s.count()))
+        self.assertEqual(lof.overall_flag.iloc[100], 2)
+        self.assertIn('did not test the daytime records', out)
+        self.assertNotIn('nighttime records', out)
+
+
+class TestOffGridRecords(unittest.TestCase):
+    """L330: a detector gave a series without a frequency one with asfreq, which
+    starts the grid at the first record. One stray first record moved the grid
+    and every other record was lost without a message."""
+
+    def setUp(self):
+        from diive.core.utils.console import get_verbosity, set_verbosity, VERBOSE_PROGRESS
+        self._saved = get_verbosity()
+        set_verbosity(VERBOSE_PROGRESS)
+
+    def tearDown(self):
+        from diive.core.utils.console import set_verbosity
+        set_verbosity(self._saved)
+
+    def test_stray_first_record_keeps_others_and_warns(self):
+        from diive.core.utils.console import console
+        idx = pd.date_range('2022-06-01 00:30', periods=1440, freq='30min')
+        idx = pd.DatetimeIndex([pd.Timestamp('2022-06-01 00:00:01')]).append(idx).rename('TIMESTAMP_END')
+        s = pd.Series(np.random.default_rng(1).normal(size=len(idx)), index=idx, name='X')
+        with console.capture() as cap:
+            z = zScore(series=s, thres_zscore=4, verbose=False)
+            z.calc(repeat=False)
+        self.assertEqual(z.series.index.freqstr, '30min')
+        self.assertEqual(z.series.index[0], pd.Timestamp('2022-06-01 00:30'))
+        pd.testing.assert_series_equal(z.series, s.iloc[1:], check_freq=False)
+        self.assertEqual(int(z.overall_flag.notna().sum()), 1440)
+        self.assertIn('1 records are not on the 30min time grid', cap.get())

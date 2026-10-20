@@ -191,7 +191,7 @@ ax.set_title('CUT Threshold Comparison\n(error bars: p16/p84, center: p50)')
 ax.grid(axis='y', alpha=0.3)
 
 plt.tight_layout()
-plt.show()  # Uncomment to display
+plt.show()
 
 # %%
 # Method Comparison Summary

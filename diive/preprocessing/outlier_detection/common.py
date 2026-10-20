@@ -7,6 +7,10 @@ Shared functions for daytime/nighttime flag generation and other detection helpe
 Part of the diive library: https://github.com/holukas/diive
 """
 
+import pandas as pd
+from pandas import Series
+
+from diive.core.utils.console import VERBOSE_PROGRESS, detail
 from diive.variables import DaytimeNighttimeFlag
 
 # Parameter names that changed when the day/night settings were unified across
@@ -42,6 +46,68 @@ def reject_legacy_params(unexpected: dict, detector: str, renamed: dict = None) 
             f"settings were unified across the outlier detectors. Pass '{table[name]}' instead."
         )
     raise TypeError(f"{detector}.__init__() got an unexpected keyword argument '{name}'")
+
+
+def window_to_records(window: int | str | None, series: Series, name: str = 'window',
+                      verbose: bool = False) -> int | None:
+    """Return a rolling window as a record count.
+
+    An int (or None) is returned unchanged. A pandas time span such as ``'7D'``,
+    ``'12h'`` or ``'30min'`` becomes the number of records it covers at the
+    regular frequency of ``series.index``, so the same setting means the same
+    duration at any data resolution.
+
+    Raises:
+        ValueError: If the index has no fixed frequency (irregular timestamps, or
+            a calendar frequency such as month start), if ``window`` is not a
+            fixed duration, or if the span is not a whole multiple of the
+            frequency.
+
+    Example:
+        >>> import pandas as pd
+        >>> s = pd.Series(0.0, index=pd.date_range('2024-01-01', periods=2000, freq='10min'))
+        >>> window_to_records('7D', s)
+        1008
+        >>> window_to_records(48, s)
+        48
+    """
+    if not isinstance(window, str):
+        return window
+
+    freq = getattr(series.index, 'freq', None)
+    step = None
+    if freq is not None:
+        # Calendar offsets (month, year, business day, week) have no fixed
+        # duration and raise on `.nanos`.
+        try:
+            step = pd.Timedelta(freq.nanos, unit='ns')
+        except ValueError:
+            step = None
+    if step is None:
+        raise ValueError(
+            f"{name}={window!r} is a time span, which needs a time index with a fixed "
+            f"frequency to be converted into records, but the index has "
+            f"{'the calendar frequency ' + repr(freq.freqstr) if freq is not None else 'no regular frequency'}. "
+            f"Make the index regular (e.g. resample or asfreq) or pass {name} as a record count.")
+
+    try:
+        span = pd.Timedelta(window)
+    except ValueError:
+        raise ValueError(
+            f"{name}={window!r} is not a fixed duration. Pass a time span such as "
+            f"'7D', '12h' or '30min', or a record count.") from None
+
+    n_records, remainder = divmod(span, step)
+    if n_records < 1:
+        raise ValueError(f"{name}={window!r} must span at least one record of {freq.freqstr!r} data.")
+    if remainder != pd.Timedelta(0):
+        raise ValueError(
+            f"{name}={window!r} is not a whole multiple of the data frequency "
+            f"{freq.freqstr!r}. Pass a span that is, or a record count.")
+
+    detail(f"{name}={window!r} = {n_records} records at {freq.freqstr!r}",
+           verbose=verbose, min_level=VERBOSE_PROGRESS)
+    return int(n_records)
 
 
 def create_daytime_nighttime_flags(timestamp_index, lat, lon, utc_offset):

@@ -55,7 +55,7 @@ Use Cases
    detector = dv.outliers.Hampel(
        series=df['NEE'],
        n_sigma=5.5,
-       window_length=48 * 13,  # window size in records, here 13 days of half-hourly data
+       window_length=48 * 13,  # record count (13 days of 30-min data), or a time span such as '13D'
        separate_day_night=True,
        lat=47.286417,
        lon=7.733750,

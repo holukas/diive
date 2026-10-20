@@ -1,11 +1,17 @@
 """
+ML: GAP-FILLING BASE
+====================
+
+Base class for gap-filling with ML regressors (Random Forest, XGBoost): training, scoring, SHAP importances and gap-filling.
+
 kudos: https://datascience.stackexchange.com/questions/15135/train-test-validation-set-splitting-in-sklearn
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import shap
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -15,6 +21,7 @@ from rich.table import Table
 
 import diive.core.dfun.frames as fr
 from diive.core.ml.results import GapFillingResult
+from diive.core.ml.shap_import import import_shap
 from diive.core.times.times import vectorize_timestamps
 from diive.core.utils.console import (
     VERBOSE_DEBUG,
@@ -28,6 +35,8 @@ from diive.core.utils.console import (
     warn,
 )
 from diive.core.ml.scores import prediction_scores
+
+shap = import_shap()
 
 
 class MlRegressorGapFillingBase:
@@ -75,13 +84,15 @@ class MlRegressorGapFillingBase:
             test_size:
                 Proportion of complete (non-gap) data to reserve for testing, between 0.0-1.0.
                 Default: 0.25 (75% train, 25% test on non-gap data only).
-                - Smaller test_size: tighter train set but more noise in test metrics
-                - Larger test_size: looser train set but better estimate stability
+                - Smaller test_size: more training data, noisier test scores
+                - Larger test_size: less training data, more stable test scores
                 Standard value 0.25 balances both considerations.
-                The test set is sampled RANDOMLY across the record (not a temporal
-                block) — the appropriate validation for gap-filling (interpolating
-                short scattered gaps), not extrapolation. See the train/test split
-                in this constructor for the full rationale.
+                The test set is sampled RANDOMLY across the record, not as a
+                temporal block. This reproduces the gap-filling task: gaps lie
+                between observed data and are filled from drivers measured at the
+                same timestamps. A block split would measure transferability to an
+                unseen period instead. See the train/test split in this
+                constructor.
 
             below_zero:
                 How to treat predicted values below zero for variables that cannot be negative
@@ -118,8 +129,8 @@ class MlRegressorGapFillingBase:
             scores_: Model performance metrics (MAE, RMSE, R²) for gap-filling.
             scores_traintest_: Held-out performance metrics from the train/test
                 split (the honest generalization estimate). The split is random
-                (scattered in time), not temporal — the right validation for
-                gap-filling; see the split in __init__.
+                (scattered in time), not temporal, because that matches the
+                gap-filling task. See the split in __init__.
 
         For Feature Engineering Parameters:
             See diive.core.ml.feature_engineer.FeatureEngineer for comprehensive documentation
@@ -200,12 +211,13 @@ class MlRegressorGapFillingBase:
         # observed target values at timestamps scattered across the whole record.
         #
         # A random (not temporal/block) split is the correct validation for
-        # GAP-FILLING: real gaps are typically short and scattered among observed
-        # data, so a random hold-out reproduces the actual task — interpolating an
-        # isolated timestamp from mostly-present neighbours. A temporal/block split
-        # would instead measure EXTRAPOLATION skill (the right question for
-        # forecasting or driver attribution), which understates gap-filling
-        # performance. Keep this random split unless the goal changes.
+        # GAP-FILLING: gaps lie between observed data and each gap record is
+        # predicted from the drivers measured at the same timestamp, so a random
+        # hold-out reproduces the actual task. A temporal/block split would
+        # instead measure transferability to an unseen period (the right question
+        # for forecasting or driver attribution). This holds for long gaps too:
+        # driver-based models often fill them better than MDS. Keep this random
+        # split unless the goal changes.
         _temp_df = self.model_df.copy().dropna()
 
         self.train_df, self.test_df = train_test_split(_temp_df, test_size=self.test_size,
@@ -265,8 +277,8 @@ class MlRegressorGapFillingBase:
 
     @property
     def feature_importances_reduction_(self) -> pd.DataFrame:
-        """Return feature importance from feature reduction, model training on training data,
-        with importances calculated using test data (holdout set)"""
+        """Return feature importance from feature reduction: a model with an added
+        random variable, fitted and explained on the same training data"""
         if not isinstance(self._feature_importances_reduction, pd.DataFrame):
             raise Exception(f'Not available: feature importances from feature reduction.')
         return self._feature_importances_reduction
@@ -287,10 +299,10 @@ class MlRegressorGapFillingBase:
         scored on the unseen test split.
 
         The test split is a RANDOM subset (``test_size``, default 25%) of the
-        complete rows, scattered across the record — not a temporal block. This
-        is the correct validation for gap-filling, which interpolates short
-        scattered gaps from nearby observed data; a temporal/block split would
-        measure extrapolation instead and understate gap-filling skill. See the
+        complete rows, scattered across the record, not a temporal block. This
+        is the correct validation for gap-filling, where each gap record is
+        predicted from the drivers measured at the same timestamp. A block split
+        would measure transferability to an unseen period instead. See the
         train/test split in ``__init__`` for the full rationale."""
         if not self._scores_traintest:
             raise Exception(f'Not available: model scores for gap-filling.')
@@ -655,10 +667,10 @@ class MlRegressorGapFillingBase:
 
         No gap-filling is done here, only the model is trained (on ``train_df``)
         and evaluated on the unseen ``test_df``. That test set is a **random**
-        subset of the complete rows (scattered in time, not a temporal block) —
-        the correct validation for gap-filling, which interpolates short scattered
-        gaps from nearby observed data rather than extrapolating long unseen
-        periods. See the train/test split in :meth:`__init__` for the rationale.
+        subset of the complete rows (scattered in time, not a temporal block).
+        This is the correct validation for gap-filling, where each gap record is
+        predicted from the drivers measured at the same timestamp. See the
+        train/test split in :meth:`__init__` for the rationale.
 
         Args:
             showplot_scores: shows plot of predicted vs observed
@@ -673,9 +685,10 @@ class MlRegressorGapFillingBase:
              f"({self.model_df.index[0]} to {self.model_df.index[-1]})", verbose=self.verbose)
         info(f"Train/test split: {len(self.train_df):,} train / {len(self.test_df):,} test "
              f"({self.test_size * 100:.0f}% held out)", verbose=self.verbose)
-        info("[dim]Test set is a RANDOM subset (scattered in time), not a temporal block "
-             "— the right validation for gap-filling (short scattered gaps), not "
-             "extrapolation.[/dim]", verbose=self.verbose)
+        info("[dim]Test set is a RANDOM subset of the complete records, not a temporal "
+             "block. This reproduces the gap-filling task: gaps lie between observed "
+             "records and are filled from the drivers at the same timestamp.[/dim]",
+             verbose=self.verbose)
         self._log_config()
         idtxt = f"TRAIN & TEST "
 
@@ -796,11 +809,13 @@ class MlRegressorGapFillingBase:
         X = features
 
         Args:
+            showplot_scores: shows plot of predicted vs observed
+            showplot_importance: shows plot of SHAP feature importances
             progress_callback: Optional ``callable(fraction: float)`` invoked as the
                 full-record SHAP importance computation advances (0.0 -> 1.0). This is
-                the slowest part on large records; a caller can use it to drive a
-                progress bar. When None (default) the SHAP call runs in one shot,
-                exactly as before — no behaviour or numeric change for existing callers.
+                the slowest part on large records, and a caller can use it to drive a
+                progress bar. When None (default) the SHAP call runs in one shot.
+                The results are the same either way.
         """
         self._section(f"GAP-FILLING — {self.target_col}")
         self._fillgaps_fullmodel(showplot_scores, showplot_importance,
@@ -1041,17 +1056,6 @@ class MlRegressorGapFillingBase:
         df[random_col] = np.random.RandomState(self._random_state).randn(df.shape[0])
         return df, random_col
 
-    # def _lag_features(self, features_lag_exclude_cols):
-    #     """Add lagged variants of variables as new features"""
-    #     exclude_cols = [self.target_col]
-    #     if features_lag_exclude_cols:
-    #         exclude_cols += features_lag_exclude_cols
-    #     return diive.pkgs.createvar.laggedvariants.lagged_variants(df=self.model_df,
-    #                                                                stepsize=self.features_lag_stepsize,
-    #                                                                lag=self.features_lag,
-    #                                                                exclude_cols=exclude_cols,
-    #                                                                verbose=self.verbose)
-
     def _check_n_cols(self):
         """Check number of columns"""
         if len(self.model_df.columns) == 1:
@@ -1086,7 +1090,7 @@ class MlRegressorGapFillingBase:
         df = self.model_df.copy()
 
         # Test how the model performs with all y data
-        # Since the model was previously trained on test data,
+        # Since the model was previously trained on the training data,
         # here it is checked how well the model performs when
         # predicting all available y data.
         # This is needed to calculate feature importance and scores.

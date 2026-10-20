@@ -5,8 +5,8 @@ GUI.WIDGETS.MDS_RESULTS: MDS GAP-FILLING RESULTS DASHBOARD
 The "Results" page of the MDS gap-filling tab — a slimmed, card-based dashboard
 tailored to ``dv.gapfilling.FluxMDS``. MDS is not an ML regressor, so it has no
 held-out test split, no SHAP feature importances and no feature reduction; the
-panel instead surfaces what MDS *does* produce: the configuration, the in-sample
-fit scores, the per-quality-level gap-fill breakdown (``model.quality_breakdown()``)
+panel instead surfaces what MDS *does* produce: the configuration, the fit
+scores, the per-quality-level gap-fill breakdown (``model.quality_breakdown()``)
 and a quality-level bar plot, plus a predicted-vs-observed scatter and the
 gap-filled cumulative sum.
 
@@ -41,10 +41,12 @@ from diive.gui.widgets.mpl_canvas import MplCanvas
 
 _PLOT_FONT = 8
 
-#: In-sample MDS score metrics in display order: (label, key, tooltip).
+#: MDS score metrics in display order: (label, key, tooltip).
 _METRICS = [
     ("R²", "r2", "Coefficient of determination on the complete (observed) records — "
-                 "1 = perfect. In-sample only (MDS has no held-out test split)."),
+                 "1 = perfect. MDS has no held-out test split. In diive mode each record "
+                 "is left out of its own prediction. In ONEFlux and REddyProc mode "
+                 "it stays in its own sample (in-sample)."),
     ("RMSE", "rmse", "Root mean squared error on the observed records, in target units."),
     ("MAE", "mae", "Mean absolute error on the observed records, in target units."),
     ("MedAE", "medae", "Median absolute error on the observed records, in target units."),
@@ -55,8 +57,10 @@ _METRICS = [
 #: Score interpretation note: MDS scores are computed by predicting the *observed*
 #: records (which is all MDS can compare against — there is no withheld test set).
 _SCORES_SUBTITLE = (
-    "In-sample fit: MDS predictions vs. the observed values it could compare "
-    "against. MDS has no held-out test split, so there is no separate test score.")
+    "MDS predictions vs. the observed values it could compare against. In diive "
+    "mode each record is left out of its own prediction. In ONEFlux and REddyProc "
+    "mode it stays in its own sample (in-sample). MDS has no held-out test split, "
+    "so there is no separate test score.")
 
 
 def _fmt(val, kind: str = "g") -> str:
@@ -166,8 +170,11 @@ class MdsResultsPanel(QScrollArea):
             ("ta_tol", f"{model.ta_tol} °C"),
             ("vpd_tol", f"{model.vpd_tol} kPa"),
             ("avg_min_n_vals", str(model.avg_min_n_vals)),
-            ("sym_mean", str(model.sym_mean)),
+            ("mode", str(model.mode)),
             ("vpd_in_kpa", str(model.vpd_in_kpa)),
+            ("swin_qc", str(model.swin_qc or "(none)")),
+            ("ta_qc", str(model.ta_qc or "(none)")),
+            ("vpd_qc", str(model.vpd_qc or "(none)")),
         ]
         # No stretch: label + value hug their content and cluster left.
         table = self._make_table(["Parameter", "Value"], len(rows), stretch_col=None)

@@ -62,8 +62,8 @@ print(f"  NEE_CUT_REF_f (CO2 flux): {nee_series.min():.2f} to {nee_series.max():
 # quality check against the same reference.
 sw_pot = potrad(
     timestamp_index=rg_series.index,
-    lat=47.286417,   # Site latitude
-    lon=7.733750,    # Site longitude
+    lat=46.81533,   # Site latitude
+    lon=9.85591,    # Site longitude
     utc_offset=1     # UTC+1
 )
 

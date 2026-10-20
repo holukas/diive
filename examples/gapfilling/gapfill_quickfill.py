@@ -5,9 +5,9 @@ QuickFill: Rapid Prototyping
 
 Rapid gap-filling using RandomForestTS with minimal features.
 
-QuickFill enables exploratory and preliminary gap-filling with speed. It uses
-single lag feature only (immediate past value) and minimal tree complexity
-for very fast execution (~3 seconds for typical dataset).
+QuickFill enables exploratory and preliminary gap-filling with speed. Its only
+features are a single lag of one record and the timestamp features, and it uses
+small trees for very fast execution (~3 seconds for typical dataset).
 
 Quality: Low (exploratory only - not for production)
 Speed: Very fast (~3 seconds)

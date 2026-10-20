@@ -3,8 +3,8 @@ GUI.TABS.OVERVIEW: SELECTED-VARIABLE OVERVIEW
 =============================================
 
 The first tab, shown when a dataset is loaded. Pick a variable on the left
-(full-height list); the right column shows a multi-panel figure with a strip of
-KPI-style stat cards (`dv.sstats`) directly below it. Figure panels are easy to
+(full-height list); the right column shows a hero band (identity + all summary
+stats from `dv.sstats`) above a multi-panel figure. Figure panels are easy to
 extend (`_PANELS`).
 
 Part of the diive library: https://github.com/holukas/diive
@@ -49,6 +49,17 @@ def _is_flag(name: str) -> bool:
     """A QC/outlier flag column (``FLAG_..._TEST`` / ``..._QCF``) — not a series
     worth auto-plotting; the Overview prefers the cleaned data column instead."""
     return str(name).startswith("FLAG_")
+
+
+def _is_plottable(dtype) -> bool:
+    """True for a numeric column dtype the Overview can plot and summarise.
+
+    Text, datetime, boolean and object columns are not plotted: `dv.sstats`
+    cannot summarise them, and a text column becomes a categorical axis with
+    one category per record, which took minutes to draw on the GUI thread
+    (L333)."""
+    return (pd.api.types.is_numeric_dtype(dtype)
+            and not pd.api.types.is_bool_dtype(dtype))
 
 # Overview figure layout (3 rows x 6 cols): the date/time heatmap fills the
 # right column (col 5) top-to-bottom. The time series spans the top two rows
@@ -479,7 +490,8 @@ class HeroBand(QFrame):
         h = QHBoxLayout(self)
         h.setContentsMargins(12, 8, 12, 8)
         h.setSpacing(12)
-        h.addWidget(_chip(chip_label, chip_bg, chip_fg))
+        self._chip = _chip(chip_label, chip_bg, chip_fg)
+        h.addWidget(self._chip)
         h.addStretch(1)
         # Metrics strip: rebuilt after each run from set_metrics().
         self._metrics_host = QWidget()
@@ -487,6 +499,10 @@ class HeroBand(QFrame):
         self._metrics_lay.setContentsMargins(0, 0, 0, 0)
         self._metrics_lay.setSpacing(12)
         h.addWidget(self._metrics_host)
+
+    def set_chip(self, text: str) -> None:
+        """Change the method chip's text (a tab that switches methods)."""
+        self._chip.setText(text)
 
     def set_metrics(self, metrics) -> None:
         """Rebuild the strip from ``[(name, value, tooltip), ...]``."""
@@ -737,7 +753,7 @@ class OverviewTab(DiiveTab):
         # carries the per-variable identity + stats below it.
         outer.addLayout(build_titlebar(self.title))
 
-        # Variable list (left, full height) | right column (figure over stats).
+        # Variable list (left, full height) | right column (stats over figure).
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.varpanel = VariablePanel()
         self.varpanel.selected.connect(self._on_select)
@@ -799,7 +815,9 @@ class OverviewTab(DiiveTab):
         prev_created = getattr(self, "_created", set())
         new_cols = [c for c in cols if c in created and c not in prev_created]
         self._df = df
-        self._created = created
+        # A copy: the main window grows its own set in place, which would make
+        # every later column look already known and never auto-selected.
+        self._created = set(created)
         # A leftover fuzzy-filter would hide a freshly added variable that doesn't
         # match it (the reported "new var not visible"); clear it so the new
         # feature actually shows. set_variables re-applies whatever text remains.
@@ -812,8 +830,10 @@ class OverviewTab(DiiveTab):
         # Auto-select a freshly added *non-flag* column (the cleaned series).
         # If every new column is a flag, select none here and fall through to
         # the surviving selection / default — plotting a bare 0/2 flag is not
-        # useful and was never the intent.
-        non_flags = [c for c in new_cols if not _is_flag(c)]
+        # useful and was never the intent. A non-numeric column (e.g. a text
+        # timestamp) is skipped the same way: there is nothing to plot.
+        plottable = {str(c): _is_plottable(t) for c, t in df.dtypes.items()}
+        non_flags = [c for c in new_cols if not _is_flag(c) and plottable[c]]
         feature = non_flags[0] if non_flags else None
         if feature in cols:
             self.varpanel.scroll_to(feature)  # bring the appended row into view
@@ -821,7 +841,9 @@ class OverviewTab(DiiveTab):
         elif self._current in cols:
             self._on_select(self._current)
         elif cols:
-            default = _DEFAULT_VAR if _DEFAULT_VAR in cols else cols[0]
+            numeric = [c for c in cols if plottable[c]]
+            default = (_DEFAULT_VAR if _DEFAULT_VAR in cols
+                       else (numeric or cols)[0])
             self._on_select(default)
 
     def _on_select(self, name: str, _additive: bool = False) -> None:
@@ -860,6 +882,9 @@ class OverviewTab(DiiveTab):
                 engine.set(w_pad=0.015, h_pad=0.02, wspace=0.0, hspace=0.10)
             except (AttributeError, TypeError):
                 pass
+        if not _is_plottable(series.dtype):
+            self._show_not_numeric(name)
+            return
         gs = fig.add_gridspec(3, 6)
         # Full series for the current range; the diel cycle re-slices it on zoom.
         self._zoom_series = series
@@ -910,6 +935,21 @@ class OverviewTab(DiiveTab):
                 shared_x_ax.set_xlim(x0, x1 + (x1 - x0) * 0.03)
             shared_x_ax.callbacks.connect("xlim_changed", self._on_zoom)
         self._thin_time_series()
+        self.canvas.draw()
+
+    def _show_not_numeric(self, name: str) -> None:
+        """Replace the panels with a note for a column that is not numeric.
+
+        Clears the zoom state too, so zoom, event focus and the summary
+        refresh find no axes of an earlier variable."""
+        self._zoom_series = None
+        self._diel_ax = self._hist_ax = self._heatmap_ax = None
+        self._heatmap_ylim = None
+        self._shared_x_ax = None
+        self.canvas.fig.text(
+            0.5, 0.5, f"{name} is not numeric, nothing to plot.",
+            ha="center", va="center", fontsize=_TITLE_FONTSIZE,
+            color=theme.manager.tokens["INK"])
         self.canvas.draw()
 
     def focus_on(self, start, end) -> None:
@@ -1137,9 +1177,11 @@ class OverviewTab(DiiveTab):
                 # a marker to stay visible.
                 long_series = len(series) > _MARKER_MAX_POINTS
                 n_lines = len(ax.lines)
+                # An explicit FormatStyle keeps the class's default look (left
+                # title, open frame) out: _style_panel sets the panel's own.
                 dv.plotting.TimeSeries(series).plot(
-                    ax=ax, color=_TS_COLOR, linewidth=0.7,
-                    marker=not long_series, markersize=2.5)
+                    ax=ax, format_style=dv.plotting.FormatStyle(), color=_TS_COLOR,
+                    linewidth=0.7, marker=not long_series, markersize=2.5)
                 if long_series:
                     # Drawn thinned for its view (see _thin_time_series); the
                     # full record stays on the line for the hover. Needs
@@ -1186,8 +1228,9 @@ class OverviewTab(DiiveTab):
                 ax.fill_between(daily.index, (daily - sd).to_numpy(),
                                 (daily + sd).to_numpy(), color=_DAILY_COLOR,
                                 alpha=0.2, edgecolor="none", zorder=0)
-                dv.plotting.TimeSeries(daily).plot(ax=ax, color=_DAILY_COLOR,
-                                                   linewidth=0.8, marker=True, markersize=2.5)
+                dv.plotting.TimeSeries(daily).plot(ax=ax, format_style=dv.plotting.FormatStyle(),
+                                                   color=_DAILY_COLOR, linewidth=0.8, marker=True,
+                                                   markersize=2.5)
                 ax.axhline(0, color=_ZERO_COLOR, linestyle="--", linewidth=1.0,
                            alpha=0.6, zorder=0)
             elif plot_type == "Histogram":

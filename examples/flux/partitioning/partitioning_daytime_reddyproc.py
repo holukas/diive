@@ -16,6 +16,9 @@ RECO and GPP are then predicted for every record. Output columns carry the
 
 Best for: matching a REddyProc daytime partitioning, or comparing the daytime
 and nighttime approaches.
+
+``dv.flux.PartitioningNEE(method='daytime', mode='reddyproc')`` runs the same
+port. It selects any of the four partitioning ports with these two arguments.
 """
 
 # %%
@@ -25,8 +28,9 @@ and nighttime approaches.
 # ``Reco_DT_CUT_REF`` / ``GPP_DT_CUT_REF``. They were produced with the measured
 # NEE uncertainty (which is not shipped) and on the full multi-year record, so
 # the port is expected to track GPP closely and RECO with a small stable bias - a
-# provenance artifact, not an algorithmic difference (the port matches a fresh
-# REddyProc run on identical inputs to r > 0.999).
+# provenance artifact, not an algorithmic difference (on identical inputs the
+# port matches a fresh REddyProc run: half-hourly values mostly within 1e-4
+# umol m-2 s-1, annual sums within 0.001%).
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -52,14 +56,15 @@ print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} re
 #
 #   - measured NEE (gaps are records that were not measured / did not pass QC)
 #   - gap-filled air temperature (for the fit and for RECO)
-#   - gap-filled VPD (diive's kPa is converted to REddyProc's hPa internally)
+#   - gap-filled VPD (hPa in this dataset, so vpd_in_kpa=False; diive's default is kPa)
 #   - gap-filled incoming shortwave radiation (day/night split + LRC light driver)
 #   - site latitude, longitude and UTC offset (solar-time day/night split)
 
 part = dv.flux.DaytimePartitioningReddyProc(
     nee=df['NEE_CUT_REF_orig'],  # measured NEE (NaN where not measured)
     ta=df['Tair_f'],  # gap-filled air temperature
-    vpd=df['VPD_f'],  # gap-filled VPD (kPa)
+    vpd=df['VPD_f'],  # gap-filled VPD, in hPa in this dataset
+    vpd_in_kpa=False,  # the default expects kPa
     sw_in=df['Rg_f'],  # gap-filled incoming shortwave radiation
     lat=46.815,  # CH-DAV latitude
     lon=9.855,  # CH-DAV longitude

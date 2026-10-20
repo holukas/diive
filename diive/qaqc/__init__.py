@@ -1,4 +1,11 @@
-"""Public namespace: dv.qaqc (quality control flags and screening)."""
+"""
+QAQC: QUALITY CONTROL
+=====================
+
+Public namespace ``dv.qaqc``: overall quality flag, meteo screening and the measurement and correction registry.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from diive.preprocessing.qaqc import FlagQCF
 from diive.preprocessing.qaqc import StepwiseMeteoScreeningDb
 from diive.preprocessing.qaqc import (

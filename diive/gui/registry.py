@@ -3,8 +3,9 @@ GUI.REGISTRY: TAB REGISTRY
 ==========================
 
 Single source of truth for which tabs the main window shows, in order. To add
-a feature area (e.g. the flux processing chain), implement a `DiiveTab`
-subclass and register it here -- nothing else changes.
+a feature area, implement a `DiiveTab` subclass and register it here -- the
+main window does not change (a menu entry may need a menu icon keyword, see
+`icons._LINE_RULES`).
 
 Menu tabs are registered by module path, not imported: each entry is a
 `LazyTab` that imports its module on first open. Importing every tab module up
@@ -89,8 +90,8 @@ def _plot_tab(plot_type: str, title: str) -> LazyTab:
     return LazyTab(f"{TABS_PACKAGE}.plotting:PlottingTab", plot_type, title)
 
 
-#: Tab classes always shown in the main window, in display order.
-#: Future: append FluxChainTab, OutlierTab, GapFillingTab, ...
+#: Tab classes always shown in the main window, in display order. Every other
+#: tab is a menu tab (`MENU_TABS`).
 TAB_CLASSES: list[type[DiiveTab]] = [
     OverviewTab,
     LogTab,
@@ -164,13 +165,11 @@ MENU_TABS: dict[str, dict[str, LazyTab]] = {
     # Eddy-covariance flux processing (dv.flux). Its own menu — a first-class
     # diive domain that will grow (gap-filling, USTAR, storage, ...).
     "Flux": {
-        "Flux processing chain": _tab("fluxchain", "FluxChainTab"),
+        "Flux post-processing chain": _tab("fluxchain", "FluxChainTab"),
         "USTAR detection": _tab("ustar_detection", "UstarDetectionTab"),
         "Time lag analysis": _tab("timelag", "TimeLagAnalysisTab"),
-        "Nighttime partitioning (ONEFlux)": _tab("partitioning_nighttime_oneflux", "NighttimePartitioningOneFluxTab"),
-        "Nighttime partitioning (REddyProc)": _tab("partitioning_nighttime_reddyproc", "NighttimePartitioningReddyProcTab"),
-        "Daytime partitioning (REddyProc)": _tab("partitioning_daytime_reddyproc", "DaytimePartitioningReddyProcTab"),
-        "Daytime partitioning (ONEFlux)": _tab("partitioning_daytime_oneflux", "DaytimePartitioningOneFluxTab"),
+        # One tab for the four partitioning ports (Method + Mode switches).
+        "NEE partitioning": _tab("partitioning", "PartitioningNEETab"),
         "Random uncertainty (PAS20)": _tab("uncertainty_randunc", "RandomUncertaintyTab"),
         "Joint uncertainty (PAS20)": _tab("uncertainty_jointunc", "JointUncertaintyTab"),
     },
@@ -204,8 +203,9 @@ MENU_TABS: dict[str, dict[str, LazyTab]] = {
         "Appearance": _tab("settings", "SettingsTab"),
         "Project settings": _tab("site", "ProjectSettingsTab"),
     },
-    # Database I/O (InfluxDB, optional 'db' group). Folded into the File menu as
-    # a "Database ▸" submenu in MainWindow (it's another data source/sink).
+    # Database I/O (InfluxDB, optional 'db' extra, internal for now). Folded into
+    # the File menu as a "Database ▸" submenu in MainWindow (another data
+    # source/sink), which only appears when the extra is installed.
     "Database": {
         "Database connection": _tab("database", "DatabaseConnectionTab"),
         "Database explorer": _tab("database_explorer", "DatabaseExplorerTab"),

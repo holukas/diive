@@ -22,6 +22,27 @@ Contents
 Because each method tags its output columns differently, all four can be kept in one dataframe and
 compared directly.
 
+One entry point
+---------------
+
+``dv.flux.PartitioningNEE`` (or the function ``dv.flux.partition_nee``) runs any of the four ports.
+``method`` picks ``'nighttime'`` or ``'daytime'``, ``mode`` picks ``'oneflux'`` (default, the ICOS
+and FLUXNET2015 approach) or ``'reddyproc'``. The results are those of the matching class:
+
+.. code-block:: python
+
+   import diive as dv
+
+   part = dv.flux.PartitioningNEE(
+       nee=df['NEE_CUT_REF_orig'], method='nighttime', mode='oneflux',
+       ta=df['Tair_orig'], sw_in=df['Rg_orig'], nee_f=df['NEE_CUT_REF_f'],
+       ta_f=df['Tair_f'], lat=46.815,
+   ).run()
+   part.reco, part.gpp   # RECO_NT_OF, GPP_NT_OF
+
+In the post-processing chain the same switches are ``FluxConfig(partition_method=...,
+partition_mode=...)`` and ``run_level42_partitioning(data, method=..., mode=...)``.
+
 Units
 -----
 

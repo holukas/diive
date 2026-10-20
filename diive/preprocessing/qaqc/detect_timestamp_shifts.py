@@ -26,6 +26,7 @@ Plot methods:
 
 - ``plot_fft_results`` — time series, histogram, polar and monthly boxplot.
 - ``plot_crosscorr_results`` — scatter over time and shift histogram.
+- ``plot_noon_shift_results``: scatter over time, histogram and monthly boxplot.
 - ``plot_monthly_dielcycles`` — multi-year diel cycles per calendar month.
 - ``plot_radiation_fingerprint`` — heatmap of intra-day radiation patterns.
 
@@ -46,6 +47,7 @@ import seaborn as sns
 from matplotlib import cm
 
 from diive.core.times.resampling import diel_cycle
+from diive.core.times.times import freq_as_timedelta
 from diive.variables.radiation import potrad
 
 
@@ -72,7 +74,7 @@ class DetectTimestampShifts:
         Site latitude in decimal degrees.  Required when col_pot is not in df.
     lon : float, optional
         Site longitude in decimal degrees.  Required when col_pot is not in df.
-    utc_offset : int
+    utc_offset : int, default 1
         UTC offset in hours (e.g. 1 for CET).
     """
 
@@ -126,7 +128,7 @@ class DetectTimestampShifts:
 
         Parameters
         ----------
-        min_clearness : float
+        min_clearness : float, default 0.6
             Minimum clearness index (measured / potential daily sum).  Days below
             this are too cloudy to yield a reliable phase estimate.
 
@@ -138,9 +140,9 @@ class DetectTimestampShifts:
         df = self.df
 
         freq = pd.infer_freq(df.index)
-        freq = '1min' if freq == 'min' else freq
         if freq:
-            dt_min = pd.to_timedelta(freq).total_seconds() / 60
+            # Through the offset: pd.to_timedelta('h') and ('min') reject a unit without a number
+            dt_min = freq_as_timedelta(freq, unit='ns').total_seconds() / 60
         elif len(df.index) >= 2:
             # median diff is robust against logging gaps at the start of the index
             dt_min = df.index.to_series().diff().median().total_seconds() / 60
@@ -200,11 +202,11 @@ class DetectTimestampShifts:
 
         Parameters
         ----------
-        max_shift_min : int
+        max_shift_min : int, default 120
             Search window in minutes (symmetric, e.g. 120 searches +/-2 h).
-        upsample_freq : str
+        upsample_freq : str, default '1min'
             Pandas frequency string for upsampling (e.g. '1min').
-        min_clearness_index : float
+        min_clearness_index : float, default 0.5
             Minimum daily clearness index to include a day.
 
         Returns
@@ -327,25 +329,29 @@ class DetectTimestampShifts:
 
         Parameters
         ----------
-        clearness_threshold : float
+        clearness_threshold : float, default 0.7
             Minimum clearness index (measured / potential daily sum) to include a day.
 
         Returns
         -------
         pd.Series
             Daily time shift in minutes (positive = measured peak is earlier).
-            Index is DatetimeIndex of clear days only.
+            Index is DatetimeIndex of clear days only. Days without data are
+            left out.
         """
         df = self.df
         daily_sums = df[[self.col_meas, self.col_pot]].resample('D').sum()
         clearness = daily_sums[self.col_meas] / daily_sums[self.col_pot]
 
-        idx_max_meas = df[self.col_meas].groupby(df.index.normalize()).idxmax()
-        idx_max_pot = df[self.col_pot].groupby(df.index.normalize()).idxmax()
+        # Days without data are left out first: idxmax raises on an all-NaN group
+        meas = df[self.col_meas].dropna()
+        pot = df[self.col_pot].dropna()
+        idx_max_meas = meas.groupby(meas.index.normalize()).idxmax()
+        idx_max_pot = pot.groupby(pot.index.normalize()).idxmax()
 
         # pot - meas: positive when meas peaks earlier, matching FFT and crosscorr convention
         delta = (idx_max_pot - idx_max_meas).dt.total_seconds() / 60
-        result = pd.Series(delta.values, index=idx_max_meas.index, name='time_shift_minutes')
+        result = delta.dropna().rename('time_shift_minutes')
 
         clear_mask = clearness[clearness > clearness_threshold].index
         self._noon_shift_results = result[result.index.isin(clear_mask)]

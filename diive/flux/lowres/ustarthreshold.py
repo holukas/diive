@@ -2,7 +2,8 @@
 USTAR THRESHOLD: FRICTION VELOCITY FILTERING
 ==============================================
 
-Flag low-turbulence data using constant friction velocity thresholds with uncertainty scenarios.
+Flag low-turbulence data using constant or time-varying friction velocity thresholds,
+one flag per uncertainty scenario.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -18,7 +19,6 @@ import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.variables import daytime_nighttime_flag_from_swinpot
 
 
@@ -45,7 +45,8 @@ class FlagMultipleConstantUstarThresholds:
     stricter one and defensible; diive favours data availability here and leaves
     the trade-off to the user, who can drop those records afterwards if the burst
     matters for their analysis. Everything else about the comparison follows
-    ONEFlux, including rejecting a record whose USTAR is missing.
+    ONEFlux, including rejecting a record whose USTAR is missing. A threshold
+    of 0 (``CUT_NONE`` for H and LE) means no u* filtering and rejects nothing.
 
     Args:
         series: pandas Series containing flux data
@@ -57,7 +58,7 @@ class FlagMultipleConstantUstarThresholds:
         idstr: Optional identifier string for output columns
 
     Example:
-        See `examples/flux/fluxprocessingchain/fluxprocessingchain_composable.py` for complete examples
+        See `examples/flux/postprocessingchain/postprocessingchain_composable.py` for complete examples
         of USTAR threshold detection and data filtering.
     """
 
@@ -102,7 +103,6 @@ class FlagMultipleConstantUstarThresholds:
             self._results[flag.name] = flag.copy()
 
 
-@ConsoleOutputDecorator()
 class FlagSingleConstantUstarThreshold(FlagBase):
     """Flag records below a single constant USTAR threshold. See :meth:`__init__`."""
 
@@ -124,11 +124,17 @@ class FlagSingleConstantUstarThreshold(FlagBase):
         above the threshold after a period below it — see
         :class:`FlagMultipleConstantUstarThresholds` for why.
 
+        A threshold of 0 or below means no u* filtering and flags nothing, not
+        even records without USTAR. This is the setting for H and LE
+        (``thresholds=[0]``, ``threshold_labels=['CUT_NONE']``).
+
         Args:
             series: Flux series to flag.
             ustar: Friction velocity (USTAR) series aligned to *series*.
             threshold: Records with ``ustar < threshold``, or with no USTAR at all,
-                are flagged as rejected.
+                are flagged as rejected. A per-record threshold Series is also
+                accepted. Records with a threshold of 0 or below are never
+                rejected.
             idstr: Optional identifier string appended to the flag column name.
             showplot: If True, show the default rejected-values plot.
             verbose: If True, print detection statistics.
@@ -164,13 +170,17 @@ class FlagSingleConstantUstarThreshold(FlagBase):
         # NaN flag is accepted downstream just the same.
         passes = (self.ustar >= self.threshold)
         passes = passes.fillna(False).astype(bool)
+        # A threshold of zero or below means "no u* filtering" (thresholds=[0]
+        # with CUT_NONE for H and LE). Every record passes, even one without
+        # USTAR. A real threshold is always positive, so this cannot change it.
+        passes |= (np.asarray(self.threshold) <= 0)
         ok = passes[passes].index
         rejected = passes[~passes].index
         n_outliers = len(rejected)
 
         if self.verbose:
             thr_repr = "variable (per-record)" if isinstance(self.threshold, Series) else self.threshold
-            n_no_ustar = int(self.ustar.isna().sum())
+            n_no_ustar = int(self.ustar.loc[rejected].isna().sum())
             detail(f"Total found outliers for USTAR threshold {self._idstr} {thr_repr}: {len(rejected)} values"
                    + (f" (of which {n_no_ustar} have no USTAR measurement)" if n_no_ustar else ""),
                    verbose=self.verbose)
@@ -254,7 +264,6 @@ class FlagMultipleVariableUstarThresholds:
             self._results[flag.name] = flag.copy()
 
 
-@ConsoleOutputDecorator()
 class UstarThresholdConstantScenarios:
     """
     Check impact of different constant USTAR thresholds on available data
@@ -271,7 +280,7 @@ class UstarThresholdConstantScenarios:
     Properties:
         scenariosdf: DataFrame of the timeseries of *series* in different USTAR
             scenarios. Records of *series* where USTAR was below the respective
-            threshold are set to missing.
+            threshold or missing are set to missing.
 
     """
 
@@ -303,7 +312,7 @@ class UstarThresholdConstantScenarios:
         return self._scenariosdf
 
     def calc(self, ustarthresholds: list = None, showplot: bool = False, verbose: bool = False):
-        """Calculate flag"""
+        """Build one series per threshold, with records below that threshold set to missing."""
         if ustarthresholds is None:
             ustarthresholds = [0.1, 0.2, 0.3, 0.4, 0.5]
         self.showplot = showplot
@@ -317,7 +326,8 @@ class UstarThresholdConstantScenarios:
             suffix = f"CUT{u}"
             colname = f"{self.series.name}_{suffix}"
             series_cut = self.series.copy()
-            series_cut.loc[self.ustar < u] = np.nan
+            # Missing USTAR is rejected too, as everywhere else in diive (and ONEFlux)
+            series_cut.loc[~(self.ustar >= u)] = np.nan
             self._scenariosdf[colname] = series_cut
 
         # Get daytime and nighttime data separately

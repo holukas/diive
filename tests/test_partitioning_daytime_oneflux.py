@@ -126,11 +126,12 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
 
     def test_hourly_windows_land_on_their_own_records(self):
         # The window anchors are record indices, so they depend on the records
-        # per day. Assuming 48 (half-hourly) for hourly input puts each window
-        # at twice its true position: the windows of the first half of the year
-        # get stretched over the whole year and those of the second half fall
-        # off the end of the record. Both symptoms are asserted here, because
-        # the results stay gap-free either way.
+        # per day. Hourly input goes onto ONEFlux's duplicated half-hourly grid,
+        # where 48 per day is right. Assuming 48 on the hourly records themselves
+        # puts each window at twice its true position: the windows of the first
+        # half of the year get stretched over the whole year and those of the
+        # second half fall off the end of the record. Both symptoms are asserted
+        # here, because the results stay gap-free either way.
         from diive.flux.partitioning import DaytimePartitioningOneFlux
         hourly = self.df[['NEE_CUT_REF_orig', 'Tair_orig', 'Rg_orig',
                           'Tair_f', 'Rg_f', 'VPD_f']].resample('1h').mean()
@@ -153,6 +154,116 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         # The last window still has to sit inside the record, not past its end.
         self.assertGreater(anchors[-1], res.index[int(0.95 * len(res))])
 
+    def _hourly(self, df):
+        """Hourly records ending on the full hour, MIDDLE-stamped (hh:30), as
+        a FLUXNET HR file gives them."""
+        cols = ['NEE_CUT_REF_orig', 'NEE_CUT_REF_f', 'Tair_orig', 'Rg_orig',
+                'Tair_f', 'Rg_f', 'VPD_f']
+        end = df.index + pd.Timedelta(minutes=15)
+        hourly = df[cols].groupby(end.ceil('h')).mean()
+        hourly.index = hourly.index - pd.Timedelta(minutes=30)
+        return hourly
+
+    def _partition(self, d):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        return DaytimePartitioningOneFlux(
+            nee=d['NEE_CUT_REF_orig'], ta=d['Tair_orig'], sw_in=d['Rg_orig'],
+            ta_f=d['Tair_f'], sw_in_f=d['Rg_f'], vpd=d['VPD_f'],
+            nee_f=d['NEE_CUT_REF_f'], verbose=0).run().results
+
+    def test_hourly_input_follows_the_oneflux_duplication_rule(self):
+        # ONEFlux repeats every hourly record (library.create_data_structures),
+        # the first copy standing for the half-hour that ends 30 minutes
+        # earlier, partitions that half-hourly grid, and its pipeline keeps the
+        # first copy of each record (pipeline/wrappers.py, check_cleanup_dt:
+        # reco[::2]). So the hourly result must equal a run on that grid built
+        # by hand, read at every second record from the first.
+        hourly = self._hourly(self.df.loc['2017-01-01':'2017-06-30'])
+        grid = pd.DataFrame(np.repeat(hourly.to_numpy(), 2, axis=0),
+                            columns=hourly.columns)
+        # MIDDLE stamps of the two half-hours: END - 30 min and END
+        mid = hourly.index.to_numpy()
+        grid.index = pd.DatetimeIndex(np.column_stack(
+            [mid - pd.Timedelta(minutes=15), mid + pd.Timedelta(minutes=15)]).ravel())
+
+        res = self._partition(hourly)
+        on_grid = self._partition(grid)
+        for col in res.columns:
+            np.testing.assert_array_equal(res[col].to_numpy(),
+                                          on_grid[col].to_numpy()[::2], err_msg=col)
+        # Not vacuous: windows were fitted, and the second copies differ (the
+        # interpolation weights depend on the grid record), so the choice of
+        # copy matters.
+        self.assertGreater(res['BETA_DT_OF'].notna().sum(), 20)
+        gpp_first, gpp_second = on_grid['GPP_DT_OF'].to_numpy()[::2], on_grid['GPP_DT_OF'].to_numpy()[1::2]
+        self.assertFalse(np.array_equal(gpp_first, gpp_second, equal_nan=True))
+
+    def test_hourly_grid_matches_oneflux_create_data_structures(self):
+        # The julday and hr of the half-hourly grid, against ONEFlux's own code
+        # (library.py, create_data_structures, the "Duplicating hourly data"
+        # block) run on the hourly END timestamps of a full year. In ONEFlux
+        # hr_value is a view of the hour column, so hr of the first copy is
+        # hour - 0.5, and the first copy of each 00:00 record takes the date,
+        # julday and hr 23.5 of the 23:00 record of the day before.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        hourly = self._hourly(self.df)
+        seen = {}
+
+        def stub(**kwargs):
+            seen.update(kwargs)
+            n = len(kwargs['julday'])
+            out = {c: np.full(n, np.nan) for c in self.part.results.columns}
+            out['RECO_DT_OF'] = np.arange(n, dtype=float)  # grid record number
+            return out
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            res = self._partition(hourly)
+
+        end = hourly.index + pd.Timedelta(minutes=30)
+        w = np.zeros(len(end), dtype=[(k, 'f4') for k in
+                                      ('year', 'month', 'day', 'hour', 'minute', 'julday', 'hr')])
+        for k in ('year', 'month', 'day', 'hour', 'minute'):
+            w[k] = getattr(end, k)
+        w['julday'] = end.dayofyear
+        w['julday'][-1] = 366  # library.py: 1 after 365 -> 366
+        w['hr'] = w['hour']  # all records at minute 0
+        # ONEFlux, library.py create_data_structures, verbatim apart from names
+        t = np.repeat(w, 2, axis=0)
+        hr_value = t['hour'][::2]
+        t['hour'][::2] = hr_value - 1
+        t['minute'][::2] = 30
+        t['hr'][::2] = hr_value + 0.5
+        before_midnight_hour_mask = (t['hr'][:] == 23)
+        before_midnight_half_mask = (t['hour'][:] == -1)
+        for k in ('hour', 'year', 'month', 'julday', 'day'):
+            t[k][before_midnight_half_mask] = t[k][before_midnight_hour_mask]
+        t['hr'][before_midnight_half_mask] = t['hr'][before_midnight_hour_mask] + 0.5
+
+        self.assertEqual(seen['nperday'], 48)
+        np.testing.assert_array_equal(seen['julday'], t['julday'])
+        np.testing.assert_array_equal(seen['hr'], t['hr'])
+        np.testing.assert_array_equal(
+            seen['nee'], mod._to_sentinel(np.repeat(hourly['NEE_CUT_REF_orig'].to_numpy(), 2)))
+        # The result keeps the first copy of every record.
+        np.testing.assert_array_equal(res['RECO_DT_OF'].to_numpy(),
+                                      np.arange(0, 2 * len(hourly), 2, dtype=float))
+
+    def test_half_hourly_input_is_not_duplicated(self):
+        from diive.flux.partitioning import daytime_oneflux as mod
+        seen = {}
+
+        def stub(**kwargs):
+            seen.update(kwargs)
+            return {c: np.full(len(kwargs['julday']), np.nan) for c in self.part.results.columns}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            self._partition(self.df)
+        end = self.df.index + pd.Timedelta(minutes=15)
+        self.assertEqual(seen['nperday'], 48)
+        self.assertEqual(len(seen['nee']), len(self.df))
+        np.testing.assert_array_equal(
+            seen['hr'], (end.hour + np.where(end.minute == 0, 0.0, 0.5)).astype(np.float32))
+
     def test_uncertainty_lookup_clips_at_the_record_edges(self):
         # The weights come from ONEFlux's Python daytime.uncert_via_gapFill,
         # which clips its look-up window onto record 0 / n-1. The MDS gap-filler
@@ -168,6 +279,30 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         with mock.patch.object(mod, 'mds_gapfill_cascade', side_effect=spy):
             mod._uncert_via_gapfill(arr, arr, arr, arr, arr, 48)
         self.assertEqual(seen.get('edge'), 'clip')
+
+    def test_uncertainty_sd_uses_oneflux_tstd_arithmetic(self):
+        # ONEFlux takes the look-up SD with scipy.stats.tstd. Under NumPy 1 its
+        # variance is float32 but the n/(n-1) correction and the square root
+        # run in float64. np.std rounds differently in about one record in
+        # five, and these SDs weight every daytime fit. Expected value: scipy
+        # 1.17.1 tstd under NumPy 1.26.4.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        x = np.array([-2.609, -9.697, 0.043, -2.206, 0.03, -5.151, -4.887,
+                      -7.379, 3.611, -4.526, 0.763, -5.942], dtype=np.float32)
+        expected = np.float32(3.8134894371032715)
+        self.assertEqual(mod._tstd_oneflux(x, 1), expected)
+        self.assertNotEqual(np.std(x, ddof=1), expected)
+
+        seen = {}
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return {'sd': np.full(len(args[0]), np.nan)}
+
+        arr = np.zeros(10, dtype=np.float32)
+        with mock.patch.object(mod, 'mds_gapfill_cascade', side_effect=spy):
+            mod._uncert_via_gapfill(arr, arr, arr, arr, arr, 48)
+        self.assertIs(seen.get('sd_func'), mod._tstd_oneflux)
 
     def test_alpha_left_at_the_starting_guess_is_accepted(self):
         # ONEFlux reads alpha back from its float32 parameter table, and
@@ -297,6 +432,257 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
         self.assertEqual(julday[-1], 366)
         self.assertEqual(julday[0], 1)
 
+    def test_too_few_records_returns_oneflux_default_result(self):
+        # ONEFlux's nlinlts2 skips the fit below 3 * npara records and returns
+        # its default result: parameters -9999, standard errors 0, a zero
+        # covariance matrix (not None), residuals -9999, RMSE 0. A None
+        # covariance would mark the window as broken instead.
+        from diive.flux.partitioning.daytime_oneflux import _fit, NAN
+        n = 11  # one short of the 12 records HLRC_LloydVPD needs
+        ind = {'rg': np.full(n, 500.0, dtype=np.float32),
+               'ta': np.full(n, 15.0, dtype=np.float32),
+               'e0': np.full(n, 150.0, dtype=np.float32),
+               'vpd': np.full(n, 8.0, dtype=np.float32)}
+        r = _fit('HLRC_LloydVPD', np.full(n, -5.0, dtype=np.float32), ind, npara=4,
+                 xguess=[0.01, 30.0, 0.0, 5.0], mprior=np.zeros(4, dtype='f4'),
+                 sigm=np.ones(4), sigd=np.ones(n, dtype=np.float32))
+        np.testing.assert_array_equal(r['params'], np.full(4, NAN))
+        np.testing.assert_array_equal(r['std'], np.zeros(4))
+        np.testing.assert_array_equal(r['cov_matrix'], np.zeros((4, 4)))
+        self.assertTrue(np.all(np.isneginf(r['cor_matrix'])))
+        np.testing.assert_array_equal(r['residuals'], np.full(n, NAN))
+        self.assertEqual(r['rmse'], 0.0)
+
+    def test_window_with_eleven_daytime_records_falls_back_to_hlrc_lloyd(self):
+        # A window enters the fit with 11 measured daytime records, one short of
+        # what HLRC_LloydVPD needs. ONEFlux then gets -9999 parameters back,
+        # reads k = -9999 < 0 and refits the window without the VPD term. The
+        # port used to skip such a window. On CH-LAE, where only a fifth of NEE
+        # is measured, that dropped 1-6 windows a year and moved annual daytime
+        # GPP by up to 1.5 %.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short.copy()
+        nee = short['NEE_CUT_REF_orig'].copy()
+        jd = (short.index + pd.Timedelta(minutes=15)).dayofyear
+        # Window (160, 164]: keep 11 measured daytime records, all nights.
+        day = (jd > 160) & (jd <= 164) & (short['Rg_orig'] > 4) & nee.notna()
+        nee.iloc[np.flatnonzero(day)[11:]] = np.nan
+        self.assertEqual(int((day & nee.notna()).sum()), 11)
+
+        real = mod._fit
+        calls = []
+
+        def spy(lts_func, dep, *args, **kwargs):
+            calls.append((lts_func, int(np.size(dep))))
+            return real(lts_func, dep, *args, **kwargs)
+
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            DaytimePartitioningOneFlux(
+                nee=nee, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+                ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+                verbose=0).run()
+        self.assertIn(('HLRC_LloydVPD', 11), calls)
+        # all three beta starting guesses carry on with the 3-parameter model
+        self.assertEqual(calls.count(('HLRC_Lloyd', 11)), 3)
+
+    def test_best_beta_guess_is_chosen_on_float32_rmse(self):
+        # ONEFlux keeps the RMSEs of the three beta starting guesses in a
+        # float32 table and takes the first minimum. Two fits whose RMSEs differ
+        # only beyond float32 precision tie, and the earlier guess wins. In
+        # float64 the later one won, which on CH-LAE 2019 carried a different
+        # alpha into the next window.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        n = 48 * 6
+        julday = (1 + np.arange(n) // 48).astype(np.float32)
+        rg = np.where(np.arange(n) % 48 >= 24, 500.0, 0.0).astype(np.float32)
+        D = dict(nee_f=np.full(n, -2.0, dtype=np.float32), nee_fqc=np.zeros(n),
+                 tair_f=np.full(n, 15.0, dtype=np.float32), rg_f=rg,
+                 vpd_f=np.full(n, 8.0, dtype=np.float32), rg_meas=rg,
+                 julday=julday, nee_fs_unc=np.ones(n, dtype=np.float32))
+        guess = {'j': 0}
+        # alpha and RMSE per beta starting guess j; j=1 and j=2 tie in float32
+        alphas, rmses = (0.05, 0.06, 0.07), (3.0, 2.0 + 1e-8, 2.0)
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                params, rmse = np.array([2.0, 150.0]), 1.0
+            else:
+                j = guess['j'] % 3
+                guess['j'] += 1
+                params, rmse = np.array([alphas[j], 30.0, 0.05, 2.0]), rmses[j]
+            return dict(params=params, std=np.full(npara, 0.01),
+                        cov_matrix=np.eye(npara) * 1e-4, cor_matrix=np.eye(npara),
+                        residuals=np.zeros(dep.size), rmse=rmse)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, *_ = mod._estimate_parasets(D, nperday=48, verbose=0)
+        self.assertGreater(len(params_ok), 0)
+        self.assertEqual(params_ok[0][0], np.float32(0.06))
+
+    def test_broken_fit_removes_the_night_range_and_reruns_the_year(self):
+        # A fit without covariance matrix makes ONEFlux abort the year. Its
+        # pipeline appends the window's night range (day_begin2, day_end2] to
+        # the error file, removes the measured NEE there and runs the year
+        # again. The port used to skip only that window and keep the data.
+        # Result: identical to a run on data without NEE in that range.
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short
+        nee = short['NEE_CUT_REF_orig']
+        jd = (short.index + pd.Timedelta(minutes=15)).dayofyear
+        # window i = 82 fits days (164, 168]; its night range is (160, 172]
+        day = (jd > 164) & (jd <= 168) & (short['Rg_orig'] > 4) & nee.notna()
+        target = nee[day].to_numpy(dtype=np.float32)
+        real = mod._fit
+        broke = []
+
+        def spy(lts_func, dep, *args, **kwargs):
+            if lts_func == 'HLRC_LloydVPD' and not broke and np.array_equal(dep, target):
+                broke.append(lts_func)
+                raise mod._BrokenWindow(lts_func)
+            return real(lts_func, dep, *args, **kwargs)
+
+        def run(nee_in):
+            return DaytimePartitioningOneFlux(
+                nee=nee_in, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+                ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+                verbose=0).run().results
+
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            broken = run(nee)
+        self.assertEqual(broke, ['HLRC_LloydVPD'])
+        removed = run(nee.where(~((jd > 160) & (jd <= 172))))
+        pd.testing.assert_frame_equal(broken, removed)
+
+    def _break_window_82_of(self, nee):
+        """A _fit spy that breaks the first HLRC_LloydVPD fit of window
+        (164, 168] of ``nee``, and only of that series (night range (160, 172])."""
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short
+        jd = (short.index + pd.Timedelta(minutes=15)).dayofyear
+        day = (jd > 164) & (jd <= 168) & (short['Rg_orig'] > 4) & nee.notna()
+        target = nee[day].to_numpy(dtype=np.float32)
+        real = mod._fit
+        broke = []
+
+        def spy(lts_func, dep, *args, **kwargs):
+            if lts_func == 'HLRC_LloydVPD' and not broke and np.array_equal(dep, target):
+                broke.append(lts_func)
+                raise mod._BrokenWindow(lts_func)
+            return real(lts_func, dep, *args, **kwargs)
+        return spy, broke, (jd > 160) & (jd <= 172)
+
+    def _scenarios(self, nee):
+        from diive.flux.partitioning import partition_nee_daytime_oneflux_scenarios
+        short = self.short
+        return partition_nee_daytime_oneflux_scenarios(
+            nee=nee, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+            ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+            verbose=0)
+
+    def _single(self, nee):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        short = self.short
+        return DaytimePartitioningOneFlux(
+            nee=nee, ta=short['Tair_orig'], sw_in=short['Rg_orig'],
+            ta_f=short['Tair_f'], sw_in_f=short['Rg_f'], vpd=short['VPD_f'],
+            verbose=0).run()
+
+    def test_broken_fit_in_one_scenario_removes_the_range_in_all(self):
+        # ONEFlux keys its error file by site, year and product, not by u*
+        # percentile, and after the search reruns every percentile with the
+        # complete file. A fit that breaks only in the second scenario must
+        # therefore rerun the first one with the range removed too.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        nee1 = self.short['NEE_CUT_REF_orig']
+        nee2 = nee1 + 0.5  # differs from nee1 in every window
+        spy, broke, night = self._break_window_82_of(nee2)
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            parts = self._scenarios({'a': nee1, 'b': nee2})
+        self.assertEqual(broke, ['HLRC_LloydVPD'])
+        self.assertEqual(parts['a'].removed_days, {2017: [(160, 172)]})
+        self.assertEqual(parts['b'].removed_days, {2017: [(160, 172)]})
+        pd.testing.assert_frame_equal(parts['a'].results,
+                                      self._single(nee1.where(~night)).results)
+        pd.testing.assert_frame_equal(parts['b'].results,
+                                      self._single(nee2.where(~night)).results)
+
+    def test_single_scenario_equals_the_class(self):
+        from diive.flux.partitioning import daytime_oneflux as mod
+        nee = self.short['NEE_CUT_REF_orig']
+        spy, _, _ = self._break_window_82_of(nee)
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            parts = self._scenarios({'a': nee})
+        spy, _, _ = self._break_window_82_of(nee)
+        with mock.patch.object(mod, '_fit', side_effect=spy):
+            single = self._single(nee)
+        self.assertEqual(single.removed_days, {2017: [(160, 172)]})
+        self.assertEqual(parts['a'].removed_days, single.removed_days)
+        pd.testing.assert_frame_equal(parts['a'].results, single.results)
+
+    def test_search_resumes_at_the_broken_scenario_then_resweeps(self):
+        # ONEFlux keeps the outputs already written while it searches, so after
+        # a broken fit it retries the same percentile, not the first one. Once
+        # a pass breaks nowhere new it reruns every percentile with the complete
+        # error file. The order decides which ranges are found. Here B breaks
+        # at r1 first, then at r3 while r2 is still in. A breaks at r2 only
+        # while r1 is removed and r3 is not. Resuming at B finds r3 before A
+        # is rerun, which stops A from breaking: ranges r1, r3. Restarting
+        # from the first scenario would rerun A first and find r1, r2.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        short = self.short
+        r1, r2, r3 = (152, 158), (160, 166), (170, 176)
+        nee_a = pd.Series(1.0, index=short.index)
+        nee_b = pd.Series(2.0, index=short.index)
+        cols = ['RECO_DT_OF', 'GPP_DT_OF', 'SE_GPP_DT_OF', 'ALPHA_DT_OF',
+                'BETA_DT_OF', 'K_DT_OF', 'RREF_DT_OF', 'E0_DT_OF']
+        calls = []
+
+        def fake(**kw):
+            nee, julday = kw['nee'], kw['julday']
+            gone = [r for r in (r1, r2, r3)
+                    if np.all(nee[(julday > r[0]) & (julday <= r[1])] == mod.NAN)]
+            scen = 'a' if nee[nee > mod.NAN_TEST][0] == 1.0 else 'b'
+            calls.append((scen, gone))
+            if scen == 'a' and r1 in gone and r2 not in gone and r3 not in gone:
+                broken = r2
+            elif scen == 'b' and r1 not in gone:
+                broken = r1
+            elif scen == 'b' and r2 not in gone and r3 not in gone:
+                broken = r3
+            else:
+                return {c: np.full(nee.size, np.nan) for c in cols}
+            e = mod._BrokenWindow('HLRC_LloydVPD')
+            e.day_range = broken
+            raise e
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=fake):
+            parts = self._scenarios({'a': nee_a, 'b': nee_b})
+        for p in parts.values():
+            self.assertEqual(p.removed_days, {2017: [r1, r3]})
+        self.assertEqual(calls, [('a', []), ('b', []), ('b', [r1]),
+                                 ('b', [r1, r3]), ('a', [r1, r3])])
+
+    def test_scenarios_must_share_one_index(self):
+        # A series with timestamps the others lack would be partitioned on
+        # drivers taken from the first series' frame, which has other records.
+        nee = self.short['NEE_CUT_REF_orig']
+        with self.assertRaises(ValueError):
+            self._scenarios({'a': nee, 'b': nee.shift(freq='15min')})
+        with self.assertRaises(ValueError):
+            self._scenarios({})
+
+    def test_removed_days_before_run_raises(self):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        short = self.short
+        part = DaytimePartitioningOneFlux(
+            nee=short['NEE_CUT_REF_orig'], ta=short['Tair_orig'],
+            sw_in=short['Rg_orig'], ta_f=short['Tair_f'],
+            sw_in_f=short['Rg_f'], vpd=short['VPD_f'], verbose=0)
+        with self.assertRaises(RuntimeError):
+            _ = part.removed_days
+
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import DaytimePartitioningOneFlux
         part = DaytimePartitioningOneFlux(
@@ -305,6 +691,134 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
             sw_in_f=self.df['Rg_f'], vpd=self.df['VPD_f'], verbose=0)
         with self.assertRaises(RuntimeError):
             _ = part.results
+
+
+def _synthetic_window_year(n_days=40, night_days=10):
+    """Arrays for _estimate_parasets: 24 night and 24 day records per day,
+    daytime NEE measured every day, nighttime NEE only on days 1..night_days.
+    tair_f is the day number, so a fake fit can tell the windows apart."""
+    n = 48 * n_days
+    day = 1 + np.arange(n) // 48
+    is_day = (np.arange(n) % 48) >= 24
+    rg = np.where(is_day, 500.0, 0.0).astype(np.float32)
+    measured = is_day | (day <= night_days)
+    return dict(nee_f=np.where(measured, -2.0, -9999.0).astype(np.float32),
+                nee_fqc=np.where(measured, 0.0, 1.0),
+                tair_f=day.astype(np.float32), rg_f=rg,
+                vpd_f=np.full(n, 8.0, dtype=np.float32), rg_meas=rg,
+                julday=day.astype(np.float32), nee_fs_unc=np.ones(n, dtype=np.float32))
+
+
+def _fit_result(params, npara, dep, rmse=1.0, std=None):
+    return dict(params=np.asarray(params, dtype=float),
+                std=np.full(npara, 0.01) if std is None else np.asarray(std, dtype=float),
+                cov_matrix=np.eye(npara) * 1e-4, cor_matrix=np.eye(npara),
+                residuals=np.zeros(dep.size), rmse=rmse)
+
+
+class TestDaytimeOneFluxWindowsWithoutNightData(unittest.TestCase):
+    """Windows whose ~12-day night range has (almost) no measured NEE.
+
+    With nights measured on days 1-10 only, window i (days 2i < d <= 2i+4,
+    night range 2i-4 < d <= 2i+8) has night records up to i = 6 and none
+    from i = 7 (days 14-18) on.
+    """
+
+    def test_empty_night_selection_falls_back_to_the_first_record(self):
+        # ONEFlux's newselif turns an empty selection into the year's first
+        # record. The window then takes E0 from earlier and the gap-filled NEE
+        # of that record as the Rref starting guess, and is fitted (L215).
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()
+        D['nee_f_first'] = np.float32(4.25)
+        rb_of = {}
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                return _fit_result([2.0, 150.0], npara, dep)
+            window = int(round((float(np.mean(indeps['ta'])) - 2.5) / 2))
+            rb_of.setdefault(window, float(xguess[3]))
+            return _fit_result([0.05, 30.0, 0.05, 2.0], npara, dep)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, ind_ok, *_, no_night = mod._estimate_parasets(D, nperday=48, verbose=0)
+        self.assertEqual(rb_of[7], 4.25)
+        self.assertEqual(rb_of[6], -2.0)  # night data of its own
+        self.assertIn(16 * 48, [int(r[2]) for r in ind_ok])  # window 7 accepted
+        self.assertEqual(no_night, [])
+
+    def test_empty_night_selection_without_nee_f_is_not_fitted_and_listed(self):
+        # Without the gap-filled NEE the selection stays empty, the Rref
+        # starting guess is NaN and the window is not fitted, as before. The
+        # window is reported so the caller can warn.
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()  # no 'nee_f_first'
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                return _fit_result([2.0, 150.0], npara, dep)
+            if np.isnan(np.asarray(xguess, dtype=float)).any():  # NaN propagates, as in leastsq
+                return _fit_result(np.full(npara, np.nan), npara, dep, rmse=np.nan)
+            return _fit_result([0.05, 30.0, 0.05, 2.0], npara, dep)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, ind_ok, *_, no_night = mod._estimate_parasets(D, nperday=48, verbose=0)
+        centrals = [int(r[2]) for r in ind_ok]
+        self.assertIn(14 * 48, centrals)       # window 6, own night data
+        self.assertNotIn(16 * 48, centrals)    # window 7
+        self.assertEqual(no_night[0], (14.0, 18.0))
+
+    def test_warning_names_nee_f_only_without_it(self):
+        from diive.flux.partitioning import DaytimePartitioningOneFlux
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()
+        idx = pd.date_range('2021-01-01 00:15', periods=D['julday'].size, freq='30min')
+        day = pd.Series(D['nee_f'].astype(float), index=idx).where(lambda s: s > -9990)
+        kw = dict(nee=day, ta=pd.Series(D['tair_f'].astype(float), index=idx),
+                  sw_in=pd.Series(D['rg_meas'].astype(float), index=idx),
+                  ta_f=pd.Series(D['tair_f'].astype(float), index=idx),
+                  sw_in_f=pd.Series(D['rg_f'].astype(float), index=idx),
+                  vpd=pd.Series(0.8, index=idx), verbose=1)
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            if lts_func == 'LloydTemp':
+                return _fit_result([2.0, 150.0], npara, dep)
+            if np.isnan(np.asarray(xguess, dtype=float)).any():
+                return _fit_result(np.full(npara, np.nan), npara, dep, rmse=np.nan)
+            return _fit_result([0.05, 30.0, 0.05, 2.0], npara, dep)
+
+        for nee_f, expect_warning in ((None, True), (day.fillna(3.0), False)):
+            with mock.patch.object(mod, '_fit', side_effect=fake_fit), \
+                    mock.patch.object(mod, 'warn') as warn:
+                DaytimePartitioningOneFlux(nee_f=nee_f, **kw).run()
+            texts = [str(c.args[0]) for c in warn.call_args_list]
+            self.assertEqual(any('pass nee_f' in t for t in texts), expect_warning, texts)
+
+    def test_window_without_night_data_takes_e0_of_the_last_lloydtemp_window(self):
+        # ONEFlux sets lloydtemp_e0 = params_ok[4, i_ok - 1] for such a window
+        # but fits with its local e0 / e0_se, left by the last window that ran
+        # LloydTemp. Here that window (6) is rejected, so the two differ: E0 300
+        # (window 6) instead of 200 (window 5, the last accepted) (L216).
+        from diive.flux.partitioning import daytime_oneflux as mod
+        D = _synthetic_window_year()
+
+        def fake_fit(lts_func, dep, indeps, npara, xguess, mprior, sigm, sigd):
+            ta = float(np.mean(indeps['ta']))
+            if lts_func == 'LloydTemp':
+                last = ta > 9.0  # window 6: night records of days 9-10 only
+                return _fit_result([2.0, 300.0 if last else 200.0], npara, dep,
+                                   std=[0.1, 7.0 if last else 3.0])
+            window = int(round((ta - 2.5) / 2))
+            beta = 300.0 if window == 6 else 30.0  # beta >= 250 rejects window 6
+            return _fit_result([0.05, beta, 0.05, 2.0], npara, dep)
+
+        with mock.patch.object(mod, '_fit', side_effect=fake_fit):
+            params_ok, ind_ok, *_ = mod._estimate_parasets(D, nperday=48, verbose=0)
+        by_central = {int(r[2]): p for r, p in zip(ind_ok, params_ok)}
+        self.assertNotIn(14 * 48, by_central)                 # window 6 rejected
+        self.assertEqual(by_central[12 * 48][4], np.float32(200.0))  # window 5
+        self.assertEqual(by_central[16 * 48][4], np.float32(300.0))  # window 7
+        self.assertEqual(by_central[16 * 48][9], np.float32(7.0))
 
 
 if __name__ == '__main__':

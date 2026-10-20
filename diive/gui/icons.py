@@ -70,7 +70,7 @@ def _line(p: QPainter, x1: float, y1: float, x2: float, y2: float) -> None:
     p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
 
 
-# --- thin-line monochrome glyphs (Studio preset) ---------------------------
+# --- thin-line monochrome glyphs (Studio look) -----------------------------
 # Single ink colour, one stroke weight, round caps/joins, no fills — the
 # minimal VIBECAD look. Icon colour follows the active theme's INK token.
 def _line_ink() -> QColor:

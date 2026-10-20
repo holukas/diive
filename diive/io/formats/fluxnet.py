@@ -53,13 +53,14 @@ class FormatEddyProFluxnetFileForUpload:
     - Load data from all found files and store in dataframe
     - Make subset that contains required variables
     - Set missing values to FLUXNET format (-9999)
+    - Rename storage variables to FLUXNET codes (e.g. SC_SINGLE to SC)
     - Rename variables by adding the FLUXNET suffix (_1_1_1)
     - Insert two timestamp columns denoting START and END of averaging interval
     - Format the two timestamp columns to FLUXNET format YYYYMMDDhhmm
     - Save data from dataframe to yearly files
 
     - Example notebook available in:
-        notebooks/Formats/ConvertEddyProFluxnetFileForUpload.ipynb
+        notebooks/FormatEddyProFluxnetFileForUpload.ipynb
 
     Variables shared with FLUXNET:
 
@@ -121,7 +122,24 @@ class FormatEddyProFluxnetFileForUpload:
                  use_wind: bool = False,
                  use_meteo: bool = False,
                  add_runid: bool = True):
-        """Configure the conversion (site, folders, which variable groups to include). See the class docstring."""
+        """Configure the conversion.
+
+        Args:
+            site: Site name, used in the names of the output files.
+            sourcedir: Folder that is searched for EddyPro ``_fluxnet_`` files.
+            outdir: Folder for the yearly output files.
+            use_co2: Include the CO2 variables.
+            use_h2o: Include the H2O and latent heat variables.
+            use_h: Include the sensible heat variables.
+            use_n2o: Include the N2O variables.
+            use_ch4: Include the CH4 variables.
+            use_wind: Include the wind and footprint variables.
+            use_meteo: Include the meteo variables.
+            add_runid: Add the current date and time to the output file names.
+
+        Raises:
+            Exception: If no variable group is selected.
+        """
         self.site = site
         self.sourcedir = sourcedir
         self.outdir = outdir
@@ -201,12 +219,12 @@ class FormatEddyProFluxnetFileForUpload:
 
         Args:
             var: str, name of variable from which data points are removed
-            remove_dates: list, see docstring of pkgs.outlierdetection.manualremoval.ManualRemoval.calc
-                for examples
+            remove_dates: list of single timestamps and [start, end] date ranges,
+                see the docstring of ``dv.outliers.ManualRemoval`` for examples
             showplot: show plot with removed data points
 
         Returns:
-            updated *var* in merged dataframe, with data points removed
+            None. The data points are set to missing in *var* of the merged dataframe.
         """
         info(f"\nRemoving {var} data points for the following date(s) and/or time range(s):")
         for d in remove_dates:
@@ -399,71 +417,3 @@ class FormatEddyProFluxnetFileForUpload:
         info("\nRemoving all newly generated columns relating to quality check "
              "(not needed for FLUXNET), restoring original set of variables ...")
         self._merged_df = df[keepcols].copy()
-
-
-def _example_format_eddypro_fluxnet_file_for_upload():
-    # from diive.configs.exampledata import load_exampledata_eddypro_fluxnet_CSV_30MIN
-    # data_df, metadata_df = load_exampledata_eddypro_fluxnet_CSV_30MIN()
-
-    # Setup
-    SOURCE = r"F:\TMP\format_FXN\IN"  # This is the folder where datafiles are searched
-    OUTDIR = r"F:\TMP\format_FXN\OUT"  # Output yearly CSV to this folder
-
-    # Imports
-    import importlib.metadata
-    from datetime import datetime
-    # from diive.pkgs.formats.fluxnet import FormatEddyProFluxnetFileForUpload
-
-    dt_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"This page was last modified on: {dt_string}")
-    version_diive = importlib.metadata.version("diive")
-    print(f"diive version: v{version_diive}")
-
-    # Show docstring
-    print(FormatEddyProFluxnetFileForUpload.__name__)
-    print(FormatEddyProFluxnetFileForUpload.__doc__)
-
-    # Initialize
-    fxn = FormatEddyProFluxnetFileForUpload(
-        site='CH-CHA',
-        use_co2=True,
-        use_h2o=False,
-        use_h=False,
-        use_n2o=False,
-        use_ch4=False,
-        use_wind=False,
-        use_meteo=False,
-        sourcedir=SOURCE,
-        outdir=OUTDIR,
-        add_runid=True)
-
-    # Search and merge _fluxnet_ datafiles
-    fxn.mergefiles(limit_n_files=None)
-
-    # # Merged dataframe
-    # print(fxn.merged_df)
-
-    # # Test for signal strength / AGC
-    # fxn.remove_low_signal_data(fluxcol=['FC', 'LE'],
-    #                            signal_strength_col='CUSTOM_AGC_MEAN',
-    #                            method='discard above',
-    #                            threshold=90)
-
-    # # Remove problematic time periods
-    # fxn.remove_erroneous_data(var='FC',
-    #                           remove_dates=[
-    #                               '2023-11-01 23:58:15',
-    #                               ['2023-11-05 00:00:15', '2023-12-07 14:15:00'],
-    #                               ['2023-06-01', '2023-08-15']
-    #                           ],
-    #                           showplot=True)
-
-    # Format data for FLUXNET
-    fxn.apply_fluxnet_format()
-
-    # Save yearly CSV files
-    fxn.export_yearly_files()
-
-
-if __name__ == '__main__':
-    _example_format_eddypro_fluxnet_file_for_upload()

@@ -902,6 +902,7 @@ class MlGapFillingTab(DiiveTab):
         if self._result_df is None or self._result_df.empty:
             return
         result = self._result_df
-        self.featuresCreated.emit(result)
+        if not self._emit_features(result):
+            return
         self.status.setText(f"Added {', '.join(result.columns)} to the variable list.")
         self.add_btn.setEnabled(False)

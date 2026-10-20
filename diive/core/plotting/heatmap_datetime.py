@@ -1,6 +1,8 @@
 """
-HEATMAP — Date/Time and Year/Month variants
-============================================
+HEATMAP_DATETIME: DATE/TIME AND YEAR/MONTH HEATMAPS
+===================================================
+
+Heatmaps of a time series, by date and time of day or by year and month.
 
 Contains two public heatmap classes built on :class:`~diive.core.plotting.heatmap_base.HeatmapBase`:
 
@@ -12,11 +14,13 @@ Contains two public heatmap classes built on :class:`~diive.core.plotting.heatma
   plots it as a *year × month* (or *month × year*) grid.  Supports arbitrary
   aggregation functions and optional rank transformation.
 
-Both classes are exposed as top-level convenience aliases in the ``diive``
-namespace (``dv.heatmap_datetime`` and ``dv.heatmap_year_month``).
+Both classes are public as ``dv.plotting.HeatmapDateTime`` and
+``dv.plotting.HeatmapYearMonth``.
 
 References:
     https://matplotlib.org/stable/gallery/images_contours_and_fields/pcolormesh_levels.html
+
+Part of the diive library: https://github.com/holukas/diive
 """
 import datetime
 
@@ -209,19 +213,19 @@ class HeatmapDateTime(HeatmapBase):
                    - ``ticks_time``: Float hours at each major tick (e.g. ``[3.0, 6.0, …]``).
                    - ``ticklabels_time``: Integer hour labels for the ticks.
         """
+        # Integer nanoseconds, so a grid under one minute (5 s, 30 s) also works
+        freq_nanos = 30 * 60 * 10 ** 9  # fallback: 30 min
         freq = self.series.index.freq
         if freq is not None:
             try:
-                freq_minutes = int(pd.tseries.frequencies.to_offset(freq).nanos / 1e9 / 60)
+                freq_nanos = int(pd.tseries.frequencies.to_offset(freq).nanos)
             except Exception:
-                freq_minutes = 30  # safe fallback
-        else:
-            freq_minutes = 30  # safe fallback
+                pass
 
         # Pick the smallest interval (3h, 6h, 12h) that is a whole multiple of the data frequency
         tick_interval_hours = 3
         for candidate in [3, 6, 12]:
-            if (candidate * 60) % freq_minutes == 0:
+            if (candidate * 3600 * 10 ** 9) % freq_nanos == 0:
                 tick_interval_hours = candidate
                 break
 
@@ -264,17 +268,19 @@ class HeatmapDateTime(HeatmapBase):
             fig: Existing matplotlib Figure. If None and ax is None, creates new figure
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
-            ax_orientation: Layout of axes. If None, uses value from __init__()
-                ``'vertical'`` — dates on y-axis, hours on x-axis (default)
-                ``'horizontal'`` — dates on x-axis, hours on y-axis
+            ax_orientation: Layout of axes. If None, uses the value from __init__().
+                The grid is built in __init__, so set the orientation there. A
+                different value here raises a ValueError.
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
-                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
-                style (grid off). The colorbar stays ``cb_*``/``zlabel``-controlled.
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
+                default (no grid, black spines, outward ticks). A passed style replaces
+                that default as a whole. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
             zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹')
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
+                to pick them from the data range
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
             minticks: Minimum major ticks on date axis (default: 3)
@@ -303,9 +309,14 @@ class HeatmapDateTime(HeatmapBase):
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        # Use provided ax_orientation or fall back to __init__ value
+        # The grid was built for the __init__ orientation. Plotting it with
+        # another one would put the labels and ticks on the wrong axes.
         if ax_orientation is None:
             ax_orientation = self.ax_orientation
+        elif ax_orientation != self.ax_orientation:
+            raise ValueError(
+                f"ax_orientation={ax_orientation!r} differs from the value set in __init__ "
+                f"({self.ax_orientation!r}). Set the orientation in the constructor.")
 
         # Use theme defaults if not provided
         if cb_labelsize is None:
@@ -384,7 +395,6 @@ class HeatmapDateTime(HeatmapBase):
             self.fig.show()
 
 
-# @ConsoleOutputDecorator(spacing=False)
 class HeatmapYearMonth(HeatmapBase):
     """
     A class for plotting heatmaps of time series data aggregated by year and month.
@@ -430,13 +440,15 @@ class HeatmapYearMonth(HeatmapBase):
         1. Ensures the time series has a name, defaulting to "data" if none exists.
         2. Sets up the series index as a proper timestamp using `_setup_timestamp`.
         3. Aggregates the time series data into a monthly matrix using
-           `dv.resample_to_monthly_agg_matrix`, applying the specified
+           `dv.times.resample_to_monthly_agg_matrix`, applying the specified
            aggregation method (`self.agg`) and optionally converting to ranks.
-        4. Transposes the resulting DataFrame if `self.ax_orientation` is "horizontal"
+        4. Completes the matrix to every year from the first to the last and
+           all 12 months. Months without data are NaN.
+        5. Transposes the resulting DataFrame if `self.ax_orientation` is "horizontal"
            to ensure months are the index and years are columns.
-        5. Extracts the x (columns), y (index), and z (values) data from the
+        6. Extracts the x (columns), y (index), and z (values) data from the
            prepared DataFrame.
-        6. Calls `_set_bounds` to extend the x and y data for proper heatmap
+        7. Calls `_set_bounds` to extend the x and y data for proper heatmap
            cell rendering, as `pcolormesh` uses bounds.
         """
         self.series.name = self.series.name if self.series.name else "data"  # Time series must have a name
@@ -531,19 +543,24 @@ class HeatmapYearMonth(HeatmapBase):
             fig: Existing matplotlib Figure. If None and ax is None, creates new figure
             figsize: Figure size as (width, height) in inches. Only used when ax is None
             figdpi: Figure DPI. Only used when ax is None. Defaults to 72
-            ax_orientation: Layout of axes. If None, uses value from __init__()
+            ax_orientation: Layout of axes. If None, uses the value from __init__().
+                The grid is built in __init__, so set the orientation there. A
+                different value here raises a ValueError.
             format_style: Shared chrome (title/labels/fonts/ticks/spines/grid) via
-                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = house
-                style (grid off). The colorbar stays ``cb_*``/``zlabel``-controlled.
+                :class:`~diive.core.plotting.styles.format.FormatStyle`. None = heatmap
+                default (no grid, black spines, outward ticks). A passed style replaces
+                that default as a whole. The colorbar stays ``cb_*``/``zlabel``-controlled.
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (auto-selected if None: 'RdYlBu' for ranks, 'RdYlBu_r' for raw)
             zlabel: Colorbar label
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2)
+            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
+                to pick them from the data range
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
-            minticks: Minimum major ticks (default: 3)
-            maxticks: Maximum major ticks (default: 10)
+            minticks: Not used here, the ticks are one per month and year (kept for
+                signature parity with the other heatmaps)
+            maxticks: Not used here, see ``minticks``
             color_bad: Color for NaN cells (default: 'grey')
             show_colormap: Whether to show colorbar (default: True)
             show_less_xticklabels: Hide every second x-tick label (default: False)
@@ -559,9 +576,14 @@ class HeatmapYearMonth(HeatmapBase):
         Returns:
             None (displays plot if ax=None, otherwise renders on provided axes)
         """
-        # Use provided ax_orientation or fall back to __init__ value
+        # The grid was built for the __init__ orientation. Plotting it with
+        # another one would put the labels and ticks on the wrong axes.
         if ax_orientation is None:
             ax_orientation = self.ax_orientation
+        elif ax_orientation != self.ax_orientation:
+            raise ValueError(
+                f"ax_orientation={ax_orientation!r} differs from the value set in __init__ "
+                f"({self.ax_orientation!r}). Set the orientation in the constructor.")
 
         # Auto-select colormap based on ranks if not provided
         if cmap is None:

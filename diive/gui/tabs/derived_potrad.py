@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QLabel,
-    QSpinBox,
     QVBoxLayout,
 )
 
@@ -39,6 +38,7 @@ from diive.gui.tabs._derived_variable_base import (
     TITLE_FONTSIZE,
     BaseDerivedVariableTab,
 )
+from diive.gui.widgets.project_offset import ProjectUtcOffset
 
 
 class PotradTab(BaseDerivedVariableTab):
@@ -80,9 +80,8 @@ class PotradTab(BaseDerivedVariableTab):
         self.lon = QDoubleSpinBox()
         self.lon.setRange(-180.0, 180.0)
         self.lon.setDecimals(4)
-        self.utc = QSpinBox()
-        self.utc.setRange(-12, 14)
-        for w in (self.lat, self.lon, self.utc):
+        self.utc = ProjectUtcOffset()
+        for w in (self.lat, self.lon):
             # Disabled, not read-only: read-only still reads as an input field.
             w.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
             w.setEnabled(False)
@@ -100,6 +99,12 @@ class PotradTab(BaseDerivedVariableTab):
 
         self._seed_site()
         site.manager.changed.connect(self._seed_site)
+        # A result from the old coordinates / offset must be recalculated.
+        self.utc.changed.connect(self._on_project_changed)
+
+    def _on_project_changed(self) -> None:
+        if self._result is not None:
+            self._on_field_changed()
 
     def _seed_site(self) -> None:
         m = site.manager
@@ -114,7 +119,6 @@ class PotradTab(BaseDerivedVariableTab):
             return
         self.lat.setValue(m.latitude)
         self.lon.setValue(m.longitude)
-        self.utc.setValue(m.utc_offset)
         self._coord_state.setVisible(False)
 
     def _coords(self) -> tuple[float, float, int]:

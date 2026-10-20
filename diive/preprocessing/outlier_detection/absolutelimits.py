@@ -1,8 +1,9 @@
 """
-Outlier detection using absolute value limits.
+ABSOLUTE LIMITS: FIXED-RANGE OUTLIER DETECTION
+==============================================
 
-This module provides simple, interpretable outlier detection by comparing values
-against fixed minimum and maximum thresholds.
+Simple, interpretable outlier detection by comparing values against fixed
+minimum and maximum thresholds.
 
 - **Global Mode:** Single threshold range applied to all data
   Fast, simple validation for any time series.
@@ -17,8 +18,7 @@ Both modes use the quality flag system:
 
 See examples/preprocessing/outlier_detection/outlier_absolutelimits.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd
@@ -26,11 +26,9 @@ from pandas import Series, DatetimeIndex
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail
-from diive.core.utils.prints import ConsoleOutputDecorator
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
 
 
-@ConsoleOutputDecorator()
 class AbsoluteLimits(FlagBase):
     """Outlier detection using absolute value limits.
 
@@ -57,6 +55,18 @@ class AbsoluteLimits(FlagBase):
     - NaN: Record missing in the input, so no test could be performed
 
     Example:
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['Tair_f'].loc['2022-07']
+        >>> al = dv.outliers.AbsoluteLimits(series=s, minval=-10, maxval=30).run()
+        >>> cleaned = al.filteredseries
+
+        Separate limits for daytime and nighttime need the site location:
+
+        >>> al = dv.outliers.AbsoluteLimits(series=s, separate_day_night=True,
+        ...                                 minval_daytime=0, maxval_daytime=30,
+        ...                                 minval_nighttime=-5, maxval_nighttime=20,
+        ...                                 lat=46.815, lon=9.856, utc_offset=1).run()
+
         See `examples/preprocessing/outlier_detection/outlier_absolutelimits.py` for complete examples.
     """
 
@@ -175,8 +185,10 @@ class AbsoluteLimits(FlagBase):
         """Calculate overall flag based on value limits.
 
         Args:
-            repeat: If True, outlier detection is repeated until all outliers
-                are removed (only applies to day/night mode).
+            repeat: If True, repeat the test on the cleaned series until a pass
+                finds no more outliers (day/night mode only). The limits are
+                fixed, so the second pass finds nothing and the result equals a
+                single pass.
             progress_callback: Optional ``callable(iteration, n_outliers,
                 filteredseries)`` invoked after each iteration (e.g. to drive a
                 progress bar / live-update the cleaned series).
@@ -210,9 +222,12 @@ class AbsoluteLimits(FlagBase):
 
     def _flagtests_global(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Global absolute limits test"""
-        ok = (self.series >= self.minval) & (self.series <= self.maxval)
+        # Test the series cleaned by earlier passes, so a repeated run stops once
+        # a pass finds nothing new.
+        s = self.filteredseries
+        ok = (s >= self.minval) & (s <= self.maxval)
         ok = ok[ok].index
-        rejected = (self.series < self.minval) | (self.series > self.maxval)
+        rejected = (s < self.minval) | (s > self.maxval)
         rejected = rejected[rejected].index
         n_outliers = len(rejected)
 
@@ -226,8 +241,10 @@ class AbsoluteLimits(FlagBase):
     def _flagtests_daytime_nighttime(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Separate daytime/nighttime absolute limits test"""
 
-        # Working data
-        s = self.series.copy().dropna()
+        # Working data: the series cleaned by earlier passes. Testing the input
+        # series instead finds the same outliers on every pass, and repeat=True
+        # never stops (L316).
+        s = self.filteredseries.copy().dropna()
         flag = pd.Series(index=self.series.index, data=np.nan)
 
         # Run for daytime (dt)
@@ -283,8 +300,6 @@ def AbsoluteLimitsDaytimeNighttime(*args, separate_day_night: bool = True, **kwa
     what it says therefore applied one set of limits to the whole series,
     with no error or warning.
 
-    A wrapper function rather than a subclass because ``ConsoleOutputDecorator``
-    replaces the decorated class with a function, which cannot be subclassed.
     Pass ``minval`` / ``maxval`` to cover both periods, and the
     ``*_daytime`` / ``*_nighttime`` overrides to differ, plus ``lat`` /
     ``lon`` / ``utc_offset``.

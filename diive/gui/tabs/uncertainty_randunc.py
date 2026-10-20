@@ -400,7 +400,8 @@ class RandomUncertaintyTab(DiiveTab):
     def _add(self) -> None:
         if self._result_df is None or self._result_df.empty:
             return
-        self.featuresCreated.emit(self._result_df)
+        if not self._emit_features(self._result_df):
+            return
         self.status.setText(
             f"Added {', '.join(self._result_df.columns)} to the variable list.")
         self.add_btn.setEnabled(False)

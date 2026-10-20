@@ -141,6 +141,76 @@ class TestFftPhaseShift(unittest.TestCase):
         self.assertFalse(detector.fft_phase_shift(min_clearness=0.5)['shift_minutes'].isna().all())
 
 
+class TestFftPhaseShiftFrequencies(unittest.TestCase):
+    """The sampling interval is read from the inferred frequency (L345).
+
+    pandas infers 'h' for hourly data, and pd.to_timedelta('h') raises, so
+    hourly data failed before the first day was processed.
+    """
+
+    @staticmethod
+    def _detector(step_minutes: int, shift_minutes: int, days: int = 20):
+        # pandas infers '60min' as 'h' and '10min' as '10min'
+        idx = pd.date_range('2022-06-01', periods=days * 1440 // step_minutes,
+                            freq=f'{step_minutes}min', name='TIMESTAMP_MIDDLE')
+        pot = pd.Series(np.asarray(dv.variables.potrad(
+            timestamp_index=idx, lat=LAT, lon=LON, utc_offset=UTC_OFFSET)), index=idx)
+        meas = (pot * 0.8).shift(shift_minutes // step_minutes).fillna(0.0)
+        df = pd.DataFrame({'SW_IN': meas, 'SW_IN_POT': pot})
+        return DetectTimestampShifts(df=df, col_meas='SW_IN', col_pot='SW_IN_POT',
+                                     lat=LAT, lon=LON, utc_offset=UTC_OFFSET)
+
+    def test_hourly_data_gives_the_same_shift_as_30min_data(self):
+        for shift in (0, 60, -120):
+            with self.subTest(shift_minutes=shift):
+                hourly = self._detector(60, shift).fft_phase_shift()
+                halfhourly = self._detector(30, shift).fft_phase_shift()
+                self.assertEqual(len(hourly), 20)
+                self.assertAlmostEqual(float(hourly['shift_minutes'].median()),
+                                       float(halfhourly['shift_minutes'].median()),
+                                       delta=2.0)
+                self.assertAlmostEqual(float(hourly['shift_minutes'].median()),
+                                       -shift, delta=2.0)
+
+    def test_10min_data_runs(self):
+        result = self._detector(10, 60, days=3).fft_phase_shift()
+        self.assertEqual(len(result), 3)
+        self.assertAlmostEqual(float(result['shift_minutes'].median()),
+                               -60.0, delta=2.0)
+
+    def test_1min_data_runs(self):
+        # pandas infers 'min', which pd.to_timedelta also rejects without a number
+        result = self._detector(1, 60, days=2).fft_phase_shift()
+        self.assertEqual(len(result), 2)
+        self.assertAlmostEqual(float(result['shift_minutes'].median()),
+                               -60.0, delta=2.0)
+
+
+class TestNoonShiftEmptyDay(unittest.TestCase):
+    """A day without measured data is left out (L346).
+
+    pandas 3 groupby().idxmax() raises on an all-NaN group, so one full day of
+    sensor outage made noon_shift fail.
+    """
+
+    def test_an_all_nan_day_is_left_out_and_other_days_are_unchanged(self):
+        reference = _detector(shift_records=2).noon_shift()
+        detector = _detector(shift_records=2)
+        detector.df.loc['2022-06-05', 'SW_IN'] = np.nan
+        result = detector.noon_shift()
+        self.assertNotIn(pd.Timestamp('2022-06-05'), result.index)
+        pd.testing.assert_series_equal(
+            result, reference.drop(pd.Timestamp('2022-06-05')))
+
+    def test_an_all_nan_day_in_potential_radiation_is_left_out(self):
+        reference = _detector(shift_records=2).noon_shift()
+        detector = _detector(shift_records=2)
+        detector.df.loc['2022-06-05', 'SW_IN_POT'] = np.nan
+        result = detector.noon_shift()
+        pd.testing.assert_series_equal(
+            result, reference.drop(pd.Timestamp('2022-06-05')))
+
+
 class TestNoonShift(unittest.TestCase):
     """The peak-time heuristic. Resolution is one record, so 30 minutes here."""
 

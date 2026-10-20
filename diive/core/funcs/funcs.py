@@ -1,4 +1,11 @@
-"""General numeric helpers (z-scores, nearest value, binning, ...)."""
+"""
+FUNCS: GENERAL HELPERS
+======================
+
+General numeric helpers (z-scores, nearest value, binning, ...).
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from collections import Counter
 
 import numpy as np

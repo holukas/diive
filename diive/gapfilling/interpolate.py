@@ -138,13 +138,19 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     series_all_interpolated = series.interpolate(method='linear', limit=None,
                                                   limit_area='inside', limit_direction='both')
 
-    # Vectorized gap-filling: create mask for all fillable gaps
+    # Copy the interpolated values into the fillable gaps only. The mask marks every
+    # timestamp between GAP_START and GAP_END of any fillable gap, built in one step
+    # instead of one full-length mask per gap (L349). A timestamp t is inside one of
+    # the gaps when the largest GAP_END among the gaps starting at or before t
+    # reaches t.
+    gaps = gapfinder_agg_df.dropna(subset=['GAP_START', 'GAP_END']).sort_values('GAP_START')
+    gap_starts = pd.DatetimeIndex(gaps['GAP_START'])
+    gap_ends_cummax = pd.DatetimeIndex(gaps['GAP_END'].cummax())
+    pos = gap_starts.searchsorted(series.index, side='right') - 1
+    mask = (pos >= 0) & series.index.notna()
+    mask[mask] = series.index[mask] <= gap_ends_cummax[pos[mask]]
     series_filled = series.copy()
-    for idx in gapfinder_agg_df.index:
-        gap_start = gapfinder_agg_df.loc[idx, 'GAP_START']
-        gap_end = gapfinder_agg_df.loc[idx, 'GAP_END']
-        mask = (series.index >= gap_start) & (series.index <= gap_end)
-        series_filled.loc[mask] = series_all_interpolated.loc[mask]
+    series_filled.loc[mask] = series_all_interpolated.loc[mask]
 
     # Output statistics
     n_missing_output = series_filled.isnull().sum()

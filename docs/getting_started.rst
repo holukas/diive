@@ -27,12 +27,12 @@ Core Concepts
    Forest, XGBoost, the MDS meteorological-similarity method and linear interpolation.
 
 **Quality Control & Outlier Detection**
-   Outliers and bad measurements are flagged before analysis. diive has more than ten
+   Outliers and bad measurements are flagged before analysis. diive has nine
    detection methods, including Hampel filters, z-scores, local standard deviation and
    Local Outlier Factor. Every detector returns both a flag series and a filtered
    series, so nothing is deleted silently.
 
-**Flux Processing Chain**
+**Flux Post-Processing Chain**
    For eddy covariance data, diive implements the Swiss FluxNet post-processing
    workflow: Level 2 (quality flags), Level 3.1 (storage correction), Level 3.2
    (outlier removal), Level 3.3 (u* filtering), Level 4.1 (gap-filling) and
@@ -109,7 +109,7 @@ The example datasets ship with the package and take no arguments:
    print(df.shape)
    print(df.index.name, df.index.min(), df.index.max())
 
-   # CH-LAE flux processing chain data, 2016-2017
+   # CH-LAE flux post-processing chain data, 2016-2017
    df_lae = dv.load_exampledata_parquet_lae()
 
 More loaders for specific file formats (EddyPro, FLUXNET, TOA5, ICOS, generic CSV)
@@ -123,7 +123,7 @@ result ends up with a datetime index.
 
 diive expects a pandas DataFrame with a datetime index named following the diive
 convention (``TIMESTAMP_MIDDLE``, ``TIMESTAMP_START`` or ``TIMESTAMP_END``).
-``TimestampSanitizer`` checks the naming, detects the time resolution, removes
+All timestamps of a dataset must use the same UTC offset. ``TimestampSanitizer`` checks the naming, detects the time resolution, removes
 duplicates and fills date gaps with NaN rows:
 
 .. code-block:: python
@@ -178,8 +178,9 @@ feeding the filtered series of one detector into the next:
    print(f"{n_removed} of {series.notna().sum()} measured records removed")
 
 ``Hampel`` separates daytime and nighttime by default, which is why it needs ``lat``,
-``lon`` and ``utc_offset``. For one threshold over all records, pass
-``separate_day_night=False``.
+``lon`` and ``utc_offset``: daytime records are compared with the daytime records of the
+window, nighttime records with the nighttime ones. To judge all records together with
+one threshold, pass ``separate_day_night=False``.
 
 For longer chains with a combined quality flag, use ``StepwiseOutlierDetection``
 from ``diive.preprocessing.outlier_detection`` together with ``dv.qaqc.FlagQCF``.
@@ -302,7 +303,7 @@ The repository ships runnable example scripts under
 - **visualization**: time series, heatmaps, histograms, diel cycles, ridgelines, wind roses
 - **gapfilling**: Random Forest, XGBoost, MDS, linear interpolation, long-term filling
 - **preprocessing**: outlier detection, corrections, stepwise screening
-- **flux**: processing chain, u* threshold detection, NEE partitioning, uncertainty
+- **flux**: post-processing chain, u* threshold detection, NEE partitioning, uncertainty
 - **analysis**: correlation, decomposition, gap statistics, harmonic analysis
 - **times**, **features**, **fits**, **io**, **events**: supporting tools
 
@@ -320,7 +321,7 @@ with one page per namespace:
 - :ref:`dv.gapfilling <api_gapfilling>`: ``FeatureEngineer``, ``RandomForestTS``, ``XGBoostTS``, ``FluxMDS``
 - :ref:`dv.plotting <api_plotting>`: ``TimeSeries``, ``HeatmapDateTime``, ``DielCycle``, ``FormatStyle``
 - :ref:`dv.analysis <api_analysis>`: ``SeasonalTrendDecomposition``, ``GapStats``, ``Histogram``
-- :ref:`dv.flux <api_flux>`: processing chain, u* filtering, partitioning, uncertainty
+- :ref:`dv.flux <api_flux>`: post-processing chain, u* filtering, partitioning, uncertainty
 - :ref:`dv.times <api_times>`: ``TimestampSanitizer``, ``DetectFrequency``, resampling
 - :ref:`dv.variables <api_variables>`, :ref:`dv.corrections <api_corrections>`,
   :ref:`dv.qaqc <api_qaqc>`, :ref:`dv.events <api_events>`

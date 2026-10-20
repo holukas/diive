@@ -1,9 +1,9 @@
 """
 ANALYSIS: HISTOGRAM DISTRIBUTION
-=================================
+================================
 
-Distribution analysis with flexible binning methods and statistical summaries.
-Supports fringe bin removal and detailed bin-wise statistics.
+Histogram of a Series, with a fixed number of bins or one bin per unique value.
+Bins at either end can be dropped from the results.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -17,7 +17,7 @@ from pandas import DataFrame, Series
 
 
 class Histogram:
-    """Compute a histogram from a Series with flexible binning. See :meth:`__init__`."""
+    """Compute a histogram from a Series. See :meth:`__init__`."""
 
     def __init__(self,
                  series: Series = None,
@@ -28,12 +28,12 @@ class Histogram:
         """Calculate histogram from Series.
 
         Args:
-            series: A pandas Series.
+            series: A pandas Series. NaN values are ignored.
             method: Method used for binning data
                 Options:
 
-                    - 'uniques': Each unique value in the dataset is a separate bin
-                    - 'n_bins': Number of bins
+                    - 'uniques': One bin per unique value.
+                    - 'n_bins': *n_bins* bins of equal width
 
             n_bins: Number of bins, needed if *method* is 'n_bins', otherwise ignored.
             ignore_fringe_bins: List of integers [i, j] with length 2
@@ -44,13 +44,10 @@ class Histogram:
 
         Properties:
             .results: Histogram results as DataFrame with BIN_START_INCL and COUNTS columns
-            .peakbins: Top 5 bins by count
+            .peakbins: Start values of the 5 bins with the most counts
 
         Example:
             See `examples/analysis/analysis_histogram_distribution.py` for complete examples.
-
-        See Also:
-            Histogram : This class.
         """
         # `s` is the deprecated name for `series` (renamed for consistency with
         # the other diive classes, which all take `series`).
@@ -72,14 +69,14 @@ class Histogram:
 
     @property
     def results(self) -> DataFrame:
-        """Return bootstrap results for daily fluxes, includes threshold detection"""
+        """Return the histogram as DataFrame with columns BIN_START_INCL and COUNTS."""
         if not isinstance(self._results_df, DataFrame):
             raise Exception('Results for histogram calculation are empty')
         return self._results_df
 
     @property
     def peakbins(self):
-        """Returns the five bins with the most counts in decreasing order"""
+        """Return the start values of the five bins with the most counts, in decreasing order of counts."""
         ix_maxcounts = self.results['COUNTS'].sort_values(ascending=False).head(5).index
         peakbins = self.results['BIN_START_INCL'].iloc[ix_maxcounts]
         return peakbins.to_numpy().tolist()
@@ -118,8 +115,12 @@ class Histogram:
     def _binning_method(self):
         bins = None
         if self.method == 'uniques':
-            # Use unique values as bins, each unique value is a separate bin
-            bins = np.unique(self.series)
+            # Use unique values as bins, each unique value is a separate bin.
+            # np.histogram closes only its last bin, so the largest value is
+            # repeated as a final edge: [max, max] holds the largest value, and
+            # the second largest keeps a bin of its own.
+            uniques = np.unique(self.series)
+            bins = np.append(uniques, uniques[-1:])
         elif self.method == 'n_bins':
             # Input defines number of bins
             bins = self.n_bins

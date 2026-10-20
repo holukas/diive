@@ -157,6 +157,37 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         self.assertEqual(doy[-2], 365)
         self.assertEqual(doy[-1], 366)
 
+    def test_hourly_input_is_partitioned_on_its_own_records(self):
+        # ONEFlux puts an hourly year onto a half-hourly grid only for the
+        # daytime method (library.create_data_structures duplicates for
+        # part_type DT only). The nighttime method gets the hourly records,
+        # with hr = the hour of the period END (all at minute 0) and the day of
+        # year of the END.
+        from diive.flux.partitioning import nighttime_oneflux as mod
+        cols = ['NEE_CUT_REF_orig', 'Tair_orig', 'Rg_orig', 'NEE_CUT_REF_f', 'Tair_f']
+        df = self.df.loc['2017', cols]
+        end_hh = df.index + pd.Timedelta(minutes=15)
+        hourly = df.groupby(end_hh.ceil('h')).mean()
+        hourly.index = hourly.index - pd.Timedelta(minutes=30)  # MIDDLE, hh:30
+        seen = []
+
+        def stub(**kwargs):
+            seen.append(kwargs)
+            n = len(kwargs['hr'])
+            return {c: np.full(n, np.nan) for c in (
+                'NEE_NIGHT_OF', 'RECO_NT_OF', 'RECO_NT_OF_ROB', 'GPP_NT_OF',
+                'GPP_NT_OF_ROB', 'RREF_NT_OF', 'E0_NT_OF')}
+
+        with mock.patch.object(mod, '_partition_one_year', side_effect=stub):
+            self._run_on(hourly)
+        end = hourly.index + pd.Timedelta(minutes=30)
+        doy = end.dayofyear.to_numpy().astype(float)
+        doy[-1] = 366  # END 1 January 2018, repaired as in ONEFlux
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(len(seen[0]['nee']), len(hourly))
+        np.testing.assert_array_equal(seen[0]['hr'], end.hour.to_numpy())
+        np.testing.assert_array_equal(seen[0]['doy'], doy)
+
     def test_missing_sw_in_does_not_exclude_night_records(self):
         # ONEFlux stores a missing SW_IN as -9999, which passes its `< 10`
         # night test; only the sunrise/sunset flag decides then. Blank SW_IN on
@@ -179,6 +210,29 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
         res = self._run_on(df)
         self.assertEqual(res.loc[t, 'NEE_NIGHT_OF'], 1.5)
 
+    def test_no_night_on_days_without_sunrise_or_sunset(self):
+        # Polar night and polar day: ONEFlux's sunrs gives NaN sunrise and
+        # sunset, compu() stores the day/night flag as missing, and the night
+        # test `daylight == 0` fails, so no record of such a day is night,
+        # whatever its SW_IN (L214). Same data at 70 N: December has no night
+        # records, November keeps its nights.
+        from diive.flux.partitioning import NighttimePartitioningOneFlux, sunrise_sunset
+        idx = pd.date_range('2021-11-01 00:15', '2021-12-31 23:45', freq='30min')
+        rng = np.random.default_rng(1)
+        ta = pd.Series(5.0 + rng.normal(0, 3, idx.size), index=idx)
+        nee = pd.Series(2.0 + rng.normal(0, 0.5, idx.size), index=idx)
+        sw_in = pd.Series(0.0, index=idx)  # dark around the clock
+        res = NighttimePartitioningOneFlux(
+            nee=nee, ta=ta, sw_in=sw_in, nee_f=nee, ta_f=ta, lat=70.0,
+            verbose=0).run().results
+        doy = (idx + pd.Timedelta(minutes=15)).dayofyear.to_numpy().astype(np.float32)
+        no_sun = np.isnan(sunrise_sunset(doy, 70.0)[0])
+        self.assertGreater(int(no_sun.sum()), 0)
+        self.assertGreater(int((~no_sun).sum()), 0)
+        night = res['NEE_NIGHT_OF'].notna().to_numpy()
+        self.assertFalse(night[no_sun].any())
+        self.assertTrue(night[~no_sun].any())
+
     def test_rref_knot_uses_the_truncated_window_midpoint(self):
         # ONEFlux places each window's Rref at int(mean(indices)), a truncation.
         # Two windows of four records each: knot at index 1 and index 5, so
@@ -192,6 +246,15 @@ class TestNighttimePartitioningOneFlux(unittest.TestCase):
                                      e0=200.0, step=10, window=10)
         self.assertAlmostEqual(rref[1], 2.0)
         self.assertAlmostEqual(rref[2], 2.2)
+
+    def test_pct_skips_average_when_preceding_rank_is_at_index_0(self):
+        # 20 values at 95 %: the critical rank 19 is an integer, so ONEFlux
+        # averages ranks 20 and 19, unless rank 19 sits at index 0, which its
+        # `numpy.sum(index) != 0` test misses.
+        from diive.flux.partitioning.nighttime_oneflux import _pct
+        rest = np.arange(18, dtype=float)
+        self.assertEqual(_pct(np.concatenate([rest, [18.0, 19.0]]), 95.0), 18.5)
+        self.assertEqual(_pct(np.concatenate([[18.0], rest, [19.0]]), 95.0), 19.0)
 
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import NighttimePartitioningOneFlux

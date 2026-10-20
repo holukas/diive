@@ -1,4 +1,7 @@
 """
+EDDYPROFLAGS: QUALITY FLAGS FROM EDDYPRO OUTPUT
+===============================================
+
 Quality flags extracted from and calculated based on EddyPro output files.
 
 diive uses a standard quality flag format across all functions:
@@ -8,7 +11,7 @@ diive uses a standard quality flag format across all functions:
 
 EddyPro output files use different flag formats depending on the test type and file format:
     - Some flags are simple integers (0=pass, 1=fail) that need conversion
-    - Some flags are multi-digit codes encoding multiple tests (e.g., VM97 8-digit codes)
+    - Some flags are multi-digit codes encoding multiple tests (e.g., VM97 9-digit codes)
     - Some data (e.g., signal strength) are continuous values requiring threshold comparison
 
 This module provides functions to:
@@ -18,6 +21,8 @@ This module provides functions to:
 
 All functions return flags in diive standard format (0=good, 1=soft warning, 2=bad)
 to ensure consistency across the library.
+
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd
@@ -137,6 +142,7 @@ def flag_steadiness_horizontal_wind_eddypro_test(df: DataFrame,
         df: A dataframe containing EddyPro FluxNet output data with VM97_NSHW_HF column.
         flux: Name of the flux variable (used only for naming the output flag column).
         idstr: An optional identifier string to append to the flag name.
+        nshwcol: Name of the flag column. Default: 'VM97_NSHW_HF'.
 
     Returns:
         A series containing the quality flag in diive format, where 0=good values, 2=bad values.
@@ -183,6 +189,7 @@ def flag_angle_of_attack_eddypro_test(df: DataFrame,
         idstr: An optional identifier string to append to the flag name.
         application_dates: Optional list of date ranges to restrict flag application.
             Format: [['2022-01-01', '2022-12-31'], ...] for selective time periods.
+        aoacol: Name of the flag column. Default: 'VM97_AOA_HF'.
 
     Returns:
         A series containing the quality flag in diive format, where 0=good values, 2=bad values.
@@ -235,10 +242,10 @@ def flags_vm97_eddypro_fluxnetfile_tests(
     EddyPro performs statistical quality tests on the raw high-frequency eddy covariance
     data. These VM97 tests evaluate the quality and reliability of the raw measurements
     before flux calculation. EddyPro FluxNet files store multiple raw data tests in a
-    single multi-digit integer (e.g., 80100010). This function extracts individual test
+    single multi-digit integer (e.g., 800000100). This function extracts individual test
     results from each digit position and converts them to diive standard format.
 
-    The VM97 integer encodes 8 different quality tests in an 8-digit code:
+    The VM97 integer encodes 8 different quality tests in a 9-digit code:
     - Position 0: Always 8 (constant, no meaning)
     - Position 1: Spike detection (hard flag)
     - Position 2: Amplitude resolution (hard flag)
@@ -265,6 +272,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         skewkurt_sf: Extract skewness/kurtosis soft flag test (position 6).
         discont_hf: Extract discontinuities hard flag test (position 7).
         discont_sf: Extract discontinuities soft flag test (position 8).
+        vm97col: Name of the VM97 flag column. Default: '{fluxbasevar}_VM97_TEST'.
 
     Returns:
         A dataframe containing selected quality flag columns in diive format
@@ -287,7 +295,7 @@ def flags_vm97_eddypro_fluxnetfile_tests(
         # '0': XXX,  # Index 0 is always the number `8`
         '1': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_SPIKE_HF_TEST",  # Spike detection, hard flag
         '2': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_AMPLITUDE_RESOLUTION_HF_TEST",  # Amplitude resolution, hard flag
-        '3': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_DROPOUT_TEST",  # Drop-out, hard flag
+        '3': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_DROPOUT_HF_TEST",  # Drop-out, hard flag
         '4': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_ABSOLUTE_LIMITS_HF_TEST",  # Absolute limits, hard flag
         '5': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_SKEWKURT_HF_TEST",  # Skewness/kurtosis, hard flag
         '6': f"FLAG{idstr}_{flux}_{fluxbasevar}_VM97_SKEWKURT_SF_TEST",  # Skewness/kurtosis, soft flag
@@ -380,6 +388,10 @@ def flag_fluxbasevar_completeness_eddypro_test(df: DataFrame, flux: str,
         thres_good: Threshold for good flag (default: 0.99 = 99% completeness required).
         thres_ok: Threshold for ok flag (default: 0.97 = 97% completeness required).
         idstr: An optional identifier string to append to the flag name.
+        expect_nr_col: Name of the column with the expected number of records.
+            Default: 'EXPECT_NR'.
+        basevar_nr_col: Name of the column with the number of base variable
+            records. Default: '{fluxbasevar}_NR'.
 
     Returns:
         A pandas Series containing the completeness flag in diive format
@@ -433,6 +445,8 @@ def flag_spectral_correction_factor_eddypro_test(
             but above the `thres_good`. Default is 4.
         idstr (str, optional): Identifier string to customize the generated flag's variable name.
             If None, default naming will be applied.
+        scfcol (str, optional): Name of the spectral correction factor column.
+            Default: '{flux}_SCF'.
 
     Returns:
         Series: A new pandas Series containing the flag values:
@@ -481,6 +495,7 @@ def flag_ssitc_eddypro_test(df: DataFrame, flux: str, setflag_timeperiod: dict =
             Example - Set records with flag 1 to flag 2 between specific dates:
                 {2: [[1, '2022-05-01', '2023-09-30'], [1, '2024-04-02', '2024-04-19']]}
         idstr: An optional identifier string to append to the flag name.
+        flagcol: Name of the SSITC flag column. Default: '{flux}_SSITC_TEST'.
 
     Returns:
         A pandas Series containing the SSITC quality flag in diive format, with the

@@ -1,6 +1,14 @@
 """
-https://matplotlib.org/matplotblog/posts/create-ridgeplots-in-matplotlib/
-https://matplotlib.org/stable/users/explain/colors/colormaps.html
+RIDGELINE: STACKED KERNEL DENSITIES PER YEAR, MONTH OR WEEK
+===========================================================
+
+Ridgeline plot of a time series: one kernel density curve per year, month or week.
+
+References:
+    https://matplotlib.org/matplotblog/posts/create-ridgeplots-in-matplotlib/
+    https://matplotlib.org/stable/users/explain/colors/colormaps.html
+
+Part of the diive library: https://github.com/holukas/diive
 """
 
 import matplotlib.gridspec as grid_spec
@@ -10,6 +18,7 @@ import pandas as pd
 from matplotlib.pyplot import cm
 from sklearn.neighbors import KernelDensity
 
+import diive.core.plotting.plotfuncs as pf
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.LightTheme import adjust_color_lightness
 from diive.core.plotting.styles.format import FormatStyle
@@ -17,8 +26,9 @@ from diive.core.utils.console import detail
 
 
 class RidgeLinePlot:
-    """
-    RidgeLinePlot uses the kernel density estimator from scikit-learn, see here:
+    """Ridgeline plot: one kernel density curve per year, month or week, stacked vertically.
+
+    The densities come from the kernel density estimator in scikit-learn, see here:
         - https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.KernelDensity.html
         - https://scikit-learn.org/stable/modules/density.html#kernel-density
 
@@ -29,18 +39,14 @@ class RidgeLinePlot:
     def __init__(self, series: pd.Series):
         """Set up a ridgeline plot for *series* (one stacked density per group/year). See :meth:`plot`.
 
-        Missing values are dropped up front: the kernel density estimator rejects
-        NaN, so any gappy series would otherwise raise. Dropping here (rather than
-        per group) also means a group left without a single valid value gets no
-        ridge at all, instead of failing at fit time.
-
-        Raises:
-            ValueError: If *series* has no valid values, i.e. there is nothing to plot.
+        Missing values (NaN) and infinite values (+inf, -inf) are dropped up
+        front: the kernel density estimator rejects both, so any gappy series
+        would otherwise raise. Dropping here (rather than per group) also means a
+        group left without a single finite value gets no ridge at all, instead of
+        failing at fit time. Without any finite value, :meth:`plot` draws one
+        empty axes with the note "no finite values".
         """
-        self.series = series.dropna()
-        if self.series.empty:
-            raise ValueError(f"RidgeLinePlot: series '{series.name}' has no valid "
-                             f"(non-missing) values, there is nothing to plot.")
+        self.series, self.n_infinite = pf.drop_infinite(series.dropna())
 
         self.xlim = None
         self.ylim = None
@@ -94,7 +100,31 @@ class RidgeLinePlot:
              fig=None, format_style: FormatStyle = None):
         """Render the ridgeline plot.
 
+        Each group (year, month or week) gets one density curve. The curves are
+        coloured from ``Spectral_r`` by the group mean, lowest mean first. The
+        mean is printed at the right end of each curve.
+
         Args:
+            xlim: X-axis limits ``[min, max]``, shared by all curves. None uses the
+                data range.
+            ylim: Y-axis (density) limits ``[min, max]``, shared by all curves. None
+                uses 0 up to the highest density of all groups.
+            hspace: Vertical space between the curves. Negative values make them
+                overlap (default -0.5).
+            fig_width: Width of a new figure in inches (default 8).
+            fig_height: Height of a new figure in inches (default 8).
+            shade_percentile: Quantile (0 to 1) of each group's values. The area
+                above it is shaded slightly darker (default 0.5, the median).
+            show_mean_line: Draw a vertical line at each group's mean (default False).
+            fig_dpi: DPI of a new figure (default 72).
+            showplot: Show the figure (default True).
+            ascending: Order of the groups from top to bottom. False (default) puts
+                the highest group label (e.g. the latest year) at the top.
+            how: Grouping: ``'yearly'``, ``'monthly'`` or ``'weekly'`` (ISO week,
+                default).
+            kd_kwargs: Keyword arguments for scikit-learn's ``KernelDensity``, e.g.
+                ``{'bandwidth': 0.5, 'kernel': 'gaussian'}``. None uses its defaults
+                (Gaussian kernel, bandwidth 1.0).
             fig: Existing matplotlib ``Figure`` to draw into (cleared first). When
                 given, the plot builds its stacked-density grid on it instead of
                 creating a new figure -- e.g. for embedding in a GUI canvas. The
@@ -105,7 +135,6 @@ class RidgeLinePlot:
                 are honoured here: the bottom x-axis label (text/units, font, colour)
                 and the figure title (text, font, colour). The per-ridge grid, spines,
                 ticks and shading stay fixed.
-            (other args unchanged)
         """
         style = format_style or FormatStyle()
         self._update_params(xlim=xlim, ylim=ylim, hspace=hspace,
@@ -113,6 +142,9 @@ class RidgeLinePlot:
                             shade_percentile=shade_percentile, show_mean_line=show_mean_line,
                             fig_dpi=fig_dpi, showplot=showplot,
                             ascending=ascending, style=style, kd_kwargs=kd_kwargs, fig=fig)
+        if self.series.empty:
+            self._plot_empty()
+            return
         self.ys, self.ys_unique = self._y_index(how=how)
         self.colors = iter(cm.Spectral_r(np.linspace(0, 1, len(self.ys_unique))))
         self.assigned_colors = self._assign_colors(how=how)
@@ -135,7 +167,7 @@ class RidgeLinePlot:
         return y_index, y_index_unique
 
     def _assign_colors(self, how: str):
-        """Assign colors depending on the monthly mean value."""
+        """Assign colors by the mean of each group (year, month or week), lowest mean first."""
         if how == 'yearly':
             aggs = self.series.groupby(self.series.index.year).agg('mean')
         elif how == 'monthly':
@@ -154,8 +186,7 @@ class RidgeLinePlot:
             y_index_colors[m] = next(self.colors)
         return y_index_colors
 
-    def _plot(self):
-
+    def _make_fig(self):
         # Draw into a caller-supplied figure (e.g. a GUI canvas) when given,
         # otherwise create a standalone one.
         if getattr(self, "_fig_external", None) is not None:
@@ -164,6 +195,19 @@ class RidgeLinePlot:
         else:
             self.fig = plt.figure(figsize=(self.fig_width, self.fig_height),
                                   layout=None, dpi=self.fig_dpi)
+
+    def _plot_empty(self):
+        """Draw one empty axes with a note: no finite value is left to plot (L353)."""
+        self._make_fig()
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_xticks([])
+        self.ax.set_yticks([])
+        pf.no_values_note(self.ax, f"{self.series.name}: no finite values")
+        if self.showplot:
+            self.fig.show()
+
+    def _plot(self):
+        self._make_fig()
 
         gs = (grid_spec.GridSpec(len(self.ys_unique), 1))
         # Set hspace up front (negative -> ridges overlap). Doing it here, before
@@ -314,7 +358,7 @@ class RidgeLinePlot:
             if self.show_mean_line:
                 self.ax.axvline(x1_mean, ls="-", lw=1, color="black")
 
-            # Show 99th percentile
+            # Shade the area above the shade_percentile quantile
             locs_percentile = np.where(x_d >= x1_percentile)
             x_d_percentile = x_d[locs_percentile]
             y_percentile = y[locs_percentile]

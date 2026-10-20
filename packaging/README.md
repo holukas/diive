@@ -13,27 +13,36 @@ uv sync --extra gui --group build      # one-time: install GUI + PyInstaller
 .\packaging\build_gui.ps1              # build + zip
 ```
 
-To include the **3-D surface** tab (Plot ▸ 3D surface), add the `gui3d` extra
-before building — the spec bundles VTK/PyVista only when it's present:
+The `gui` extra includes VTK/PyVista, so the build bundles the **3-D surface**
+tabs (Plot ▸ 3D surface). If they are missing from the build env, the app still
+builds and the 3-D tabs show an install notice.
+
+**Public and internal builds.** The InfluxDB database tabs are for internal use
+for now. The default build is the public one for the GitHub releases: it leaves
+out `influxdb-client` even when the build env has the `db` extra, and the app
+then hides **File ▸ Database**. For the working group, build with `-WithDb`:
 
 ```powershell
-uv sync --extra gui --extra gui3d --group build
-.\packaging\build_gui.ps1
+uv sync --extra all --group build
+.\packaging\build_gui.ps1 -Clean -WithDb
 ```
 
-Without `gui3d` the app builds fine and the 3-D tab shows an install notice.
+`-WithDb` sets `DIIVE_BUILD_DB=1` for the spec, which then bundles
+`influxdb-client` (and stops if it is not installed). The internal build has its
+own folders (`dist\diive-gui-internal\`, `build\diive-gui-internal\`), and its
+zip gets an `-internal` tag (`...-internal-win64.zip`). Share it within the
+group only, not on GitHub.
 
-To include **InfluxDB support** (the Database tabs), add the `db` group before
-building — the spec bundles `influxdb-client` only when present:
+The two builds never share files, so you can make both from one environment in
+any order:
 
 ```powershell
-uv sync --extra gui --group db --group build
-.\packaging\build_gui.ps1
+.\packaging\build_gui.ps1 -Clean            # public zip, for the GitHub release
+.\packaging\build_gui.ps1 -Clean -WithDb    # internal zip, for the group
 ```
 
-Without `db` the app builds fine and the Database tabs show an install notice.
-Combine extras/groups freely, e.g.
-`uv sync --extra gui --extra gui3d --group db --group build` for everything.
+As a safety net, the public build stops with an error if `influxdb_client` ends
+up in its folder.
 
 `build_gui.ps1` automatically **renders the GUI user manual** (`diive/gui/MANUAL.md`
 → `diive/gui/MANUAL.html`) before PyInstaller runs, so the exe always ships a
@@ -49,28 +58,59 @@ source of truth, `MANUAL.html` is generated — don't hand-edit the HTML.
 
 Output:
 
-- `dist\diive-gui\` — the runnable app folder (`diive-gui.exe` + dependencies)
-- `dist\diive-gui-<version>+build.<stamp>-win64.zip` — share this; users unzip and
+- `dist\diive-gui\` — the runnable app folder (`diive-gui.exe` + dependencies),
+  `dist\diive-gui-internal\` with `-WithDb`
+- `dist\diive-gui-<version>+build.<stamp>-win64.zip` (`...-internal-win64.zip`
+  with `-WithDb`) — share this; users unzip and
   run the exe. `<stamp>` is the build timestamp (`yyyyMMdd.HHmmss`), so each build
   of the same version gets its own name, e.g.
   `diive-gui-0.91.0+build.20260716.101500-win64.zip`
 
-Useful flags: `.\packaging\build_gui.ps1 -Clean` (wipe `build\`/`dist\` first),
-`-NoZip` (skip the archive).
+Useful flags: `.\packaging\build_gui.ps1 -Clean` (empty this build's app and work
+folders first, zips are kept),
+`-NoZip` (skip the archive), `-WithDb` (internal build with the database tabs).
 
 **Use `-Clean` for release builds.** PyInstaller's `COLLECT` step overwrites but
-never *prunes* `dist\`, so files from a previous build linger and get shipped —
-e.g. VTK from a `gui3d` build you've since dropped (hundreds of MB). `-Clean`
+never *prunes* the app folder, so files from a previous build linger and get shipped —
+e.g. packages you've since removed from the build env (hundreds of MB). `-Clean`
 guarantees the output folder matches exactly this build. (Skipping it is fine
 for dev iteration.)
+
+## Linux and macOS (untested)
+
+The releases include only the Windows app. PyInstaller does not cross-compile,
+so a Linux or macOS app must be built on that system. The spec has almost
+nothing Windows-specific, but `build_gui.ps1` is PowerShell. Run its steps by
+hand from the repo root:
+
+```bash
+uv sync --extra gui --group build
+uv run python -m diive.gui.build_manual
+uv run pyinstaller packaging/diive_gui.spec --noconfirm --clean
+```
+
+This gives `dist/diive-gui/` with a `diive-gui` executable. Pack the folder with
+`zip` or `tar` to share it. Nobody has tried these builds yet. Expected problems:
+
+- **macOS:** the result is a folder with a command-line executable, not a `.app`.
+  A `.app` needs a `BUNDLE` step in the spec and an `.icns` icon. Gatekeeper
+  blocks unsigned apps, and signing needs an Apple Developer account.
+- **Linux:** the app runs only on systems with the same or a newer glibc than
+  the build machine, so build on an older distribution. Qt needs system
+  libraries for its window handling (`xcb`), which are not installed everywhere.
+- **3-D tabs:** VTK has not been tested in a frozen build on these systems.
+
+On Linux and macOS, `pip install "diive[gui]"` and `diive-gui` is usually the
+simpler way to run the app. A GitHub Actions workflow with Windows, macOS and
+Linux runners could build all three for each release.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `diive_gui.spec` | PyInstaller build recipe (one-folder; bundles `diive/configs` data + `diive/gui/MANUAL.html`; collects shap/xgboost/sklearn/... ; conditionally bundles the `gui3d` and `db` optionals when installed; excludes unused Qt modules) |
+| `diive_gui.spec` | PyInstaller build recipe (one-folder; bundles `diive/configs` data + `diive/gui/MANUAL.html`; collects shap/xgboost/sklearn/... ; conditionally bundles VTK/PyVista when installed and `influxdb-client` only with `DIIVE_BUILD_DB=1`; excludes unused Qt modules) |
 | `launch_diive_gui.py` | Frozen-app entry point (calls `diive.gui.launch`) |
-| `build_gui.ps1` | Build + zip helper (also renders `MANUAL.md` → `MANUAL.html` first) |
+| `build_gui.ps1` | Build + zip helper (also renders `MANUAL.md` → `MANUAL.html` first; `-WithDb` for the internal build) |
 | `make_icon.py` | Renders the splash-motif app icon to `diive.ico` (run once when the icon art changes) |
 | `diive.ico` | Embedded EXE / taskbar icon (multi-size; generated by `make_icon.py`) |
 
@@ -103,16 +143,15 @@ once — that exercises the lazy imports.
   `_no_test_submodules()` filter drops every `tests` / `testing` / `conftest`
   submodule at collection time. If a future run unexpectedly needs one, loosen
   that filter rather than re-adding the whole tree.
-- **VTK/PyVista (the `gui3d` extra) is collected conditionally.** The spec
+- **VTK/PyVista (part of the `gui` extra) is collected conditionally.** The spec
   bundles `vtkmodules` / `vtk` / `pyvista` / `pyvistaqt` (via `collect_all`)
-  **only if** they're installed in the build env, so a 2-D-only build skips
-  them. VTK routes its render window through PySide6's OpenGL modules — do **not**
-  add `PySide6.QtOpenGL` / `PySide6.QtOpenGLWidgets` to `excludes`. VTK adds
-  several hundred MB; expect a noticeably larger build with 3-D enabled.
+  **only if** they're installed in the build env. VTK routes its render window
+  through PySide6's OpenGL modules — do **not** add `PySide6.QtOpenGL` /
+  `PySide6.QtOpenGLWidgets` to `excludes`. VTK adds several hundred MB to the
+  build.
 
 ## Notes
 
 - **One-folder, not one-file** — diive's scientific stack is large; a one-file
   exe would unpack everything to a temp dir on each launch (slow/flaky).
-- **Windows only** — PyInstaller does not cross-compile. A macOS/Linux build
-  must run on that OS.
+- **Windows only** — see [Linux and macOS](#linux-and-macos-untested).

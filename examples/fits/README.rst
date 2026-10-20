@@ -28,7 +28,7 @@ Use Cases
        df=df,
        xcol='PAR',                   # X variable (predictor)
        ycol='GPP',                   # Y variable (response)
-       n_bins_x=10,                  # Divide X into 10 equal-width bins
+       n_bins_x=10,                  # Divide X into 10 quantile bins (about equal record counts)
        bins_y_agg='mean',            # Aggregate Y per bin ('mean' or 'median')
        fit_type='quadratic_offset'   # y = ax^2 + bx + c
    )

@@ -35,10 +35,11 @@ print(f"  Range: {series.min():.2f} to {series.max():.2f} W/m²")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # The correction:
-# 1. Calculates sunrise and sunset using solar geometry
-# 2. Identifies nighttime periods
-# 3. Calculates mean radiation during night as the offset
-# 4. Subtracts this offset and sets nighttime to zero
+# 1. Calculates potential radiation for each record from the site location
+# 2. Flags records with potential radiation below 0.001 W/m² as nighttime
+# 3. Takes the mean of each day's nighttime values as that day's offset
+# 4. Subtracts the offset, sets nighttime to zero and clamps remaining
+#    negative values to zero
 
 series_corr = dv.corrections.remove_nighttime_zero_offset(
     series=series,

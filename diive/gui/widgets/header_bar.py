@@ -3,9 +3,9 @@ GUI.WIDGETS.HEADER_BAR: STUDIO CUSTOM HEADER
 ============================================
 
 The custom title bar for the frameless "Studio" window chrome (see
-`diive.gui.theme` presets): a "diive" wordmark on the left, then the full menu
-tree as inline dropdown buttons (File ⌄, Data ⌄, Plot ⌄, …), and a centred
-title. Replaces the native title bar + menu bar in Studio mode only.
+`diive.gui.theme`): a "diive" wordmark on the left, then the full menu tree as
+inline dropdown buttons (File ⌄, Data ⌄, Plot ⌄, …), and a centred title.
+Replaces the native title bar and menu bar.
 
 On a narrow window the bar degrades in priority order (`_reflow`): menus that
 don't fit fold into a "More ⌄" overflow dropdown (their labels are never
@@ -16,7 +16,7 @@ across the bar — implemented like a classic menu bar: each button's ``Enter``
 pops its menu up (`QMenu.popup`, non-blocking), and while a menu is open its
 own mouse-move events drive switching to whichever button the cursor is over.
 Dragging an empty area of the bar moves the window (native ``startSystemMove``).
-Labels use the active preset's tracked/uppercase typography (`theme.manager`).
+Labels use the Studio tracked/uppercase typography (`theme.manager`).
 
 GUI-only presentation.
 

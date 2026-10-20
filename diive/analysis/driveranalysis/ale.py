@@ -19,14 +19,33 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from diive.core.plotting.styles.format import FormatStyle
 
 # Material Design palette (see CLAUDE.md plotting conventions).
 _MD_BLUE = '#2196F3'
 _MD_BLUE_BG = '#BBDEFB'
 _MD_GREY = '#455A64'
+
+
+def _reject_flat_title(legacy: dict, method: str) -> None:
+    """Raise for a leftover keyword argument, pointing a flat ``title`` to FormatStyle.
+
+    The plot methods take ``**legacy`` only so that a call from before the move
+    to FormatStyle gets a message that says what to change. Any other name is
+    still rejected, so a typo cannot pass silently.
+    """
+    if not legacy:
+        return
+    if 'title' in legacy:
+        raise TypeError(f"{method}() no longer takes 'title'. "
+                        "Pass format_style=dv.plotting.FormatStyle(title=...) instead.")
+    raise TypeError(f"{method}() got an unexpected keyword argument '{next(iter(legacy))}'")
 
 
 @dataclass
@@ -90,21 +109,28 @@ class AleCurve:
             return '∩' if sign[0] > 0 else '∪'
         return 'nonmonotonic'
 
-    def plot(self, ax=None, color: str = _MD_BLUE, label: str = None,
-             title: str = None, showplot: bool = False, **style):
+    def plot(self, ax=None, format_style: FormatStyle = None, color: str = _MD_BLUE,
+             label: str = None, showplot: bool = False, **style):
         """Render the ALE curve (two-phase: styling lives here).
 
         Args:
             ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid, legend). The title defaults to
+                ``"ALE: <feature>"`` and the x-label to the feature name.
             color: Line color (Material Design blue by default).
             label: Legend label; defaults to the feature name.
-            title: Axes title.
             showplot: Call ``fig.show()`` when a new figure was created.
             **style: Passed through to ``ax.plot``.
         """
+        from diive.core.plotting import plotfuncs as pf
+        from diive.core.plotting.styles.format import FormatStyle
+        if 'title' in style:
+            # `title` would otherwise reach ax.plot and fail with a Line2D error.
+            raise TypeError("AleCurve.plot() no longer takes 'title'. "
+                            "Pass format_style=dv.plotting.FormatStyle(title=...) instead.")
         created = False
         if ax is None:
-            from diive.core.plotting import plotfuncs as pf
             fig, ax = pf.create_ax(figsize=(9, 6))
             created = True
         label = self.feature if label is None else label
@@ -114,14 +140,11 @@ class AleCurve:
         ax.plot(self.bin_edges, np.full_like(self.bin_edges, self.ale.min()),
                 marker='|', ls='none', color=_MD_GREY, alpha=0.5, zorder=4)
         ax.axhline(0, color=_MD_GREY, lw=0.8, ls='--', zorder=2)
-        ax.set_xlabel(self.feature)
-        ax.set_ylabel('ALE (effect on prediction, target units)')
-        ax.set_title(title if title else f"ALE: {self.feature}")
-        ax.legend(loc='best', fontsize=10)
-        if created:
-            ax.grid(True, ls='--', alpha=0.4, zorder=0)
-            if showplot:
-                fig.show()
+        (format_style or FormatStyle()).apply(
+            ax=ax, default_title=f"ALE: {self.feature}", default_xlabel=self.feature,
+            default_ylabel='ALE (effect on prediction, target units)')
+        if created and showplot:
+            fig.show()
         return ax
 
 
@@ -151,9 +174,21 @@ class Ale2DResult:
             return 0.0
         return float(np.nanmax(self.ale) - np.nanmin(self.ale))
 
-    def plot(self, ax=None, cmap: str = 'RdBu_r', title: str = None,
-             showplot: bool = False):
-        """Render the 2D ALE surface as a diverging heatmap."""
+    def plot(self, ax=None, format_style: FormatStyle = None, cmap: str = 'RdBu_r',
+             showplot: bool = False, **legacy):
+        """Render the 2D ALE surface as a diverging heatmap.
+
+        Args:
+            ax: Existing axes to draw on. A new figure is created when ``None``.
+            format_style: Shared :class:`~diive.plotting.FormatStyle` for the chrome
+                (title, labels, fonts, grid). The title defaults to
+                ``"2D ALE: <f1> x <f2>"`` and the axis labels to the feature names.
+                Without a style the grid is off.
+            cmap: Diverging colormap, centred on zero.
+            showplot: Call ``fig.show()`` when a new figure was created.
+        """
+        _reject_flat_title(legacy, 'Ale2DResult.plot')
+        from diive.core.plotting.styles.format import FormatStyle
         created = False
         if ax is None:
             from diive.core.plotting import plotfuncs as pf
@@ -163,9 +198,9 @@ class Ale2DResult:
         mesh = ax.pcolormesh(self.x_edges, self.y_edges, self.ale,
                              cmap=cmap, vmin=-vmax, vmax=vmax, shading='auto')
         ax.figure.colorbar(mesh, ax=ax, label='2nd-order ALE (interaction)')
-        ax.set_xlabel(self.f1)
-        ax.set_ylabel(self.f2)
-        ax.set_title(title if title else f"2D ALE: {self.f1} x {self.f2}")
+        (format_style or FormatStyle(show_grid=False)).apply(
+            ax=ax, default_title=f"2D ALE: {self.f1} x {self.f2}",
+            default_xlabel=self.f1, default_ylabel=self.f2)
         if created and showplot:
             ax.figure.show()
         return ax

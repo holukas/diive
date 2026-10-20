@@ -141,5 +141,39 @@ class TestNamespaceRegistration(unittest.TestCase):
                          "packaging/diive_gui.spec")
 
 
+
+class TestShapImport(unittest.TestCase):
+    """L313: shap's stored import errors must not keep the importing caller alive."""
+
+    def test_stored_import_errors_release_the_caller(self):
+        import gc
+        import weakref
+
+        import shap
+        from diive.core.ml.shap_import import import_shap
+
+        class Sentinel:
+            pass
+
+        def caller():
+            # Stands in for a GUI tab held as a local while shap is first imported.
+            sentinel = Sentinel()
+            try:
+                import diive_no_such_module  # noqa: F401
+            except ImportError as e:
+                shap.utils._general.record_import_error("fake", "missing", e)
+            return weakref.ref(sentinel)
+
+        ref = caller()
+        try:
+            gc.collect()
+            self.assertIsNotNone(ref(), "the stored traceback should pin the caller here")
+            import_shap()
+            gc.collect()
+            self.assertIsNone(ref(), "import_shap must drop the stored traceback")
+        finally:
+            shap.utils._general.import_errors.pop("fake", None)
+
+
 if __name__ == '__main__':
     unittest.main()

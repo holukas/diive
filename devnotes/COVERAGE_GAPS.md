@@ -92,9 +92,9 @@ Largest remaining GUI-only line counts, none of them a whole module:
 
 | GUI-only lines | Module | Module coverage |
 |---|---|---|
-| 88 | `flux/fluxprocessingchain/container.py` | 66 % |
+| 88 | `flux/postprocessingchain/container.py` | 66 % |
 | 76 | `analysis/gapfinder.py` | 43 % |
-| 64 | `flux/fluxprocessingchain/levels/level33.py` | — |
+| 64 | `flux/postprocessingchain/levels/level33.py` | — |
 | 44 | `gapfilling/mds.py` | — |
 | 39 | `preprocessing/outlier_detection/stepwiseoutlierdetection.py` | — |
 
@@ -205,9 +205,9 @@ session touched adjacent work on without closing — its four functions take pre
 | ~~281~~ | ~~`preprocessing/qaqc/detect_timestamp_shifts.py`~~ — **now 92 %** | yes |
 | 205 | `io/formats/fluxnet.py` | — |
 | 167 | `io/formats/meteo.py` | — |
-| 149 | `core/plotting/seasonaltrend.py` | yes (`LongtermAnomaliesYear`) |
+| 149 | `core/plotting/seasonaltrend.py` | no (nothing calls it; `LongtermAnomaliesYear` is in `core/plotting/bar.py`) |
 | 49 | `core/utils/vargroups.py` | — |
-| 40 | `core/plotting/_fitplot.py` | yes (via `Fitter`) |
+| 40 | `core/plotting/_fitplot.py` | no (no `Fitter` class exists, and nothing calls `fitplot`) |
 | 16 | `core/dfun/regression.py` | — |
 | 11 | **`diive/corrections/__init__.py`** | — |
 | 5 | `core/plotting/rectangle.py` | — |
@@ -233,7 +233,7 @@ no GUI-test contribution at all):
 |---|---|---|
 | `preprocessing/outlier_detection/codegen.py` | 54 % (100 % GUI-only) | **100 %** |
 | `core/plotting/codegen.py` | 94 % (100 % GUI-only) | **99 %** |
-| `flux/fluxprocessingchain/codegen.py` | 80 % | **94 %** |
+| `flux/postprocessingchain/codegen.py` | 80 % | **94 %** |
 | `gapfilling/codegen.py` | 35 % (100 % GUI-only) | **93 %** |
 | `flux/lowres/codegen.py` | 85 % (~100 % GUI-only) | **92 %** |
 | `flux/partitioning/codegen.py` | 12 % (100 % GUI-only) | **92 %** |
@@ -379,7 +379,7 @@ L58 / L73), and `quality_weighted_decompose` was deleted with L50 — it never w
 
 ## Tier 1g — Flux-chain re-run cascade — **DONE** (2026-07-26)
 
-`TestRerunCascade` in `tests/test_fluxprocessingchain.py`: 10 tests, 3.4 s. The chain is built once
+`TestRerunCascade` in `tests/test_postprocessingchain.py`: 10 tests, 3.4 s. The chain is built once
 in `setUpClass` (0.6 s) and every test re-runs from those snapshots, which the levels' purity makes
 safe.
 
@@ -506,7 +506,7 @@ What the tests pin:
   and the empty-string miss.
 
 Also added: an `__all__` resolution test for `dv.qaqc` and `dv.variables`, matching the one written
-for `dv.corrections`. **Seven namespace `__init__` files still have no such test** — `dv.outliers`,
+for `dv.corrections`. ~~**Seven namespace `__init__` files still have no such test**~~ (closed by Tier 1e) — `dv.outliers`,
 `dv.events`, `dv.gapfilling`, `dv.flux`, `dv.analysis`, `dv.plotting`, `dv.times`.
 
 ## Tier 1c — `dv.corrections` — **DONE** (2026-07-26)
@@ -604,7 +604,7 @@ adds the detail that most of the "covered" ones are covered only by the GUI.
 |---|---|---|
 | `core/plotting/codegen.py` (16 fns) | 94 % | **100 %** |
 | `flux/lowres/codegen.py` (2 fns) | 85 % | ~100 % |
-| `flux/fluxprocessingchain/codegen.py` (7 fns) | 80 % | 40 % — the one with real tests (`test_flux_codegen.py`) |
+| `flux/postprocessingchain/codegen.py` (7 fns) | 80 % | 40 % — the one with real tests (`test_flux_codegen.py`) |
 | `preprocessing/corrections/codegen.py` (1 fn) | 62 % | high |
 | `preprocessing/outlier_detection/codegen.py` (10 fns) | 54 % | **100 %** |
 | `gapfilling/codegen.py` (7 fns) | 35 % | **100 %** |
@@ -702,10 +702,10 @@ direct test of the dispatch table, not just the individual correction functions.
 
 | Symbol | Status |
 |---|---|
-| `dv.plotting.DateTimeSurface`, `datetime_surface_grid` | `core/plotting/surface_grid.py` 48 %, all GUI-only. Runs without the `gui3d` extra, so testable headless |
+| `dv.plotting.DateTimeSurface`, `datetime_surface_grid` | `core/plotting/surface_grid.py` 48 %, all GUI-only. Runs without PyVista, so testable headless |
 | `dv.events.CATEGORY_COLORS` | no test, no example |
 | `dv.load_parquet_many` | no test, no example, despite a documented `progress_callback` |
-| `UstarDetectionMPT`, `UstarThresholdConstantScenarios`, `FlagSingleConstantUstarThreshold` | `flux/lowres/ustarthreshold.py` **29 %**, 92 of 126 covered lines GUI-only |
+| `UstarDetectionMPT` (removed since, `85eb97cc`), `UstarThresholdConstantScenarios`, `FlagSingleConstantUstarThreshold` | `flux/lowres/ustarthreshold.py` **29 %**, 92 of 126 covered lines GUI-only |
 
 ---
 
@@ -731,21 +731,21 @@ Coverage cannot speak to this tier; it stays grep-derived. Each is a documented 
 
 | Symbol | Real line coverage of backing module |
 |---|---|
-| `DetectTimestampShifts` | **0 %** (281 stmts) |
-| `LongtermAnomaliesYear` | **0 %** (`core/plotting/seasonaltrend.py`, 149 stmts) |
-| `Fitter` | `core/plotting/_fitplot.py` **0 %**; `core/dfun/fits.py` low |
+| ~~`DetectTimestampShifts`~~ | ~~**0 %** (281 stmts)~~ Now 92 %, see Tier 1j |
+| ~~`LongtermAnomaliesYear`~~ | ~~**0 %** (`core/plotting/seasonaltrend.py`, 149 stmts)~~ Wrong module: the class is in `core/plotting/bar.py`, tested since Tier 1b |
+| ~~`Fitter`~~ | ~~`core/plotting/_fitplot.py` **0 %**; `core/dfun/fits.py` low~~ No `Fitter` class exists. The fit example uses `BinFitterCP` |
 | `MultiDataFileReader`, `ReadFileType`, `search_files` | `core/io/filereader.py` partial, 82 of 290 covered lines GUI-only |
 | `UstarVekuriThresholdDetection` | 19 of 193 stmts, all GUI-only |
 | `TimeLagAnalysis` | 23 of 211 stmts, all GUI-only |
 | `FindOptimumRange` | 27 of 222 stmts, all GUI-only |
-| `harmonic_analysis` + `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics` | 6 of 7 symbols in `analysis/harmonic.py` untested |
+| ~~`harmonic_analysis` + `reconstruct_harmonics`, `periodogram`, `fft_decompose`, `multi_scale_harmonics`~~ | ~~6 of 7 symbols in `analysis/harmonic.py` untested~~ The four helpers were removed (`57b8b845`), and `harmonic_analysis` is tested in `test_analyses.py` |
 | `GrangerCausality` | 10 of 53 stmts, all GUI-only |
 | `ManualRemoval` | 33 of 37 stmts, all GUI-only |
 | `DailyCorrelation`, `StratifiedAnalysis` | `analysis/correlation.py`, `analysis/decoupling.py` |
 | `get_encoded_value_from_int`, `get_encoded_value_series` | top-level |
-| `add_driver` | `flux/fluxprocessingchain/container.py` — 235 of 269 covered lines GUI-only |
+| `add_driver` | `flux/postprocessingchain/container.py` — 235 of 269 covered lines GUI-only |
 | `detect_fluxbasevar`, `run_level33_variable_ustar` | chain; `levels/level33.py` 79 of 122 GUI-only |
-| `run_level42_nighttime_reddyproc`, `run_level42_daytime_reddyproc`, `run_level42_daytime_oneflux` | 3 of 4 L4.2 entry points reached only through the ONEFlux-nighttime path |
+| ~~`run_level42_nighttime_reddyproc`, `run_level42_daytime_reddyproc`~~ | ~~2 of 4 L4.2 entry points reached only through the ONEFlux-nighttime path~~ Since 2026-10-17 `TestLevel42Partitioning` in `test_postprocessingchain.py` runs all four `run_level42_*` functions and checks `run_level42_partitioning` against each. `run_level42_daytime_oneflux` also has its own test (L211) |
 
 ---
 
@@ -758,10 +758,10 @@ wrong** — corrected here.
 
 | Module | Real coverage | Earlier claim |
 |---|---|---|
-| `gapfilling/similarity.py` | **88 %**, only 32/128 GUI-only | **[revised]** I called it "indirect only, no direct test". It is well exercised by the `FluxMDS` and `RandomUncertaintyPAS20` tests. Deprioritise |
+| `gapfilling/similarity.py` | **88 %**, only 32/128 GUI-only | **[revised]** I called it "indirect only, no direct test". It is well exercised by the `FluxMDS` and `RandomUncertaintyPAS20` tests. Deprioritise. (2026-09-29: `RandomUncertaintyPAS20` uses only the similarity tolerances; the cascade's other caller is the daytime ONEFlux NEE uncertainty, and `test_uncertainty.py` now tests the cascade directly.) |
 | `core/base/flagbase.py` | **69 %**, 44/134 GUI-only | **[revised]** Genuinely covered via the outlier detectors, as suspected but now confirmed |
 | `flux/lowres/storage_correction.py` | **47 %**, 26/72 GUI-only | **[revised]** I listed it as "no test". Real tests reach it via `run_level31` |
-| `flux/fluxprocessingchain/codegen.py` | 80 %, 40 % GUI-only | **[revised]** The healthiest codegen module, thanks to `test_flux_codegen.py` |
+| `flux/postprocessingchain/codegen.py` | 80 %, 40 % GUI-only | **[revised]** The healthiest codegen module, thanks to `test_flux_codegen.py` |
 
 ### Confirmed or worse than the grep pass suggested
 
@@ -769,13 +769,13 @@ wrong** — corrected here.
 |---|---|---|
 | `flux/lowres/selfheating.py` | **10 %** (69 of 667), all GUI-only | Largest under-tested module. 3 examples, no real test |
 | `flux/lowres/ustarthreshold.py` | **29 %**, 73 % of that GUI-only | |
-| `core/times/decomposition_utils.py` | **45 %**, mostly GUI-only | CLAUDE.md records a **fixed bug** here (missing `period`, unsupported `fit(weights=)`). The regression test still does not exist |
+| `core/times/decomposition_utils.py` | **45 %**, mostly GUI-only | CLAUDE.md records a **fixed bug** here (missing `period`, unsupported `fit(weights=)`). ~~The regression test still does not exist~~ Tested since Tier 1h |
 | `core/plotting/heatmap_base.py` | 73 %, **92 of 103 covered lines GUI-only** | **[revised]** Worse than the "indirect via HeatmapDateTime" I assumed — `HeatmapDateTime` itself is GUI-only |
 | `preprocessing/qaqc/eddyproflags.py` | 80 %, 55/99 GUI-only | Confirmed indirect via `run_level2`; 7 flag functions, no direct unit test |
 | `preprocessing/outlier_detection/stepwiseoutlierdetection.py` | 84 %, 81 of 119 GUI-only | The documented chained-detection API |
-| `flux/fluxprocessingchain/levels/_rerun.py` | 87 %, mostly GUI-only | **The documented re-run cascade has no test in `test_fluxprocessingchain.py`.** Its coverage comes from the GUI driving levels repeatedly |
-| `flux/fluxprocessingchain/levels/_qcf.py` | 86 %, GUI-only | |
-| `preprocessing/qaqc/qcf.py` | **53 %** | `FlagQCF` — 339 stmts, 159 missing |
+| `flux/postprocessingchain/levels/_rerun.py` | 87 %, mostly GUI-only | ~~**The documented re-run cascade has no test in `test_postprocessingchain.py`.** Its coverage comes from the GUI driving levels repeatedly~~ Tested since Tier 1g |
+| `flux/postprocessingchain/levels/_qcf.py` | 86 %, GUI-only | |
+| `preprocessing/qaqc/qcf.py` | **53 %** | `FlagQCF` — 339 stmts, 159 missing. Now 95 %, see Tier 1i |
 | `preprocessing/qaqc/meteoscreening.py` | **55 %**, half GUI-only | |
 | `preprocessing/outlier_detection/localsd.py` | **63 %** | Lowest of the outlier detectors (siblings are 80-95 %) |
 
@@ -804,14 +804,15 @@ pass and is arguably the most important item.
 2. ~~**Break the plotting classes out of GUI-only coverage**~~ — **done**, `TestPlotClasses` in
    `tests/test_plots.py`. Follow-up left: `core/plotting/seasonaltrend.py`, still 0 %.
 3. ~~**`dv.corrections` namespace import + `apply_corrections` dispatch test**~~ — **done**,
-   `tests/test_corrections.py`. The same `__all__` check is still worth adding for the **other
-   nine namespace `__init__` files** (a one-line import test each); only `dv.corrections` has it.
+   `tests/test_corrections.py`. ~~The same `__all__` check is still worth adding for the **other
+   nine namespace `__init__` files** (a one-line import test each); only `dv.corrections` has it.~~
+   Done, see 4b.
 4. ~~**`dv.qaqc` registry and `dv.variables` classification tests**~~ — **done**, in
    `tests/test_qaqc.py` and `tests/test_createvar.py`.
 4b. ~~**`__all__` tests for the remaining namespaces**~~ — **done**, all ten in
    `tests/test_imports.py`, plus the four-place namespace-registration check.
 5. ~~**`GapFillingResult` / `prediction_scores`**~~ — **done**, in `tests/test_gapfilling.py`.
-6. ~~**Re-run cascade test**~~ — **done**, `TestRerunCascade` in `tests/test_fluxprocessingchain.py`.
+6. ~~**Re-run cascade test**~~ — **done**, `TestRerunCascade` in `tests/test_postprocessingchain.py`.
 7. ~~**`stl_decompose` regression test**~~ — **done**, `TestStlDecompose` in `tests/test_time.py`
    (the function is at 84 %). Follow-up: the other five functions in
    `core/times/decomposition_utils.py` remain at 2-8 %.

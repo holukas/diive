@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "diive"
-version = "0.91.2"
+version = "0.92.0"
 description = "Time series processing"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -26,20 +26,15 @@ dependencies = [
     "numpy>=2.2.4,<3.0.0",
     "shap>=0.50.0,<1.0.0",  # 0.50 parses XGBoost's bracketed base_score itself
     "rich>=15.0.0",
+    "threadpoolctl>=3.1.0,<4.0.0",  # one BLAS thread in the daytime REddyProc port
 ]
 
 [project.optional-dependencies]
-# PySide6 (Qt) desktop GUI. Optional so headless/library users never pull in
-# Qt. Install with: pip install 'diive[gui]'  (or: uv sync --extra gui).
+# PySide6 (Qt) desktop GUI, including the VTK-based 3-D surface tabs (embedded
+# via pyvistaqt's QtInteractor). Optional so headless/library users never pull
+# in Qt or VTK. Install with: pip install 'diive[gui]'  (or: uv sync --extra gui).
 gui = [
     "pyside6>=6.8,<7.0",
-]
-# GPU-accelerated 3-D plotting for the desktop GUI (VTK-based, embedded via
-# pyvistaqt's QtInteractor). Separate from 'gui' because VTK is heavy and most
-# GUI users don't need 3-D; lazy-imported, so a 'gui'-only install never pulls
-# in VTK. Install with: pip install 'diive[gui,gui3d]'  (or: uv sync --extra
-# gui --extra gui3d).
-gui3d = [
     "pyvista>=0.44",
     "pyvistaqt>=0.11",
     # Packs the 3-D surface export to a true binary .glb (VTK only writes .gltf);
@@ -47,15 +42,17 @@ gui3d = [
     "trimesh>=4.0",
 ]
 # InfluxDB v2 support for diive's in-house engine (diive/core/io/db/influx).
-# Also exposed as the 'db' dependency group below, which is the documented way to
-# opt in when working *on* diive. It is an extra as well because a dependency
-# group is local to the project that declares it and never reaches the published
-# metadata: a downstream project depending on diive (including through a uv
-# path/editable source) cannot request a group, only an extra. So a consuming
-# project asks for 'diive[db]'. Install with: pip install 'diive[db]'  (or:
-# uv sync --extra db).
+# Install with: pip install "diive[db]"  (or: uv sync --extra db).
 db = [
     "influxdb-client>=1.37.0",
+]
+# Everything for the working group: desktop app, InfluxDB and JupyterLab for the
+# database notebooks. JupyterLab has no extra of its own, because public users
+# bring their own notebook setup. Its pin matches the dev group's.
+# Install with: pip install "diive[all]"  (or: uv sync --extra all).
+all = [
+    "diive[gui,db]",
+    "jupyterlab>=4.3.6,<5.0.0",
 ]
 
 [project.scripts]
@@ -72,11 +69,8 @@ Issues = "https://github.com/holukas/diive/issues"
 python-preference = "managed"
 
 [dependency-groups]
-# InfluxDB v2 support for diive's in-house engine (diive/core/io/db/influx).
-# Personal/local InfluxDB workflow, NOT part of the default sync — other
-# contributors use their own database setup. Opt in with: uv sync --group db
-# Defers to the 'db' extra so the version pin lives in exactly one place.
-db = ["diive[db]"]
+# Development tools, synced by default with uv. With pip (25.1 or newer):
+# python -m pip install -e ".[all]" --group dev
 dev = [
     "jupyterlab>=4.3.6,<5.0.0",
     "ipykernel>=7.2.0",

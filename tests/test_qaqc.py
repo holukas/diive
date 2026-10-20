@@ -6,6 +6,16 @@ import pandas as pd
 from diive.qaqc import FlagQCF
 
 
+def _report_row(text: str, label: str) -> list:
+    """The whole numbers in the report table row that starts with *label*."""
+    import re
+    row = next((line for line in text.splitlines() if line.strip().startswith(label)
+                and not line.strip()[len(label):].startswith(':')), None)  # not an info line
+    assert row is not None, f'{label!r} row not in report'
+    rest = row.strip()[len(label):]
+    return [int(x.replace(',', '')) for x in re.findall(r'(?<![\d.<>])\d[\d,]*(?![\d.])', rest)]
+
+
 class TestFlagQCF(unittest.TestCase):
 
     def _build(self):
@@ -211,9 +221,9 @@ class TestFlagQCFReports(unittest.TestCase):
 
     def test_reports_emit_output(self):
         expected = {
-            'report_qcf_flags': 'INDIVIDUAL TEST FLAG STATISTICS',
-            'report_qcf_evolution': 'QCF EVOLUTION',
-            'report_qcf_series': 'QCF QUALITY CONTROL REPORT',
+            'report_qcf_flags': 'Test flags: FC',
+            'report_qcf_evolution': 'QCF evolution: FC',
+            'report_qcf_series': 'QCF summary: FC',
         }
         for method, heading in expected.items():
             with self.subTest(report=method):
@@ -244,6 +254,35 @@ class TestFlagQCFPlots(unittest.TestCase):
                 getattr(self.qcf, method)()
                 self.assertGreater(len(plt.get_fignums()), 0)
                 plt.close('all')
+
+    def test_plots_draw_a_display_frame(self):
+        """`flags=` draws a caller's display copy instead of `flags`, which stays as it is."""
+        import matplotlib.pyplot as plt
+        stored = self.qcf.flags.copy()
+        shown = self.qcf.flags.copy()
+        shown['FC'] = -5.0
+        shown.loc[shown.index[:10], 'FC'] = np.nan
+
+        plt.close('all')
+        self.qcf.showplot_qcf_heatmaps(flags=shown)
+        cells = plt.gcf().axes[0].collections[0].get_array()
+        self.assertEqual(int(np.ma.count(cells)), len(shown) - 10)
+        self.assertEqual(float(cells.max()), -5.0)
+
+        plt.close('all')
+        self.qcf.showplot_qcf_timeseries(flags=shown)
+        lines = {ln.get_label(): ln for ax in plt.gcf().axes for ln in ax.get_lines()}
+        np.testing.assert_array_equal(np.asarray(lines['FC'].get_ydata(), dtype=float),
+                                      shown['FC'].to_numpy())
+        plt.close('all')
+        pd.testing.assert_frame_equal(self.qcf.flags, stored)
+
+        # Without it, the plots draw `flags`.
+        self.qcf.showplot_qcf_timeseries()
+        lines = {ln.get_label(): ln for ax in plt.gcf().axes for ln in ax.get_lines()}
+        np.testing.assert_array_equal(np.asarray(lines['FC'].get_ydata(), dtype=float),
+                                      stored['FC'].to_numpy())
+        plt.close('all')
 
 
 class TestValidateIdString(unittest.TestCase):
@@ -322,13 +361,24 @@ class TestFlagQCFValidation(unittest.TestCase):
             with self.assertRaises(KeyError):
                 FlagQCF(df=df, target_col='FC', swinpot_col='NOT_A_COLUMN')
 
+    def test_ustar_scenario_error_says_none_or_several(self):
+        from diive.qaqc import FlagQCF
+        df = _flag_frame(4)
+        scenarios = ['CUT_16', 'CUT_50', 'CUT_84']
+        with self.assertRaisesRegex(ValueError, 'No USTAR scenario'):
+            FlagQCF(df=df, target_col='FC', idstr='_L3.3', ustar_scenarios=scenarios)
+        with self.assertRaisesRegex(ValueError, 'More than one USTAR scenario'):
+            FlagQCF(df=df, target_col='FC', idstr='_CUT_16_CUT_50',
+                    ustar_scenarios=scenarios)
+
 
 class TestFlagQCFNeverNaN(unittest.TestCase):
-    """QCF is always 0/1/2, never NaN (finding L8).
+    """QCF is always 0/1/2 for a record, never NaN (finding L8).
 
     The flag sums treat a NaN test flag as 0, so a record whose every test flag
     is NaN lands at QCF=0 ("nothing flagged it"), not at NaN. The NaN in
-    `_calculate_flag_qcf` is only the column initialisation.
+    `_calculate_flag_qcf` is only the column initialisation. Rows that are not
+    records at all are the exception, see `TestFlagQCFEmptySlots`.
     """
 
     def test_all_nan_test_flags_give_qcf_zero(self):
@@ -344,6 +394,140 @@ class TestFlagQCFNeverNaN(unittest.TestCase):
         flag = qcf.get()[qcf.flagqcfcol]
         self.assertFalse(flag.isna().any(), "QCF must never be NaN")
         self.assertEqual(list(flag.astype(int)), [0, 0, 1, 2])
+
+
+class TestFlagQCFEmptySlots(unittest.TestCase):
+    """Rows where the missing-values flag is NaN are not records.
+
+    Mixed-resolution meteo screening puts coarse records on a finer grid, and the
+    slots between them hold no record: their MISSING flag is NaN, while a real gap
+    has flag 2. Such rows must not be counted, rated QCF=0 or drawn as good.
+    """
+
+    N, SWINPOT = 192, 'SW_IN_POT'
+
+    @classmethod
+    def _frame(cls, empty_slots: bool):
+        df = _flag_frame(cls.N, with_swinpot=True)
+        df.loc[df.index[100:104], 'FLAG_FC_T1_TEST'] = 1.0
+        df['FLAG_FC_MISSING_TEST'] = 0.0
+        empty = df.index[10:90:2]  # 40 rows, spanning day and night
+        gap = df.index[150]  # one real missing record
+        df.loc[[gap], 'FC'] = np.nan
+        df.loc[[gap], 'FLAG_FC_MISSING_TEST'] = 2.0
+        df.loc[empty, 'FC'] = np.nan
+        # Other detectors leave NaN where there is no value (FlagBase).
+        df.loc[empty, [f'FLAG_FC_T{i}_TEST' for i in range(1, 6)]] = np.nan
+        # Without empty slots these rows are ordinary gaps (flag 2).
+        df.loc[empty, 'FLAG_FC_MISSING_TEST'] = np.nan if empty_slots else 2.0
+        return df, empty
+
+    def _qcf(self, empty_slots: bool):
+        from diive.qaqc import FlagQCF
+        df, empty = self._frame(empty_slots)
+        qcf = FlagQCF(df=df, target_col='FC', swinpot_col=self.SWINPOT)
+        qcf.calculate()
+        return qcf, empty
+
+    @staticmethod
+    def _emits(qcf, method_name):
+        import contextlib
+        import io
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            getattr(qcf, method_name)()
+        return buffer.getvalue()
+
+    def test_qcf_and_sums_are_nan_at_empty_slots(self):
+        qcf, empty = self._qcf(empty_slots=True)
+        out = qcf.get()
+        for col in (qcf.flagqcfcol, qcf.sumflagscol, qcf.sumhardflagscol, qcf.sumsoftflagscol):
+            with self.subTest(col=col):
+                self.assertTrue(out.loc[empty, col].isna().all())
+                self.assertFalse(out[col].drop(empty).isna().any())
+        # Records keep their rating, the real gap included.
+        flag = out[qcf.flagqcfcol]
+        self.assertEqual(flag.iloc[150], 2)
+        self.assertEqual(set(flag.iloc[100:104]), {1})
+
+    def test_reports_exclude_empty_slots(self):
+        qcf, empty = self._qcf(empty_slots=True)
+        n_records = self.N - len(empty)
+
+        table, text = qcf.screening_report()
+        potential = table.groupby('period')['n_potential'].max()
+        self.assertEqual(int(potential['OVERALL']), n_records)
+        self.assertEqual(int(potential['DAYTIME'] + potential['NIGHTTIME']), n_records)
+        self.assertEqual(int(table['n_measured'].max()), n_records - 1)
+        self.assertIn(f"Potential records : {n_records:>7}", text)
+
+        series_report = self._emits(qcf, 'report_qcf_series')
+        all_records = _report_row(series_report, 'All records')
+        self.assertEqual(all_records[0], n_records)
+        self.assertEqual(sum(all_records[-2:]), n_records)  # day + night
+        self.assertEqual(_report_row(series_report, 'Missing')[0], 1)
+
+        self.assertIn(f"Measured records: {n_records - 1}", self._emits(qcf, 'report_qcf_evolution'))
+
+        # Every per-flag count sees only records: all measured records tested, none extra.
+        flags_report = self._emits(qcf, 'report_qcf_flags')
+        self.assertIn(f"Measured records: {n_records - 1} of {n_records}", flags_report)
+        for test in ('T1', 'T2', 'T3', 'T4', 'T5'):
+            row = _report_row(flags_report, test)  # shown without the 'FC_' prefix
+            self.assertEqual((row[0], row[-1]), (n_records - 1, 0))  # tested, not tested
+
+    def test_plots_do_not_show_empty_slots_as_good(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        qcf, empty = self._qcf(empty_slots=True)
+        n_records = self.N - len(empty)
+        plt.close('all')
+        qcf.showplot_qcf_heatmaps()
+        axes = plt.gcf().axes
+        # Panels: before, after, flag sum, QCF. Unmasked cells are records only.
+        for ax in axes[2:4]:
+            cells = ax.collections[0].get_array()
+            self.assertEqual(int(np.ma.count(cells)), n_records)
+        plt.close('all')
+        qcf.showplot_qcf_timeseries()
+        lines = {ln.get_label(): ln for ax in plt.gcf().axes for ln in ax.get_lines()}
+        ydata = np.asarray(lines[qcf.flagqcfcol].get_ydata(), dtype=float)
+        self.assertEqual(int(np.isnan(ydata).sum()), len(empty))
+        plt.close('all')
+
+    def test_without_nan_in_missing_flag_nothing_changes(self):
+        qcf, empty = self._qcf(empty_slots=False)
+        out = qcf.get()
+        self.assertFalse(out[qcf.flagqcfcol].isna().any())
+        self.assertFalse(out[qcf.sumflagscol].isna().any())
+        # The would-be empty slots are ordinary gaps now: rejected and counted.
+        self.assertEqual(set(out.loc[empty, qcf.flagqcfcol]), {2})
+        table, _ = qcf.screening_report()
+        self.assertEqual(int(table.groupby('period')['n_potential'].max()['OVERALL']), self.N)
+        self.assertEqual(_report_row(self._emits(qcf, 'report_qcf_series'), 'All records')[0], self.N)
+
+    def test_measured_value_with_nan_missing_flag_is_a_record(self):
+        """A NaN missing flag makes an empty slot only where the value is NaN too.
+
+        A measured value keeps its hard flags, e.g. when the missing-values flag
+        was computed over a shorter period and joined onto the frame.
+        """
+        from diive.qaqc import FlagQCF
+        df, empty = self._frame(empty_slots=True)
+        spike = df.index[120]
+        df.loc[spike, 'FC'] = 500.0
+        df.loc[spike, 'FLAG_FC_T1_TEST'] = 2.0
+        df.loc[spike, 'FLAG_FC_MISSING_TEST'] = np.nan
+        qcf = FlagQCF(df=df, target_col='FC', swinpot_col=self.SWINPOT)
+        qcf.calculate()
+
+        self.assertEqual(qcf.flagqcf.loc[spike], 2)
+        self.assertTrue(np.isnan(qcf.filteredseries.loc[spike]))
+        self.assertTrue(qcf.flagqcf.loc[empty].isna().all())  # empty slots unchanged
+        table, _ = qcf.screening_report()
+        self.assertEqual(int(table.groupby('period')['n_potential'].max()['OVERALL']),
+                         self.N - len(empty))
 
 
 class TestEddyProFlags(unittest.TestCase):
@@ -406,7 +590,23 @@ class TestEddyProFlags(unittest.TestCase):
         flags = flags_vm97_eddypro_fluxnetfile_tests(df=vm97, flux='FC', fluxbasevar='CO2',
                                                      spikes=True, dropout=True)
         self.assertEqual(list(flags['FLAG_FC_CO2_VM97_SPIKE_HF_TEST']), [0.0, 2.0, 0.0])
-        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_DROPOUT_TEST']), [0.0, 0.0, 0.0])
+        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_DROPOUT_HF_TEST']), [0.0, 0.0, 0.0])
+
+    def test_vm97_dropout_is_hard_flag(self):
+        # EddyPro labels drop_out a hard flag. The flag name used to lack '_HF_',
+        # so a failed drop-out test stayed a soft flag (1) and QCF kept the record.
+        from diive.preprocessing.qaqc.eddyproflags import flags_vm97_eddypro_fluxnetfile_tests
+        vm97 = pd.DataFrame({'CO2_VM97_TEST': [800000000.0, 800100000.0]}, index=self._idx(2))
+        flags = flags_vm97_eddypro_fluxnetfile_tests(df=vm97, flux='FC', fluxbasevar='CO2',
+                                                     spikes=False, dropout=True)
+        self.assertEqual(list(flags['FLAG_FC_CO2_VM97_DROPOUT_HF_TEST']), [0.0, 2.0])
+
+        df = flags.assign(FC=[1.0, 2.0])
+        qcf = FlagQCF(df=df, target_col='FC')
+        qcf.calculate(daytime_accept_qcf_below=2, nighttime_accept_qcf_below=2)
+        out = qcf.get()
+        self.assertEqual(list(out[qcf.flagqcfcol].astype(int)), [0, 2])
+        self.assertTrue(np.isnan(out[qcf.filteredseriescol].iloc[1]))
 
 
 class TestMeasurementsRegistry(unittest.TestCase):

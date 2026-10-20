@@ -1,4 +1,11 @@
-"""Identify related/relevant variable columns by name."""
+"""
+BASE: IDENTIFY
+==============
+
+Identify related variable columns by name.
+
+Part of the diive library: https://github.com/holukas/diive
+"""
 from pandas import DataFrame
 
 

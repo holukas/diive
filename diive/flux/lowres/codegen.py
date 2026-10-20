@@ -1,6 +1,6 @@
 """
 FLUX.LOWRES.CODEGEN: RENDER LOW-RES FLUX CHOICES AS A RUNNABLE SCRIPT
-====================================================================
+=====================================================================
 
 Turn the choices a caller makes (e.g. in the GUI's random-uncertainty tab) into
 a self-contained, runnable diive snippet — so a point-and-click run stays

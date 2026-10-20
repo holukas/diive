@@ -18,6 +18,9 @@ daytime REddyProc port (``_DT_RP``) and the nighttime ports (``_NT_OF`` /
 
 Best for: matching an ONEFlux / FLUXNET2015 daytime partitioning, or comparing
 the ONEFlux and REddyProc daytime implementations.
+
+``dv.flux.PartitioningNEE(method='daytime', mode='oneflux')`` runs the same
+port. It selects any of the four partitioning ports with these two arguments.
 """
 
 # %%
@@ -30,12 +33,18 @@ the ONEFlux and REddyProc daytime implementations.
 # does NOT use solar geometry or latitude - the day/night split is the measured
 # radiation threshold.
 #
+# The gap-filled NEE (``nee_f``) is optional. ONEFlux reads it only for windows
+# without any measured nighttime NEE, for example at high latitudes in summer
+# or in long gaps. Without it such windows are not fitted and a warning lists
+# them.
+#
 # The bundled CH-DAV dataset ships REddyProc daytime reference columns
 # (``Reco_DT_CUT_REF`` / ``GPP_DT_CUT_REF``). They come from a different
 # algorithm and provenance (measured NEE uncertainty, bootstrap, full record), so
 # the ONEFlux port tracks GPP closely and RECO with a stable bias - a provenance
-# artifact, not an algorithmic difference (the port matches a native ONEFlux run
-# on identical inputs to RECO r ~ 0.999, GPP r ~ 0.9999).
+# artifact, not an algorithmic difference (on identical inputs, every fit is
+# bitwise identical to a native ONEFlux run under NumPy 1, and RECO/GPP differ
+# by at most 6e-6 umol m-2 s-1, float32 rounding).
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -61,7 +70,8 @@ part = dv.flux.DaytimePartitioningOneFlux(
     sw_in=df['Rg_orig'],  # measured incoming shortwave radiation
     ta_f=df['Tair_f'],  # gap-filled air temperature
     sw_in_f=df['Rg_f'],  # gap-filled incoming shortwave radiation
-    vpd=df['VPD_f'],  # gap-filled VPD (kPa, converted to hPa internally)
+    vpd=df['VPD_f'],  # gap-filled VPD, in hPa in this dataset
+    vpd_in_kpa=False,  # the default expects kPa
 )
 part.run()
 results = part.results

@@ -1,9 +1,8 @@
 """
 FITS: CURVE FITTING AND REGRESSION
-===================================
+==================================
 
-Polynomial and custom function fitting for binned data.
-Includes binning aggregation and uncertainty estimation.
+Polynomial fits to binned or unbinned data, with confidence and prediction intervals.
 
 Part of the diive library: https://github.com/holukas/diive
 """

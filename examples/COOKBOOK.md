@@ -62,8 +62,8 @@ df = dv.load_exampledata_parquet()
 detector = StepwiseOutlierDetection(
     dfin=df,
     col='NEE_CUT_REF_orig',
-    site_lat=47.48,
-    site_lon=8.37,
+    site_lat=46.81533,
+    site_lon=9.85591,
     utc_offset=1
 )
 
@@ -86,7 +86,7 @@ Available methods on `StepwiseOutlierDetection`: `flag_outliers_hampel_test`,
 `flag_outliers_localsd_test`, `flag_outliers_zscore_test`,
 `flag_outliers_zscore_rolling_test`, `flag_outliers_lof_test`,
 `flag_outliers_abslim_test`, `flag_outliers_increments_zcore_test`,
-`flag_outliers_trim_low_test`.
+`flag_outliers_trim_low_test`, `flag_manualremoval_test`, `flag_missingvals_test`.
 
 Full example: [preprocessing/outlier_detection/outlier_stepwise.py](preprocessing/outlier_detection/outlier_stepwise.py)
 
@@ -126,8 +126,8 @@ rfts.fillgaps(showplot_scores=False, showplot_importance=False)
 
 # Step 3: access results
 r = rfts.results                  # GapFillingResult dataclass
-print(r.scores['r2'])             # gap-filling R²
-gapfilled = r.gapfilled           # gap-filled Series (flag: 0=observed, 1=filled)
+print(r.scores_traintest['r2'])   # R² on held-out test data
+gapfilled = r.gapfilled           # gap-filled Series (r.flag: 0=observed, 1=filled, 2=fallback)
 ```
 
 Swap `RandomForestTS` for `XGBoostTS` (same API) or `FluxMDS` for a no-training alternative.
@@ -139,11 +139,11 @@ Full examples: [gapfilling/gapfill_randomforest.py](gapfilling/gapfill_randomfor
 
 ---
 
-## 5. Run the full flux processing chain (L2–L4.1)
+## 5. Run the full flux post-processing chain (L2–L4.1)
 
 ```python
 from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
-from diive.flux.fluxprocessingchain import (
+from diive.flux.postprocessingchain import (
     FluxConfig, add_driver, init_flux_data, run_chain)
 
 df = load_exampledata_parquet_lae_level1_30MIN()
@@ -155,18 +155,19 @@ df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME')
 data = init_flux_data(
     df=df,
     fluxcol='FC',
-    site_lat=47.41887,
-    site_lon=8.491318,
+    site_lat=47.478333,
+    site_lon=8.364389,
     utc_offset=1,
     nighttime_threshold=20,                 # W m-2
     daytime_accept_qcf_below=2,
     nighttime_accept_qcf_below=2,
 )
 
-# MDS needs VPD in kPa, but this dataset carries it in hPa. Convert, then
-# register it with add_driver so it lands in data.full_df, where L4.1 reads
-# from. Without this step FluxConfig raises: there is no VPD_kPa column.
-vpd_kpa = (df['VPD_T1_47_1_gfXG'] / 10.0).rename('VPD_kPa')
+# MDS needs VPD in kPa, which this dataset already has. add_driver registers
+# it under a short name in data.full_df, where L4.1 reads from. Without this
+# step FluxConfig raises: there is no VPD_kPa column. With VPD in hPa, divide
+# by 10 here.
+vpd_kpa = df['VPD_T1_47_1_gfXG'].rename('VPD_kPa')
 data = add_driver(data, vpd_kpa)
 
 # One FluxConfig drives the whole L2 -> L3.1 -> L3.2 -> L3.3 -> L4.1 chain.
@@ -176,7 +177,7 @@ cfg = FluxConfig(
     ustar_labels=['CUT_50'],
     mds_swin='SW_IN_T1_47_1_gfXG',          # L4.1 MDS drivers (must be in data.full_df)
     mds_ta='TA_T1_47_1_gfXG',
-    mds_vpd='VPD_kPa',                       # MDS needs VPD in kPa, not hPa
+    mds_vpd='VPD_kPa',                       # MDS needs VPD in kPa
     gapfill_mds=True,
     gapfill_rf=True,
     gapfilling_features=['TA_T1_47_1_gfXG', 'SW_IN_T1_47_1_gfXG', 'VPD_kPa'],
@@ -191,8 +192,8 @@ Returns a complete audit trail: one flag column per test, QCF composite flag, an
 gap-filled flux at every USTAR scenario. For full control over every detector and
 model knob, use the composable per-level API (`run_level2`, `run_level31`, ...).
 
-Full example: [flux/fluxprocessingchain/fluxprocessingchain_runchain.py](flux/fluxprocessingchain/fluxprocessingchain_runchain.py) |
-composable version: [flux/fluxprocessingchain/fluxprocessingchain_composable.py](flux/fluxprocessingchain/fluxprocessingchain_composable.py)
+Full example: [flux/postprocessingchain/postprocessingchain_runchain.py](flux/postprocessingchain/postprocessingchain_runchain.py) |
+composable version: [flux/postprocessingchain/postprocessingchain_composable.py](flux/postprocessingchain/postprocessingchain_composable.py)
 
 ---
 
@@ -203,7 +204,7 @@ import diive as dv
 
 df = dv.load_exampledata_parquet()
 
-# DateTime heatmap: hours on y-axis, days on x-axis
+# DateTime heatmap: dates on y-axis, time of day on x-axis
 dv.plotting.HeatmapDateTime(series=df['NEE_CUT_REF_f']).plot()
 ```
 
@@ -216,7 +217,7 @@ dv.plotting.HeatmapYearMonth(series=df['NEE_CUT_REF_f'], agg='mean').plot()
 # Scatter
 dv.plotting.ScatterXY(x=df['Tair_f'], y=df['NEE_CUT_REF_f']).plot()
 
-# Diel cycle by month
+# Diel cycle (pass each_month=True to the plot for one curve per month)
 dv.plotting.DielCycle(series=df['NEE_CUT_REF_f']).plot()
 ```
 

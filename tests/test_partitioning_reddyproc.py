@@ -74,20 +74,23 @@ class TestNighttimePartitioningReddyProc(unittest.TestCase):
         # REddyProc estimates exactly one E0 for the entire series.
         self.assertEqual(len(e0), 1)
         self.assertGreater(e0[0], 30.0)
-        self.assertLess(e0[0], 350.0)
+        self.assertLess(e0[0], 450.0)
 
     def test_matches_reddyproc_reference(self):
         part = self._run()
         res = part.results
+        # Native REddyProc 1.3.4 sMRFluxPartition on exactly these ten years and
+        # coordinates gives E0 = 282.89 (with the old E0 bound of 350: 153.96).
+        self.assertEqual(res['E0_NT_RP'].iloc[0], 282.89)
+        # The bundled Reco/GPP columns are REddyProc-derived but come from other
+        # runs (per year, other settings), so they are a plausibility check only.
         reco_ref = self.df['Reco_CUT_REF']
         gpp_ref = self.df['GPP_CUT_REF_f']
-        # These reference columns are themselves REddyProc-derived, so this is a
-        # genuine 1:1 parity target (not just a sanity check).
         m = res['RECO_NT_RP'].notna() & reco_ref.notna()
-        self.assertGreater(np.corrcoef(res['RECO_NT_RP'][m], reco_ref[m])[0, 1], 0.99)
+        self.assertGreater(np.corrcoef(res['RECO_NT_RP'][m], reco_ref[m])[0, 1], 0.98)
         self.assertLess(abs(res['RECO_NT_RP'][m].mean() - reco_ref[m].mean()), 0.25)
         mg = res['GPP_NT_RP'].notna() & gpp_ref.notna()
-        self.assertGreater(np.corrcoef(res['GPP_NT_RP'][mg], gpp_ref[mg])[0, 1], 0.99)
+        self.assertGreater(np.corrcoef(res['GPP_NT_RP'][mg], gpp_ref[mg])[0, 1], 0.98)
 
     def test_gpp_definition(self):
         part = self._run()
@@ -142,6 +145,106 @@ class TestNighttimePartitioningReddyProc(unittest.TestCase):
             lat=self.lat, lon=self.lon, utc_offset=self.utc_offset, verbose=0)
         with self.assertRaises(RuntimeError):
             _ = part.results
+
+
+class TestNighttimeReddyProcParity(unittest.TestCase):
+    """Parity with native REddyProc 1.3.4 (R 4.5.3) on single years of CH-DAV.
+
+    Reference numbers come from sMRFluxPartition run on the same inputs (the
+    REddyProc parity harness: nee/ta/sw_in measured, nee_f/ta_f gap-filled,
+    lat 46.8153, lon 9.8559, UTC+1).
+    """
+    LAT, LON = 46.8153, 9.8559
+
+    @classmethod
+    def setUpClass(cls):
+        import diive as dv
+        cls.df = dv.load_exampledata_parquet()
+
+    def _year(self, year):
+        cols = {'nee': 'NEE_CUT_REF_orig', 'nee_f': 'NEE_CUT_REF_f', 'ta': 'Tair_orig',
+                'ta_f': 'Tair_f', 'sw_in': 'Rg_orig'}
+        sub = self.df.loc[str(year), list(cols.values())].copy()
+        sub.columns = list(cols)
+        return sub
+
+    def _run(self, year):
+        from diive.flux.partitioning import NighttimePartitioningReddyProc
+        sub = self._year(year)
+        return NighttimePartitioningReddyProc(
+            nee=sub['nee'], ta=sub['ta'], sw_in=sub['sw_in'], nee_f=sub['nee_f'],
+            ta_f=sub['ta_f'], lat=self.LAT, lon=self.LON, utc_offset=1, verbose=0).run().results
+
+    def _window(self, year, start):
+        """Nighttime NEE and temperature (K) of the E0 window starting at DayCounter `start`."""
+        import diive.flux.partitioning.nighttime_reddyproc as nr
+        sub = self._year(year)
+        idx = sub.index
+        potrad = nr.potential_radiation(idx.dayofyear.to_numpy(),
+                                        (idx.hour + idx.minute / 60.0).to_numpy(),
+                                        self.LAT, self.LON, 1)
+        nee, ta = sub['nee'].to_numpy(), sub['ta'].to_numpy()
+        night = (sub['sw_in'].to_numpy() <= 10) & (potrad <= 0) & ~np.isnan(nee)
+        day_counter = np.arange(1, len(sub) + 1) // 48
+        sel = (day_counter >= start) & (day_counter <= start + 14) & night & ~np.isnan(ta)
+        return nee[sel], ta[sel] + 273.15
+
+    def test_e0_upper_bound_is_450(self):
+        # sMRFluxPartition passes the temperature as 'FP_Temp_NEW', so the
+        # 'Tair' branch (350) of sRegrE0fromShortTerm never runs: 450 applies.
+        import diive.flux.partitioning.nighttime_reddyproc as nr
+        self.assertEqual(nr.E0_MAX, 450.0)
+        # In 2016 the window starting on day 281 (E0 367.6 +- 42.0) is one of
+        # the three averaged; with a bound of 350 E0 was 231.11.
+        self.assertEqual(self._run(2016)['E0_NT_RP'].iloc[0], 280.68)
+        self.assertEqual(self._run(2019)['E0_NT_RP'].iloc[0], 167.5)
+
+    def test_reco_matches_reddyproc(self):
+        res = self._run(2016)
+        # (time stamp, REddyProc R_ref, REddyProc Reco)
+        ref = [('2016-01-01 00:15', 0.6189940733139093, 0.12808948041285195),
+               ('2016-04-14 04:15', 10.5843350869417, 2.3424526857547097),
+               ('2016-07-06 12:15', 8.979994261178613, 9.344891963616682),
+               ('2016-12-20 04:15', 4.80739608660523, 0.701560369170886)]
+        for ts, rref, reco in ref:
+            self.assertAlmostEqual(res.loc[ts, 'RREF_NT_RP'], rref, delta=1e-13 * rref)
+            self.assertAlmostEqual(res.loc[ts, 'RECO_NT_RP'], reco, delta=1e-13 * reco)
+
+    def test_window_dropped_where_r_nls_fails(self):
+        import diive.flux.partitioning.nighttime_reddyproc as nr
+        # 2016 day 11: nls does not converge within 50 iterations. 2019 day 131:
+        # nls runs into a singular gradient. REddyProc drops both windows; a
+        # generic least-squares solver returned E0 4724 and -1971 there.
+        for year, start in ((2016, 11), (2019, 131)):
+            nee, ta_k = self._window(year, start)
+            self.assertIsNone(nr._fit_e0_single(nee, ta_k, nr.TREF_K))
+
+    def test_window_fit_matches_r_nls(self):
+        import diive.flux.partitioning.nighttime_reddyproc as nr
+        # REddyProc's E_0_trim and E_0_trim_SD of the three averaged windows of
+        # 2016. The leastsq-based port was off by up to 6e-6 relative; what is
+        # left comes from exp() rounding differently in its last bit.
+        ref = {271: (207.78782739839917, 47.99914068123538),
+               276: (266.6322669497816, 51.81372936729844),
+               281: (367.62269001416365, 42.033458506377904)}
+        for start, (e0, sd) in ref.items():
+            nee, ta_k = self._window(2016, start)
+            fit = nr._fit_e0_single(nee, ta_k, nr.TREF_K)
+            self.assertIsNotNone(fit)
+            self.assertAlmostEqual(fit[4], e0, delta=1e-6 * e0)
+            self.assertAlmostEqual(fit[5], sd, delta=1e-6 * sd)
+
+    def test_r_arithmetic_helpers(self):
+        import diive.flux.partitioning.nighttime_reddyproc as nr
+        # R 4.5.3: round(c(276.455, 326.925), 2); Python's round gives the other neighbour.
+        self.assertEqual(nr._r_round(276.455, 2), 276.46)
+        self.assertEqual(nr._r_round(326.925, 2), 326.92)
+        # R: coef(lm(y ~ 0 + x)) through the QR; sum(x*y)/sum(x^2) is 1.2531129185484733.
+        x = np.array([1.75, 2.29, 2.05, 0.95, 1.1, 2.25])
+        y = np.array([0.03, 4.11, 3.99, 2.34, 1.52, 1.39])
+        self.assertEqual(nr._lm_through_origin(x, y), 1.2531129185484731)
+        # R: qr(cbind(x, 2 * x))$rank is 1 -> nls reports a singular gradient.
+        self.assertEqual(nr._dqrdc2(np.column_stack([x, 2 * x]))[2], 1)
 
 
 if __name__ == '__main__':

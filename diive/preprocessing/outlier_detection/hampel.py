@@ -1,14 +1,18 @@
 """
-Outlier detection using the Hampel filter (Median Absolute Deviation).
+HAMPEL: ROLLING MEDIAN ABSOLUTE DEVIATION FILTER
+================================================
 
-This module provides robust, window-based outlier detection using the Hampel filter,
-which relies on the Median Absolute Deviation (MAD). Two modes are available:
+Robust, window-based outlier detection with the Hampel filter, which relies on
+the Median Absolute Deviation (MAD). Two modes are available:
 
 - **Global Mode:** Single threshold applied to entire time series
   Fast, simple outlier detection for any data.
 
-- **Daytime/Nighttime Mode:** Separate thresholds for different times of day
-  Useful when data characteristics vary significantly by time-of-day conditions.
+- **Daytime/Nighttime Mode:** daytime records are judged against the median and
+  MAD of the daytime records in the window, nighttime records against those of
+  the nighttime records, each with its own threshold (as ONEFlux qc_auto,
+  Papale et al. 2006). Useful when the variability differs between day and
+  night, e.g. radiation or fluxes.
 
 Both modes support:
   - Double-differencing (Papale et al. 2006 method) to remove trends
@@ -22,8 +26,7 @@ Quality flags:
 
 See examples/preprocessing/outlier_detection/outlier_hampel.py for working examples.
 
-This module is part of the diive library:
-https://github.com/holukas/diive
+Part of the diive library: https://github.com/holukas/diive
 """
 import numpy as np
 import pandas as pd
@@ -31,11 +34,10 @@ from pandas import DatetimeIndex, Series
 
 from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import VERBOSE_PROGRESS, detail, warn
-from diive.core.utils.prints import ConsoleOutputDecorator
-from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags, reject_legacy_params
+from diive.preprocessing.outlier_detection.common import (create_daytime_nighttime_flags, reject_legacy_params,
+                                                          window_to_records)
 
 
-@ConsoleOutputDecorator()
 class Hampel(FlagBase):
     """Robust outlier detection using the Hampel filter (Median Absolute Deviation).
 
@@ -44,12 +46,49 @@ class Hampel(FlagBase):
     underlying patterns. Works in two modes:
 
     - **Global Mode:** Single threshold for entire time series (simple, fast)
-    - **Daytime/Nighttime Mode:** Separate thresholds for different times of day
-      (useful when data characteristics vary by time-of-day conditions)
+    - **Daytime/Nighttime Mode:** separate median, MAD and threshold for daytime
+      and nighttime records, as in ONEFlux (useful when the variability differs
+      between day and night)
 
     Optional double-differencing (Papale et al. 2006) removes trends before detection.
+    In both modes a record at the start or end of a run without gaps is
+    compared with the line through its next two records. That comparison has
+    the curvature sign of the central double difference, so a smooth curve
+    gives the same sign at the edge as inside the run.
+
+    With double-differencing the filter finds single spikes and pairs of
+    adjacent spikes, also at the series ends and next to gaps. A large spike
+    usually costs its two neighbours too, because their double differences
+    contain the spike. With ``repeat=True`` a block of three or four
+    bad values is also removed, in the middle of the data, at either series end
+    and on either side of a gap. In a block of five or more only the outer bad
+    values and their good neighbours are removed (at a series end or a gap only
+    the inner ones), because the inner values are consistent with each other.
+    Runs of several bad values (logger glitch, stuck sensor) belong to absolute
+    limits or manual removal. A level shift costs the two records at the step.
+    When a series end or a gap follows within four records of the step, the one
+    to three records in between go too, because they look like a bad block. A
+    gap is a missing record in the input. In a stepwise screening this includes
+    records removed by earlier tests.
 
     Example:
+        Daytime and nighttime are separate by default and need the site location.
+        ``window_length`` is a record count (48 * 7 is one week of 30-minute data)
+        or a time span:
+
+        >>> import diive as dv
+        >>> s = dv.load_exampledata_parquet()['NEE_CUT_REF_orig'].loc['2022-07']
+        >>> ham = dv.outliers.Hampel(series=s, window_length=48 * 7,
+        ...                          n_sigma_daytime=5.5, n_sigma_nighttime=4,
+        ...                          lat=46.815, lon=9.856, utc_offset=1).run()
+        >>> cleaned = ham.filteredseries
+
+        One threshold for all records:
+
+        >>> ham = dv.outliers.Hampel(series=s, window_length=48 * 7, n_sigma=5.5,
+        ...                          separate_day_night=False).run()
+        >>> ham = dv.outliers.Hampel(series=s, window_length='7D', separate_day_night=False).run()
+
         See `examples/preprocessing/outlier_detection/outlier_hampel.py` for complete examples.
     """
 
@@ -60,7 +99,7 @@ class Hampel(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
-                 window_length: int = 48 * 13,
+                 window_length: int | str = 48 * 13,
                  n_sigma: float = 5.5,
                  n_sigma_daytime: float = None,
                  n_sigma_nighttime: float = None,
@@ -80,8 +119,8 @@ class Hampel(FlagBase):
         1. **Double-Differencing:** If ``use_differencing=True``, applies filter to
            double-differenced data ($d = (x_t - x_{t-1}) - (x_{t+1} - x_t)$).
            Removes trends and isolates short-term deviations/spikes.
-        2. **Day/Night Separation:** If ``separate_day_night=True``, uses solar elevation
-           to apply different thresholds for daytime and nighttime periods.
+        2. **Day/Night Separation:** If ``separate_day_night=True``, daytime and
+           nighttime records each get their own median, MAD and threshold.
 
         The general formula for the detection interval is:
         $$Limit = \\text{Median} \\pm (n\\_sigma \\times k \\times MAD)$$
@@ -91,12 +130,22 @@ class Hampel(FlagBase):
             lat (float): Latitude of the site (Required if ``separate_day_night=True``).
             lon (float): Longitude of the site (Required if ``separate_day_night=True``).
             utc_offset (int): UTC offset in hours (Required if ``separate_day_night=True``).
-            window_length (int): The size of the sliding window centered on the point,
-                expressed as a record count (not a duration). Default is
-                ``48 * 13 = 624`` records, which equals **13 days at the
-                half-hourly (30-min) sampling rate** typical of eddy-covariance
-                data — matching the Papale et al. 2006 spike-detection window.
-                Scale for other sampling rates (e.g. ``24 * 13`` for hourly).
+            window_length (int or str): The size of the sliding window centered on
+                the point, as a record count or as a time span such as ``'13D'``.
+                A time span is converted to records at the series' frequency
+                (``'13D'`` is 624 records of 30-min data, 1872 of 10-min data) and
+                must be a whole multiple of it. Default is ``48 * 13 = 624``
+                records, which equals **13 days at the half-hourly (30-min)
+                sampling rate** typical of eddy-covariance data — matching the
+                Papale et al. 2006 spike-detection window. For other sampling
+                rates pass ``'13D'`` or scale the count (e.g. ``24 * 13`` for hourly).
+                The window rolls over the records present, so missing records
+                (gaps, and outliers removed by earlier iterations) do not count
+                and the window stretches across them: with 20 % of the records
+                missing, ``'13D'`` covers about 16 calendar days. With
+                ``separate_day_night=True`` the median and MAD of a daytime
+                record come from the daytime records in its window, those of a
+                nighttime record from the nighttime records.
             n_sigma (float): The number of standard deviations for the threshold.
                 Default is 5.5. Used for:
                 * **Global mode (separate_day_night=False):** Applied to all records.
@@ -109,8 +158,36 @@ class Hampel(FlagBase):
                 For a Gaussian distribution, $k \approx 1.4826$.
             use_differencing (bool): If ``True``, applies the filter to the double-differenced
                 time series (Papale et al. 2006 method). If ``False``, applies to raw values.
-            separate_day_night (bool): If ``True``, splits the dataset based on solar elevation
-                and applies different thresholds for daytime and nighttime.
+            separate_day_night (bool): If ``True``, daytime and nighttime (from potential
+                radiation at the site) get their own rolling median and MAD, from the
+                records of the same period in the window, and their own threshold, as in
+                ONEFlux. Unlike ONEFlux, the records next to the change between day and
+                night belong to one period only: against the near-zero night MAD of
+                radiation every record on the light ramp would look like a spike. The
+                night includes records with up to 20 W m-2 potential radiation, so in
+                radiation a few records at sunrise and sunset can still be rejected.
+                With ``use_differencing=True`` a double difference uses records of one
+                period only, also as in ONEFlux:
+
+                * In a run of three or more records of one period without a gap, the
+                  first and last record are compared with the line through the next
+                  two records of the run, the others with both neighbours.
+                * A single record with a change between day and night on one side
+                  and one missing record on the other is compared with the line
+                  through the nearest two records of its own period beyond the
+                  missing one, if those belong to a run of three or more.
+                * A run of one or two records with a change on both sides (short polar
+                  days and nights) is compared with both neighbours, across the change.
+                * Other runs of one or two records stay untested, e.g. a run of two
+                  between a change and a gap, or a run between a change and a longer
+                  gap or a series end. On clean clear-sky 30-min SW_IN every test
+                  tried for them rejected good first and last daytime records.
+
+                With ``repeat=True`` a record removed by an earlier iteration also ends
+                a run, and the short runs next to it get the line tests described in
+                ``_double_differences`` first. If ``False``, one median, MAD and
+                threshold for all records, and double differences ignore the change
+                between day and night.
             idstr (str, optional): Identifier suffix added to output variable names.
             showplot (bool): If ``True``, displays a summary plot after calculation.
             verbose (bool): If ``True``, prints iteration statistics to the console.
@@ -133,7 +210,8 @@ class Hampel(FlagBase):
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         self.showplot = showplot
         self.verbose = verbose
-        self.window_length = window_length
+        self.window_length = window_to_records(window_length, self.series, name='window_length',
+                                               verbose=self.verbose)
         self.n_sigma = n_sigma
         # Per-period overrides default to None and fall back to the global value,
         # so changing n_sigma alone still affects both periods.
@@ -152,13 +230,6 @@ class Hampel(FlagBase):
         # rather than silent.
         self._n_degenerate_scale = 0
 
-        # Records whose double difference would reach across a gap in the INPUT
-        # data. Computed once, from the original series, so that it stays fixed
-        # across iterations: values removed by an earlier iteration must not make
-        # their neighbours untestable, or a cluster of spikes would shelter itself
-        # after the first pass.
-        self._untestable = self._gap_flanking_records(self.series)
-
         # Detect daytime and nighttime
         if self.separate_day_night:
             if lat is None or lon is None or utc_offset is None:
@@ -172,6 +243,12 @@ class Hampel(FlagBase):
             self.is_daytime = None
             self.is_nighttime = None
             self.flag_daytime = None
+
+        # Runs of records without a gap in the INPUT data. A gap in the input is
+        # never bridged. The differences themselves use the runs of the current
+        # series (see _double_differences), so a record removed by an earlier
+        # iteration also ends a run.
+        self._segment = self._runs(self.series)
 
     def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.
@@ -210,20 +287,20 @@ class Hampel(FlagBase):
                                                     title=title)
 
     @staticmethod
-    def _gap_flanking_records(series: Series) -> Series:
-        """Records whose immediate neighbour is missing in the input data.
+    def _input_segments(series: Series) -> Series:
+        """Number of the gap-free run each input record belongs to.
 
-        The double difference at record *t* uses both of its neighbours, so *t*
-        cannot be judged when either of them is absent: dropping missing records
-        before differencing would silently pair *t* with a partner hours or days
+        A run ends where the next record is missing, either as an absent
+        timestamp or as a missing value. Dropping missing records before
+        differencing would otherwise pair a record with a partner hours or days
         away and make every gap edge look like a spike.
 
-        Returns a boolean Series over the input index (all False when the index
-        is not a usable time axis, which leaves the previous behaviour in place).
+        Returns an integer Series over the input index (one run when the index
+        is not a usable time axis).
         """
         index = series.index
         if not isinstance(index, DatetimeIndex) or len(index) < 3:
-            return pd.Series(False, index=index)
+            return pd.Series(0, index=index)
 
         # A non-fixed offset (month/year start, business day, week) has no constant
         # duration and raises on `.nanos`; even `hasattr` propagates that error, so
@@ -237,17 +314,217 @@ class Hampel(FlagBase):
         if step is None:
             step = pd.Series(index).diff().median()
         if pd.isna(step) or step <= pd.Timedelta(0):
-            return pd.Series(False, index=index)
+            return pd.Series(0, index=index)
 
         # A neighbour is missing either because the timestamp itself is absent
         # (irregular index) or because it carries no value (gap on a regular grid).
         steps = pd.Series(index).diff()
         far_before = (steps > step * 1.5).to_numpy()
-        far_after = np.append(far_before[1:], False)
         empty = series.isna().to_numpy()
         empty_before = np.append(True, empty[:-1])
-        empty_after = np.append(empty[1:], True)
-        return pd.Series(far_before | far_after | empty_before | empty_after, index=index)
+        return pd.Series(np.cumsum(far_before | empty_before), index=index)
+
+    def _runs(self, series: Series) -> Series:
+        """Gap-free runs of *series*, split at each change between day and night.
+
+        The split applies only with ``separate_day_night=True``. As in ONEFlux,
+        a double difference then uses records of one period only. Across the
+        change, the step from the flat night to the light ramp looks like a
+        spike against the daytime statistics: clear-sky 30-min SW_IN lost the
+        first and last daytime record of nearly every day (L255). The record
+        next to the change is tested against the extrapolation from records of
+        its own period instead, so a spike there is still found. Runs of one or
+        two records next to the change get the tests listed in
+        ``_double_differences`` (L274).
+        """
+        seg = self._input_segments(series)
+        if not self.separate_day_night:
+            return seg
+        day = self.is_daytime.reindex(seg.index, fill_value=False).astype(bool)
+        return ((seg != seg.shift()) | (day != day.shift())).cumsum()
+
+    def _double_differences(self, s: Series) -> tuple[Series, Series, Series]:
+        """Second differences of *s* that stay inside each run.
+
+        A run ends at a gap in the input, at a record removed by an earlier
+        iteration and, with ``separate_day_night=True``, at a change between day
+        and night (see ``_runs``). Inside a run: ``d = 2 x_t - x_{t-1} - x_{t+1}``,
+        the Papale et al. (2006) double difference. A record at the start or end
+        of its run has a neighbour on one side only and is tested against the
+        linear extrapolation from the next two records,
+        ``d = -(x_t - 2 x_{t+1} + x_{t+2})`` (or mirrored), which has the same
+        noise and also cancels a trend. Without that test a spike at a run edge
+        was never judged, and with ``repeat=True`` each iteration removed the
+        next record paired with it, until the run was gone.
+
+        Every test has the curvature sign of the central difference. For a
+        smooth curve with second derivative ``f''`` and step ``h`` the central
+        ``d`` is about ``-f'' h^2``, and ``x_t`` minus a line extended beyond
+        its two records is about ``+f'' h^2``, so all extrapolations carry a
+        negative factor. ``x_t`` minus a line between records on both sides has
+        the central sign. With statistics per period the median of ``d`` is not
+        zero (daytime curvature), and with the opposite sign each run edge was
+        judged against a band shifted the wrong way: ``repeat=True`` removed
+        both ends of each clear day, record by record (L255). The rule applies
+        in both modes. With ``separate_day_night=False`` the median is near
+        zero, so the sign changes fewer flags, but it still changes some.
+
+        Removed records end runs because differencing across them assumes equal
+        spacing. On a diurnal ramp or across a level shift that mismatch looks
+        like a spike, so each iteration removed the next record and
+        ``repeat=True`` ate into good data (L226). The price: in a block of five
+        or more bad values the inner records are consistent with each other and
+        stay. Short runs left next to such a hole get a line test instead:
+
+        - A run of one or two records with kept records of the same input run
+          on both sides is compared with the straight line between the nearest
+          kept record on either side.
+        - A run of one or two records, or of three at a series end or input
+          gap, with kept records of the same input run on one side only is
+          compared with the line through the nearest two records on that side,
+          extended across the hole. Those two records must belong to a run of
+          three or more.
+
+        Here an input run is also split at each change between day and night
+        (``self._segment``), so these lines never cross a change or an input
+        gap.
+
+        With ``separate_day_night=True`` a run of one or two records next to a
+        change between day and night has no test inside its period (one missing
+        record next to the change, short polar days and nights, L274):
+
+        - A single record with a change on one side and one missing record
+          (input gap or removed record) on the other is compared with the line
+          through the nearest two records of its own period beyond the missing
+          one. Those two records must belong to a run of three or more. A run
+          of two between a change and a gap stays untested: on clean clear-sky
+          30-min SW_IN (noise 0.5 W m-2) the same line rejected 1-7 % of the
+          good inner records, and 15-24 % of the outer ones.
+        - With a change on both sides, each record is compared with both
+          neighbours, across the change (the central difference, as before
+          L255).
+
+        No difference across the change next to a gap or a series end: on
+        clear-sky 30-min SW_IN the step from the flat night to the light ramp
+        rejected 78-95 % of the good first and last daytime records there.
+        Other records in runs of fewer than three are NaN.
+
+        Returns ``d`` plus, for mapping the detection band to data units, the
+        value ``x_t`` is compared with and the factor on ``x_t`` in ``d``.
+        """
+        seg = self._runs(self.filteredseries).reindex(s.index)
+        same = {k: (seg.shift(k) == seg) for k in (1, 2, -1, -2)}
+        p1, p2, n1, n2 = s.shift(1), s.shift(2), s.shift(-1), s.shift(-2)
+        central = same[1] & same[-1]
+        forward = ~central & same[-2]
+        backward = ~central & ~forward & same[2]
+        reference = ((p1 + n1) / 2).where(central, (2 * n1 - n2).where(forward, (2 * p1 - p2).where(backward)))
+        # Negative for the extrapolations, see the sign rule in the docstring.
+        factor = pd.Series(np.where(central, 2.0, -1.0), index=s.index)
+
+        # Short runs next to a hole made by an earlier iteration get the line
+        # tests described in the docstring, so a block of three or four bad
+        # values is removed completely wherever it sits. The factor gives both
+        # tests the noise of the central difference. Longer runs are not
+        # bridged: across wide holes the line misses the curvature of a diurnal
+        # cycle.
+        segv = seg.to_numpy()
+        n = len(segv)
+        first = np.searchsorted(segv, segv, side='left')
+        last = np.searchsorted(segv, segv, side='right') - 1
+        length = last - first + 1
+        if (length <= 3).any():
+            inseg = self._segment.reindex(s.index).to_numpy()
+
+            def kept(i):
+                # Record i exists and belongs to the same input run.
+                return (i >= 0) & (i < n) & (inseg[np.clip(i, 0, n - 1)] == inseg)
+
+            left, right = first - 1, last + 1
+            # At an end or input gap only one side of a block is removed in the
+            # first pass, so a block of four leaves three records there.
+            short = (length <= 2) | ((length == 3) & ~(kept(left) & kept(right)))
+            island = short & kept(left) & kept(right)
+            # The line through two records comes only from a neighbouring run
+            # of three or more. A shorter one may be the rest of a bad block.
+            ahead = short & ~island & kept(right) & (length[np.clip(right, 0, n - 1)] >= 3)
+            behind = short & ~island & ~ahead & kept(left) & (length[np.clip(left, 0, n - 1)] >= 3)
+            # The line runs through records a and b. w is the position of the
+            # tested record on it: 0 at a, 1 at b, negative beyond a.
+            a = np.where(island | behind, left, right)
+            b = np.where(island, right, np.where(behind, left - 1, right + 1))
+            line = island | ahead | behind
+            a, b = np.clip(a, 0, n - 1), np.clip(b, 0, n - 1)
+            pos = self.series.index.get_indexer(s.index)
+            x = s.to_numpy(dtype=float)
+            # Island lines interpolate (0 < w < 1), the others extrapolate.
+            sign = np.where(island, 1.0, -1.0)
+            # Without a line test a and b can coincide, so w is not finite there.
+            with np.errstate(divide='ignore', invalid='ignore'):
+                w = (pos - pos[a]) / (pos[b] - pos[a])
+                reference = reference.mask(line, (1 - w) * x[a] + w * x[b])
+                factor = factor.mask(line, sign * np.sqrt(6 / (1 + (1 - w) ** 2 + w ** 2)))
+
+            if self.separate_day_night:
+                # A run of one or two records next to a change between day and
+                # night has no test inside its period (L274). Such runs come
+                # from a missing record next to the change and from short polar
+                # days and nights. gap_l and gap_r count the missing records
+                # before and after the run, -1 at a series end.
+                day = self.is_daytime.reindex(s.index, fill_value=False).to_numpy(dtype=bool)
+                full_day = self.is_daytime.reindex(self.series.index, fill_value=False).to_numpy(dtype=bool)
+                period = np.cumsum(np.r_[True, full_day[1:] != full_day[:-1]])
+                lc, rc = np.clip(left, 0, n - 1), np.clip(right, 0, n - 1)
+                gap_l = np.where(left >= 0, pos[first] - pos[lc] - 1, -1)
+                gap_r = np.where(right < n, pos[rc] - pos[last] - 1, -1)
+                change_l = (gap_l == 0) & (day[lc] != day)
+                change_r = (gap_r == 0) & (day[rc] != day)
+                untested = (length <= 2) & ~line & (change_l | change_r)
+                # A single record with a change on one side and one missing
+                # record on the other: the line through the nearest two records
+                # of its own period beyond the gap (see docstring).
+                own_r = (untested & (length == 1) & (gap_r == 1) & (period[pos[rc]] == period[pos[last]])
+                         & (length[rc] >= 3))
+                own_l = (untested & ~own_r & (length == 1) & (gap_l == 1)
+                         & (period[pos[lc]] == period[pos[first]]) & (length[lc] >= 3))
+                own = own_r | own_l
+                a = np.where(own_r, rc, lc)
+                b = np.clip(np.where(own_r, rc + 1, lc - 1), 0, n - 1)
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    w = (pos - pos[a]) / (pos[b] - pos[a])
+                    reference = reference.mask(own, (1 - w) * x[a] + w * x[b])
+                    factor = factor.mask(own, -np.sqrt(6 / (1 + (1 - w) ** 2 + w ** 2)))
+                # Change on both sides (short polar day or night): the central
+                # difference across the change, as before L255. Not used next to
+                # a gap: there the step from the flat night to the light ramp
+                # rejected most good first and last daytime records of
+                # clear-sky 30-min SW_IN, centrally or one-sided.
+                across = untested & change_l & change_r
+                i = np.arange(n)
+                ip, inx = np.clip(i - 1, 0, n - 1), np.clip(i + 1, 0, n - 1)
+                reference = reference.mask(across, (x[ip] + x[inx]) / 2)
+                factor = factor.mask(across, 2.0)
+        return factor * (s - reference), reference, factor
+
+    def _rolling_median_mad(self, x: Series) -> tuple[Series, Series]:
+        """Centred rolling median and MAD of *x*. NaN values do not count.
+
+        A window in which more than half the values are identical has a MAD of
+        exactly zero, and then the detection band has zero width: every value that
+        differs from the local median at all becomes an outlier, however small the
+        difference. That is not a strict filter, it is an undefined one - the data
+        carry no scale to judge against - and substituting a tiny epsilon turns it
+        into a silent mass rejection of the signal itself. Quantized readings, a
+        stuck sensor or coarse data upsampled before they reach this class hit this
+        routinely. Such records get a NaN MAD, so they are left unflagged (NaN
+        limits compare False), and the count is reported rather than hidden.
+        """
+        median = x.rolling(window=self.window_length, center=True, min_periods=1).median()
+        mad = (x - median).abs().rolling(window=self.window_length, center=True, min_periods=1).median()
+        degenerate = (mad == 0) & x.notna()
+        if degenerate.any():
+            self._n_degenerate_scale += int(degenerate.sum())
+        return median, mad.where(mad != 0)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         """Perform tests required for this flag using optimized Pandas operations."""
@@ -257,72 +534,52 @@ class Hampel(FlagBase):
 
         # 2. Transform data
         if self.use_differencing:
-            # d = (x_t - x_{t-1}) - (x_{t+1} - x_t)
-            s_to_test = s.diff() - s.diff().shift(-1)
-            s_to_test = s_to_test.fillna(0)
             # Missing records were dropped above, so consecutive entries can be hours
-            # or days apart. A difference taken across such a gap compares unrelated
-            # records and makes the two records flanking every gap look like spikes.
-            # Neutralize those (mask computed once from the input, see __init__).
-            s_to_test = s_to_test.mask(self._untestable.reindex(s.index, fill_value=False))
+            # or days apart. The differences stay inside each gap-free run.
+            s_to_test, reference, factor = self._double_differences(s)
         else:
             s_to_test = s
 
-        # Calculate rolling stats (vectorized on the whole series)
-        # This is much faster than splitting day/night first
-        rolling_median = s_to_test.rolling(window=self.window_length, center=True, min_periods=1).median()
-
-        # MAD (Median Absolute Deviation) calculation
-        deviations = np.abs(s_to_test - rolling_median)
-        rolling_mad = deviations.rolling(window=self.window_length, center=True, min_periods=1).median()
-
-        # A window in which more than half the records are identical has a MAD of
-        # exactly zero, and then the detection band has zero width: every value that
-        # differs from the local median at all becomes an outlier, however small the
-        # difference. That is not a strict filter, it is an undefined one - the data
-        # carry no scale to judge against - and substituting a tiny epsilon turns it
-        # into a silent mass rejection of the signal itself. Windows that arise from
-        # upsampled coarse data, quantized readings or a stuck sensor hit this
-        # routinely. Such records are therefore left unflagged (NaN limits compare
-        # False), and the count is reported rather than hidden.
-        degenerate = rolling_mad == 0
-        if degenerate.any():
-            self._n_degenerate_scale += int(degenerate.sum())
-        rolling_mad = rolling_mad.where(~degenerate)
-
-        # Define thresholds
         if self.separate_day_night:
-            # Create a series of thresholds matching the data index
-            # Default to nighttime threshold
-            thresholds = pd.Series(data=self.n_sigma_nighttime, index=s_to_test.index)
-            # Overwrite daytime indices with daytime threshold
-            current_daytime = self.is_daytime.reindex(s_to_test.index, fill_value=False)
-            thresholds.loc[current_daytime] = self.n_sigma_daytime
+            # Median and MAD per period, as in ONEFlux qc_auto (Papale et al. 2006).
+            # With shared statistics the quiet night (e.g. radiation near zero) set
+            # the MAD and normal daytime variability looked like spikes (L239). The
+            # window keeps its span, the records of the other period are blanked.
+            # ONEFlux also counts the records next to the change between day and
+            # night in both periods. Not here: for radiation, the night statistics
+            # rejected nearly every record on the light ramp.
+            in_day = self.is_daytime.reindex(s_to_test.index, fill_value=False).astype(bool)
+            in_night = self.is_nighttime.reindex(s_to_test.index, fill_value=False).astype(bool)
+            is_outlier = pd.Series(False, index=s_to_test.index)
+            upper_bound = pd.Series(np.nan, index=s_to_test.index)
+            lower_bound = pd.Series(np.nan, index=s_to_test.index)
+            for in_period, n_sigma in ((in_day, self.n_sigma_daytime), (in_night, self.n_sigma_nighttime)):
+                median, mad = self._rolling_median_mad(s_to_test.where(in_period))
+                upper = median + self.k * mad * n_sigma
+                lower = median - self.k * mad * n_sigma
+                is_outlier |= (in_period & ((s_to_test > upper) | (s_to_test < lower))).fillna(False)
+                upper_bound = upper_bound.mask(in_period, upper)
+                lower_bound = lower_bound.mask(in_period, lower)
         else:
-            # Global mode, single threshold for all everything
-            thresholds = self.n_sigma
-
-        # Detect outliers
-        # Limit = k * MAD * n_sigma
-        # k = 1.4826 (scaling factor for Gaussian consistency)
-        limit = self.k * rolling_mad * thresholds
-        upper_bound = rolling_median + limit
-        lower_bound = rolling_median - limit
-
-        # NaN limits (degenerate scale) and NaN test values (differences spanning a
-        # gap) both compare False here, i.e. no decision is made for those records.
-        is_outlier = ((s_to_test > upper_bound) | (s_to_test < lower_bound)).fillna(False)
+            median, mad = self._rolling_median_mad(s_to_test)
+            upper_bound = median + self.k * mad * self.n_sigma
+            lower_bound = median - self.k * mad * self.n_sigma
+            # NaN limits (degenerate scale) and NaN test values (differences spanning a
+            # gap) both compare False here, i.e. no decision is made for those records.
+            is_outlier = ((s_to_test > upper_bound) | (s_to_test < lower_bound)).fillna(False)
 
         # Expose the per-iteration detection band in DATA units (for visualisation).
         # Raw mode: the bounds already are in data units. Double-differencing mode:
-        # the test runs on d = 2*x_t - (x_{t-1} + x_{t+1}), so x_t is flagged iff it
-        # leaves [lower, upper] mapped to data units as neighbour_avg + bound/2
-        # (neighbour_avg = (x_{t-1} + x_{t+1}) / 2). This is the exact data-space
-        # band the flag decision uses for the current iteration.
+        # the test runs on d = factor * (x_t - reference), so x_t is flagged iff it
+        # leaves reference + bound / factor. This is the exact data-space band the
+        # flag decision uses for the current iteration. A negative factor
+        # (extrapolations) swaps upper and lower.
         if self.use_differencing:
-            neighbour_avg = (s.shift(1) + s.shift(-1)) / 2.0
-            self.last_upper_bound = neighbour_avg + upper_bound / 2.0
-            self.last_lower_bound = neighbour_avg + lower_bound / 2.0
+            hi = reference + upper_bound / factor
+            lo = reference + lower_bound / factor
+            flipped = factor < 0
+            self.last_upper_bound = hi.mask(flipped, lo)
+            self.last_lower_bound = lo.mask(flipped, hi)
         else:
             self.last_upper_bound = upper_bound.copy()
             self.last_lower_bound = lower_bound.copy()
