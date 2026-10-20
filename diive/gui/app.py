@@ -53,6 +53,7 @@ from diive.gui.registry import (
     TAB_CLASSES,
 )
 from diive.core.io.files import ALLOWED_TIMESTAMP_NAMES
+from diive.gui.widgets.column_picker import NONE_ITEM
 from diive.gui.widgets.daterange_dialog import DateRangeDialog
 from diive.gui.widgets.menu import studio_menu
 from diive.gui.widgets.open_data_dialog import OpenDataDialog
@@ -65,19 +66,24 @@ _EXAMPLE_SOURCE = "example data (CH-DAV)"
 _RENAMED_MENU_LABELS = {"Flux processing chain": "Flux post-processing chain"}
 
 #: Menu tabs merged into another tab: old label -> (new label, state preset,
-#: renamed control keys). A project saved with an old tab reopens as the new
-#: one, preset to the old tab's variant, with its saved controls carried over.
+#: renamed control keys, controls the old tab did not have). A project saved
+#: with an old tab reopens as the new one, preset to the old tab's variant,
+#: with its saved controls carried over.
 _MERGED_MENU_TABS = {
     "Nighttime partitioning (ONEFlux)": (
-        "NEE partitioning", {"method": "nighttime", "mode": "oneflux"}, {}),
+        "NEE partitioning", {"method": "nighttime", "mode": "oneflux"}, {}, {}),
     "Nighttime partitioning (REddyProc)": (
-        "NEE partitioning", {"method": "nighttime", "mode": "reddyproc"}, {}),
+        "NEE partitioning", {"method": "nighttime", "mode": "reddyproc"}, {}, {}),
+    # The old daytime ONEFlux tab had no gap-filled NEE input. Without "(none)"
+    # the picker would guess one, possibly from another u* scenario, and change
+    # the results in windows without measured nighttime NEE (L325).
     "Daytime partitioning (ONEFlux)": (
-        "NEE partitioning", {"method": "daytime", "mode": "oneflux"}, {}),
+        "NEE partitioning", {"method": "daytime", "mode": "oneflux"}, {},
+        {"nee_f": NONE_ITEM}),
     # The old daytime REddyProc tab called its gap-filled drivers "ta" / "sw_in".
     "Daytime partitioning (REddyProc)": (
         "NEE partitioning", {"method": "daytime", "mode": "reddyproc"},
-        {"ta": "ta_f", "sw_in": "sw_in_f"}),
+        {"ta": "ta_f", "sw_in": "sw_in_f"}, {}),
 }
 
 
@@ -86,9 +92,9 @@ def _migrate_merged_tab(label: str, state: dict) -> tuple[str, dict]:
     ``_MERGED_MENU_TABS``). Other labels pass through unchanged."""
     if label not in _MERGED_MENU_TABS:
         return label, state
-    new_label, preset, renames = _MERGED_MENU_TABS[label]
+    new_label, preset, renames, added = _MERGED_MENU_TABS[label]
     controls = {renames.get(k, k): v for k, v in (state.get("controls") or {}).items()}
-    return new_label, {**state, **preset, "controls": controls}
+    return new_label, {**state, **preset, "controls": {**added, **controls}}
 
 
 def _namespace_metadata(raw: dict, key: str) -> dict:

@@ -7180,7 +7180,9 @@ def test_partitioning_tab_switch_keeps_picks_and_defaults_to_oneflux(app, partit
     ("Daytime partitioning (ONEFlux)", "daytime", "oneflux",
      {"nee": "NEE_CUT_REF_orig", "ta": "Tair_orig", "sw_in": "Rg_orig",
       "ta_f": "Tair_f", "sw_in_f": "Rg_f", "vpd": "VPD_f", "vpd_kpa": False},
-     {"nee": "NEE_CUT_REF_orig", "sw_in_f": "Rg_f", "vpd": "VPD_f"}),
+     # The old tab had no gap-filled NEE: it stays unset, not guessed (L325).
+     {"nee": "NEE_CUT_REF_orig", "sw_in_f": "Rg_f", "vpd": "VPD_f",
+      "nee_f": "(none)"}),
     # The old daytime REddyProc tab stored its gap-filled drivers as ta / sw_in.
     ("Daytime partitioning (REddyProc)", "daytime", "reddyproc",
      {"nee": "NEE_CUT_REF_orig", "ta": "Tair_f", "vpd": "VPD_f", "sw_in": "Rg_f",
@@ -7214,8 +7216,39 @@ def test_project_restores_old_partitioning_tab_as_nee_partitioning(
             assert tab.vpd_kpa_cb.isChecked() is controls["vpd_kpa"]
         # No "saved selection no longer available" warning for hidden inputs.
         assert "no longer available" not in tab.status.text()
+        if (method, mode) == ("daytime", "oneflux"):
+            # Neither the run nor Copy Python passes a gap-filled NEE.
+            code = tab._python_code()
+            assert code is not None and "nee_f" not in code
+            calls = []
+            tab._runner.run = lambda fn, *args: calls.append(args)
+            tab._run()
+            assert len(calls) == 1
+            series_map = calls[0][0]
+            assert "nee_f" not in series_map
+            assert series_map["nee"].name == "NEE_CUT_REF_orig"
+            tab._set_running(False)
     finally:
         site.manager.load_dict(snap)
+
+
+@pytest.mark.parametrize("nee_f", ["NEE_CUT_REF_f", "(none)"])
+def test_project_keeps_saved_gapfilled_nee_of_nee_partitioning_tab(window, nee_f):
+    # A tab saved by the NEE partitioning tab itself keeps its gap-filled NEE
+    # pick (or its "(none)"): only old daytime ONEFlux tabs get "(none)".
+    window._close_all_menu_tabs()
+    window._restore_tabs([{
+        "label": "NEE partitioning", "title": "NEE partitioning 1",
+        "pinned": False,
+        "state": {"method": "daytime", "mode": "oneflux",
+                  "controls": {"nee": "NEE_CUT_REF_orig", "nee_f": nee_f,
+                               "sw_in_f": "Rg_f", "vpd": "VPD_f"}}}])
+    tab = window._menu_tab_list[0]
+    assert (tab.method, tab.mode) == ("daytime", "oneflux")
+    assert tab.picker.picks()["nee_f"] == nee_f
+    code = tab._python_code()
+    assert code is not None
+    assert ("nee_f" in code) is (nee_f != "(none)")
 
 
 def test_old_partitioning_menu_labels_are_gone(app):

@@ -430,6 +430,8 @@ GUI only:
   until a site is set in Project settings.
 - **Reset to all variables:** the reset is kept when the project is saved and reopened.
 - **Select records by condition:** only numeric variables are offered as the condition.
+- **Old daytime partitioning tabs:** projects saved with the old "Daytime partitioning (ONEFlux)" tab
+  reopen without a gap-filled NEE, so they give the same results as before.
 
 Examples:
 

@@ -1284,7 +1284,9 @@ and `mode=`.
 
 Projects saved with the earlier per-variant tabs (for example **Daytime partitioning
 (REddyProc)**) open in this tab, with Method, Mode and the saved column picks set to
-match.
+match. The old **Daytime partitioning (ONEFlux)** tab had no gap-filled NEE input, so
+it opens with **NEE (gap-filled, optional)** set to *(none)* and gives the same results
+as before.
 
 > The bundled CH-DAV example already has measured and gap-filled NEE, air
 > temperature, VPD, and radiation columns, so you can try this tab on it right away.
