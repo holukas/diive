@@ -17,6 +17,11 @@ from abc import ABC, abstractmethod
 from PySide6.QtWidgets import QWidget
 
 
+#: Key the main window sets in a frame's ``attrs`` when the user declines to add
+#: it (Cancel in the "Replace variables" question).
+ADD_DECLINED_KEY = "diive_add_declined"
+
+
 class DiiveTab(ABC):
     """One top-level tab in the diive GUI.
 
@@ -41,6 +46,22 @@ class DiiveTab(ABC):
         if self._widget is None:
             self._widget = self.build()
         return self._widget
+
+    def _emit_features(self, df) -> bool:
+        """Send `df` to the main window to add it to the dataset.
+
+        Returns False when the user cancelled the "Replace variables" question.
+        The tab's status line then says that nothing was added, and the caller
+        leaves its Add button enabled.
+        """
+        df.attrs.pop(ADD_DECLINED_KEY, None)
+        self.featuresCreated.emit(df)
+        if not df.attrs.pop(ADD_DECLINED_KEY, False):
+            return True
+        status = getattr(self, "status", None)
+        if status is not None:
+            status.setText("Nothing added: the existing variables were kept.")
+        return False
 
     def on_data_loaded(self, df, created: set | None = None) -> None:
         """Called by the main window when the dataset changes.

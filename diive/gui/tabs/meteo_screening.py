@@ -717,7 +717,8 @@ class MeteoScreeningTab(ScreeningTabBase):
             if n_out:
                 notes += f" {n_out} of these records lie outside the dataset's range."
 
-        self.featuresCreated.emit(self._result_df)
+        if not self._emit_features(self._result_df):
+            return
         msg = f"Added {name} ({n_total} records) to the dataset."
         if name != self._var:
             msg = f"Added {name} (renamed from existing {self._var}, {n_total} records)."

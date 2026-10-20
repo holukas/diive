@@ -965,7 +965,8 @@ class ScreeningTabBase(DiiveTab):
             return
         if self._result_df is None or self._result_df.empty:
             return
-        self.featuresCreated.emit(self._result_df)
+        if not self._emit_features(self._result_df):
+            return
         self.status.setText(self._added_message(list(self._result_df.columns)))
         self.add_btn.setEnabled(False)
 

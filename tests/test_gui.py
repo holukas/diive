@@ -1168,6 +1168,8 @@ def test_combine_and_potrad_tabs_ask_before_replacing(window, monkeypatch,
     QApplication.processEvents()
     assert len(asked) == 1 and "NEE_CUT_REF_f" in asked[0]
     pd.testing.assert_series_equal(window._full_data["NEE_CUT_REF_f"], original)
+    # After Cancel the tab says so and Add stays enabled.
+    assert tab.status.text().startswith("Nothing added") and tab.add_btn.isEnabled()
     # A new name is added without a question.
     tab.name_edit.setText("TA_X_VPD")
     asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Cancel)
@@ -1188,6 +1190,7 @@ def test_combine_and_potrad_tabs_ask_before_replacing(window, monkeypatch,
     QApplication.processEvents()
     assert len(asked) == 1 and "SW_IN_POT" in asked[0]
     pd.testing.assert_series_equal(window._full_data["SW_IN_POT"], stored)
+    assert tab.status.text().startswith("Nothing added") and tab.add_btn.isEnabled()
     asked = _answer_question(monkeypatch, QMessageBox.StandardButton.Yes)
     tab.name_edit.setText("SW_IN_POT")             # re-enables Add
     tab._add()

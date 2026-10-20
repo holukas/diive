@@ -504,7 +504,8 @@ class BasePartitioningTab(DiiveTab):
     def _add(self) -> None:
         if self._results is None or self._results.empty:
             return
-        self.featuresCreated.emit(self._results)
+        if not self._emit_features(self._results):
+            return
         self.status.setText(
             f"Added {', '.join(str(c) for c in self._results.columns)} to the "
             f"variable list.")

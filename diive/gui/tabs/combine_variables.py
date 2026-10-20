@@ -596,7 +596,8 @@ class CombineVariablesTab(DiiveTab):
                         "method": self.method.currentData()},
                 tags=["combined"]),
         }
-        self.featuresCreated.emit(result)
+        if not self._emit_features(result):
+            return
         self.status.setText(f"Added {name} to the variable list.")
         self.add_btn.setEnabled(False)
 

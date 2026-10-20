@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
 import diive
 from diive.core.utils.console import info, success, warn
 from diive.gui import config, db, events, metadata_store, site, theme
+from diive.gui.tabs.base import ADD_DECLINED_KEY
 from diive.gui.registry import (
     MENU_TAB_CLASSES,
     MENU_TABS,
@@ -1101,6 +1102,9 @@ class MainWindow(QMainWindow):
         if confirm_overwrite and not self._confirm_replace(
                 [str(c) for c in new_df.columns if str(c) in self._full_data.columns]):
             info("Nothing added: existing variables kept")
+            # The emitting tab reads this after its emit returns and keeps its
+            # Add button and status line (DiiveTab._emit_features).
+            new_df.attrs[ADD_DECLINED_KEY] = True
             return
         # Rebind instead of mutating in place (`assign` aligns on index just the
         # same): with no active range `_data` *is* `_full_data`, the very frame

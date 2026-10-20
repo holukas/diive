@@ -1922,7 +1922,9 @@ class FluxChainTab(DiiveTab):
                 tags=["fluxchain", label.lower()])
             for c in out.columns
         }
-        self.featuresCreated.emit(out)
+        if not self._emit_features(out):
+            self.summary.setPlainText("Nothing added: the existing variables were kept.")
+            return
         self.summary.setPlainText(
             f"Added {len(out.columns)} {label} column(s) to the dataset.")
 

@@ -515,7 +515,8 @@ class SelectRecordsTab(DiiveTab):
                 origin=DERIVED, parent=str(self._target), operation=self.title,
                 params={"steps": self._steps}, tags=["selected"]),
         }
-        self.featuresCreated.emit(result)
+        if not self._emit_features(result):
+            return
         self.status.setText(f"Added {out.name} to the variable list.")
         self.add_btn.setEnabled(False)
 

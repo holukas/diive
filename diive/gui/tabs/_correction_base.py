@@ -489,7 +489,8 @@ class BaseCorrectionTab(DiiveTab):
         if self._result_df is None or self._result_df.empty:
             return
         result = self._result_df
-        self.featuresCreated.emit(result)  # MainWindow merges into the dataset
+        if not self._emit_features(result):  # MainWindow merges into the dataset
+            return
         self.status.setText(
             f"Added {', '.join(str(c) for c in result.columns)} to the variable list.")
         self.add_btn.setEnabled(False)
