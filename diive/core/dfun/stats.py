@@ -6,8 +6,6 @@ Summary-statistic helpers for Series and DataFrames.
 
 Part of the diive library: https://github.com/holukas/diive
 """
-# import diive.pkgs.dfun
-# from stats.boxes import insert_statsboxes_txt
 import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame

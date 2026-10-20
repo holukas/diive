@@ -1054,17 +1054,6 @@ class MlRegressorGapFillingBase:
         df[random_col] = np.random.RandomState(self._random_state).randn(df.shape[0])
         return df, random_col
 
-    # def _lag_features(self, features_lag_exclude_cols):
-    #     """Add lagged variants of variables as new features"""
-    #     exclude_cols = [self.target_col]
-    #     if features_lag_exclude_cols:
-    #         exclude_cols += features_lag_exclude_cols
-    #     return diive.pkgs.createvar.laggedvariants.lagged_variants(df=self.model_df,
-    #                                                                stepsize=self.features_lag_stepsize,
-    #                                                                lag=self.features_lag,
-    #                                                                exclude_cols=exclude_cols,
-    #                                                                verbose=self.verbose)
-
     def _check_n_cols(self):
         """Check number of columns"""
         if len(self.model_df.columns) == 1:
