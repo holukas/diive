@@ -510,8 +510,9 @@ def run_level33_ustar_detection(
         if np.isnan(thr):
             raise RuntimeError(
                 f"USTAR threshold detection produced NaN for percentile {p}. "
-                "Check that the dataset has sufficient nighttime records "
-                "(>= 3000 total, >= 160 per season)."
+                "Check that the dataset has enough nighttime records: at least 3000 "
+                "in total and 700 per season. If every season has fewer, all nights "
+                "are pooled into one season, which needs at least 160."
             )
         cut_thresholds.append(float(thr))
     # Zero-pad to a uniform width so labels can never be substrings of one

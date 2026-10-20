@@ -49,7 +49,7 @@ class FluxQualityFlagsEddyPro:
         idstr (str): Suffix appended to generated flag column names for identification.
             Validated for usage within flags.
         fluxbasevar (str): Name of the base variable used to calculate the flux, such
-            as 'CO2_CONC' for CO2 flux calculations.
+            as 'CO2' for CO2 flux calculations.
         _results (DataFrame): Internal dataframe used to store the original flux
             column and all generated flag columns.
         """

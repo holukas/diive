@@ -412,7 +412,8 @@ class TimeLagAnalysis:
         1. Extracts time lag series for specified gas (\*_TLAG_ACTUAL column)
         2. Creates histogram using unique value binning
         3. Excludes specified fringe bins (non-physical accumulations)
-        4. Filters histogram to display range (startbin-endbin, in lag seconds),
+        4. Filters histogram to display range (histogram_start_seconds to
+           histogram_end_seconds),
            skipping the filter with a warning if it would keep fewer than two bins
         5. Detects peak lag using histogram maximum
         6. Identifies peak range boundaries via gradient-based edge detection
@@ -583,8 +584,8 @@ class TimeLagAnalysis:
         Raises
         ------
         ValueError
-            If gas analysis fails (e.g., column not found). Error message printed
-            to console but does not interrupt calling function.
+            If gas analysis fails (e.g., column not found). Raised from
+            ``analyze_gas()``. Only ``plot_all_gases()`` catches it.
 
         Notes
         -----

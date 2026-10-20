@@ -1,7 +1,4 @@
 # TODO generalization bias
-# TODO SHAP values
-# https://pypi.org/project/shap/
-# https://mljar.com/blog/feature-importance-in-random-forest/
 
 """
 GAP-FILLING: RANDOM FOREST TIME SERIES IMPUTATION

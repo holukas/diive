@@ -56,8 +56,9 @@ Level                          Shape                         Why this shape
 ``run_level2``                 per-test config dicts         N independent EddyPro tests, each with its own
                                                              ``apply`` / threshold / time-period settings.
                                                              Flat kwargs would explode the namespace.
-``run_level31``                flat booleans                 Two binary decisions only — a config object
-                                                             would be overkill.
+``run_level31``                flat keyword arguments        Two binary decisions and an optional storage
+                                                             column name. A config object would be
+                                                             overkill.
 ``run_level32``                pre-built detector object     Outlier detection is inherently sequential and
                                                              stateful: each ``flag_*`` + ``addflag()`` pair
                                                              filters the survivors of the previous step.
@@ -91,8 +92,8 @@ encode *which* quality threshold was applied:
   gap-filling and most downstream analysis.
 - ``..._QCF0`` — the flux filtered at **strictly QCF=0** (all quality tests
   passed; no soft warnings tolerated).  This is the "highest-quality"
-  reference series, used as the training target for ML gap-filling and
-  anywhere you want to be conservative.
+  reference series, for analyses that need the strictest filter. Gap-filling
+  (L4.1) uses the ``..._QCF`` series.
 
 With ``daytime_accept_qcf_below=1`` and ``nighttime_accept_qcf_below=1``
 (the defaults) the two contain identical values (both keep only QCF=0), but

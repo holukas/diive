@@ -138,7 +138,7 @@ def linear_interpolation(series: Series, limit: int = 3, verbose: bool = False) 
     series_all_interpolated = series.interpolate(method='linear', limit=None,
                                                   limit_area='inside', limit_direction='both')
 
-    # Vectorized gap-filling: create mask for all fillable gaps
+    # Copy the interpolated values into the fillable gaps only, one gap at a time
     series_filled = series.copy()
     for idx in gapfinder_agg_df.index:
         gap_start = gapfinder_agg_df.loc[idx, 'GAP_START']

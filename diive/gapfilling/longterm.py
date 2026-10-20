@@ -2,8 +2,8 @@
 GAP-FILLING: LONG-TERM MODELS
 =============================
 
-Extended gap-filling for multi-year datasets with USTAR filtering support.
-Wrapper for RF and XGBoost with scenario handling.
+Gap-filling for multi-year datasets: one model per year, trained on that year
+and its two closest neighbouring years. Random Forest and XGBoost variants.
 
 Part of the diive library: https://github.com/holukas/diive
 """

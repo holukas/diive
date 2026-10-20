@@ -184,7 +184,7 @@ def run_level32(
     # column in `.flags` — neither directly nor under the `_N_TEST` re-run rename
     # — the user forgot to commit it.
     # ``StepwiseOutlierDetection`` initialises ``_last_flag`` as an empty
-    # ``pd.DataFrame()`` (line 91 of stepwiseoutlierdetection.py). Each
+    # ``pd.DataFrame()`` (in its ``__init__``). Each
     # ``flag_outliers_*()`` method then assigns a ``pd.Series`` to
     # ``_last_flag`` whose ``.name`` is the test's flag-column name. The
     # check below only makes sense for the Series case — narrow with

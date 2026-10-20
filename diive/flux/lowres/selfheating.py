@@ -377,8 +377,8 @@ class ScopPhysics:
         Gap-fill unscaled flux correction term using XGBoostTS with engineered features.
 
         Creates temporal lag and rolling features to capture diurnal and synoptic patterns
-        in the self-heating correction term. XGBoost handles non-linear relationships between
-        radiation, temperature, wind speed and flux correction efficiently.
+        in the self-heating correction term. The drivers are air temperature, air heat
+        capacity, air density, wind speed and USTAR.
         """
         from diive.core.ml.feature_engineer import FeatureEngineer
         from diive.gapfilling.xgboost_ts import XGBoostTS
@@ -534,7 +534,15 @@ class ScopPhysics:
         # return series, series_orig
 
     def _flux_correction_term_unscaled_bur08(self) -> tuple[pd.Series, pd.Series]:
-        """Calculate bulk instrument surface temperature (BUR08)"""
+        """Calculate the unscaled flux correction term from per-surface heat (BUR08).
+
+        Models the surface temperatures and sensible heat of the top window, the
+        bottom window and the spar, and sums the heat into ``S``.
+
+        Returns:
+            Tuple ``(fct_unsc, S)``: the unscaled flux correction term
+            (umol m-2 s-1) and the instrument sensible heat (W m-2).
+        """
 
         # TOP OF WINDOW ---
         # Surface temperatures day/night

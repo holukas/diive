@@ -2,7 +2,8 @@
 USTAR THRESHOLD: FRICTION VELOCITY FILTERING
 ==============================================
 
-Flag low-turbulence data using constant friction velocity thresholds with uncertainty scenarios.
+Flag low-turbulence data using constant or time-varying friction velocity thresholds,
+one flag per uncertainty scenario.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -300,7 +301,7 @@ class UstarThresholdConstantScenarios:
         return self._scenariosdf
 
     def calc(self, ustarthresholds: list = None, showplot: bool = False, verbose: bool = False):
-        """Calculate flag"""
+        """Build one series per threshold, with records below that threshold set to missing."""
         if ustarthresholds is None:
             ustarthresholds = [0.1, 0.2, 0.3, 0.4, 0.5]
         self.showplot = showplot

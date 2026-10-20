@@ -495,9 +495,9 @@ class LevelResults:
     **High-quality vs. accepted-quality series:**
 
     - ``filteredseries_hq`` — flux with QCF=0 *only* (strictest filter, no
-      soft warnings tolerated).  Used as the reference series for gap-filling
-      model training.  Written by L2 (where the QCF=0 mask is computed) and
-      by L3.1 (which reapplies that same L2 QCF=0 mask to the
+      soft warnings tolerated).  A reference series only: gap-filling trains
+      on ``filteredseries_level33_qcf``.  Written by L2 (where the QCF=0
+      mask is computed) and by L3.1 (which reapplies that same L2 QCF=0 mask to the
       storage-corrected flux — L3.1 itself has no new QC test).  L3.2 stores
       its QCF=0 series only in ``filteredseries_level32_qcf``-adjacent
       attributes (it does not overwrite this field), and L3.3 keeps the
@@ -1415,7 +1415,7 @@ def add_driver(
 
     Example:
         >>> import diive as dv
-        >>> vpd = dv.variables.calc_vpd_from_ta_rh(ta=data.full_df['TA'], rh=data.full_df['RH'])
+        >>> vpd = dv.variables.calc_vpd_from_ta_rh(df=data.full_df, rh_col='RH', ta_col='TA')
         >>> data = dv.flux.add_driver(data, vpd, name='VPD_kPa')
     """
     col_name = name if name is not None else (
