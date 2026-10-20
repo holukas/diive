@@ -23,17 +23,17 @@ uv sync --extra gui --extra gui3d --group build
 
 Without `gui3d` the app builds fine and the 3-D tab shows an install notice.
 
-To include **InfluxDB support** (the Database tabs), add the `db` group before
+To include **InfluxDB support** (the Database tabs), add the `db` extra before
 building — the spec bundles `influxdb-client` only when present:
 
 ```powershell
-uv sync --extra gui --group db --group build
+uv sync --extra gui --extra db --group build
 .\packaging\build_gui.ps1
 ```
 
 Without `db` the app builds fine and the Database tabs show an install notice.
 Combine extras/groups freely, e.g.
-`uv sync --extra gui --extra gui3d --group db --group build` for everything.
+`uv sync --extra all --group build` for everything.
 
 `build_gui.ps1` automatically **renders the GUI user manual** (`diive/gui/MANUAL.md`
 → `diive/gui/MANUAL.html`) before PyInstaller runs, so the exe always ships a

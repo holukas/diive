@@ -301,7 +301,7 @@ def _upload_frame(n=48, start="2026-03-01 00:30", site="ch-hon", all_nan=False):
     return df
 
 
-@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db group (influxdb-client)")
+@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db extra (influxdb-client)")
 class TestInfluxUploadMockedHttp(unittest.TestCase):
     """upload_singlevar with the real client, only the HTTP calls replaced."""
 
@@ -420,7 +420,7 @@ class TestInfluxUploadMockedHttp(unittest.TestCase):
         self.assertEqual(self.deletes, [])
 
 
-@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db group (influxdb-client)")
+@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db extra (influxdb-client)")
 class TestInfluxDownloadMergeMockedHttp(unittest.TestCase):
     """Several tables of one variable (different tag sets) at the same timestamps."""
 
@@ -549,7 +549,7 @@ def _lines_to_tables(lines):
     return [g.dropna(axis=1, how="all") for _, g in df.groupby(tagcols, sort=True)]
 
 
-@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db group (influxdb-client)")
+@unittest.skipUnless(HAS_INFLUXDB_CLIENT, "needs the db extra (influxdb-client)")
 class TestInfluxRealParser(unittest.TestCase):
     """Download through the real client CSV parser and upload through the real serializer.
 

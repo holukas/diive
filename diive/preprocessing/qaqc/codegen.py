@@ -100,7 +100,7 @@ def meteoscreening_to_code(steps: list[dict], *, field: str, site: str,
         ...     corrections=[{'key': 'setto_max', 'kwargs': {'threshold': 40}}])
         >>> print(code)
         import diive as dv
-        from diive.core.io.db.influx import InfluxIO  # needs: uv sync --group db
+        from diive.core.io.db.influx import InfluxIO  # needs: pip install "diive[db]"
         <BLANKLINE>
         # Download; start/stop and the timestamps are in UTC+1, stop is excluded
         dbc = InfluxIO(dirconf='PATH/TO/DIRCONF')  # PLACEHOLDER: folder with the database configs
@@ -144,7 +144,7 @@ def meteoscreening_to_code(steps: list[dict], *, field: str, site: str,
     """
     lines = ["import diive as dv"]
     if download is not None:
-        lines.append("from diive.core.io.db.influx import InfluxIO  # needs: uv sync --group db")
+        lines.append('from diive.core.io.db.influx import InfluxIO  # needs: pip install "diive[db]"')
     lines.append("")
     lines += _download_lines(download, field, utc_offset)
     lines += ["",

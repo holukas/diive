@@ -481,6 +481,13 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "influxdb-client" },
+    { name = "pyside6" },
+    { name = "pyvista" },
+    { name = "pyvistaqt" },
+    { name = "trimesh" },
+]
 db = [
     { name = "influxdb-client" },
 ]
@@ -496,9 +503,6 @@ gui3d = [
 [package.dev-dependencies]
 build = [
     { name = "pyinstaller" },
-]
-db = [
-    { name = "diive", extra = ["db"] },
 ]
 dev = [
     { name = "autopep8" },
@@ -520,6 +524,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bokeh", specifier = ">=3.7.1,<4.0.0" },
+    { name = "diive", extras = ["gui", "gui3d", "db"], marker = "extra == 'all'" },
     { name = "influxdb-client", marker = "extra == 'db'", specifier = ">=1.37.0" },
     { name = "matplotlib", specifier = ">=3.10.0,<4.0.0" },
     { name = "numpy", specifier = ">=2.2.4,<3.0.0" },
@@ -540,11 +545,10 @@ requires-dist = [
     { name = "xgboost", specifier = ">=3.0.0,<4.0.0" },
     { name = "yellowbrick", specifier = ">=1.5,<2.0" },
 ]
-provides-extras = ["gui", "gui3d", "db"]
+provides-extras = ["gui", "gui3d", "db", "all"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pyinstaller", specifier = ">=6.10" }]
-db = [{ name = "diive", extras = ["db"] }]
 dev = [
     { name = "autopep8", specifier = ">=2.3.2" },
     { name = "furo", specifier = ">=2025.12.19" },

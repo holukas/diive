@@ -28,7 +28,7 @@ when it starts. Without the guard, that process would run the script again and o
 a second window.
 
 For the optional **Database** tabs (read from an InfluxDB), also install the
-`db` dependency group: `uv sync --group db` (or `pip install influxdb-client`).
+`db` extra: `pip install "diive[db]"` (or `uv sync --extra db` in a clone).
 Without it the Database tabs show a short install notice instead of failing.
 
 A splash screen with a loading spinner appears while the app starts. diive then

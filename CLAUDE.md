@@ -20,11 +20,11 @@ Python 3.12-3.13, `uv`. Minimum pins in `pyproject.toml`.
 
 ```bash
 uv sync                              # core + dev
-uv sync --all-extras --all-groups    # everything (extras gui/gui3d/db + groups dev/db/build)
+uv sync --all-extras --all-groups    # everything (extras gui/gui3d/db/all + groups dev/build)
 uv run pytest tests/test_gapfilling.py -v
 ```
 
-`--all-extras` alone is not everything: `db` (`influxdb-client`) is **both** an extra and a group, on purpose. Working on diive, use `uv sync --group db`. The extra exists for projects that depend on diive, because a dependency group never reaches published metadata. The group is `db = ["diive[db]"]`, so the pin lives only in the extra. `influxdb-client` is imported lazily.
+Optional parts are extras: `gui`, `gui3d`, `db` (`influxdb-client`, imported lazily) and `all` (= `diive[gui,gui3d,db]`, which refers back to the others so each pin lives in one place). `dev` and `build` are dependency groups. `--all-extras` leaves out only `build`. pip users get the dev tools with `python -m pip install -e ".[gui]" --group dev` (pip 25.1+). The `db` group was removed on 2026-10-20 (it duplicated the extra), so `uv sync --group db` now fails: use `--extra db`.
 
 ## Repository rules
 

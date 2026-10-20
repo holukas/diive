@@ -126,12 +126,12 @@ if _ilu.find_spec("pyvista") is not None and _ilu.find_spec("pyvistaqt") is not 
     # static analyzer keeps it (collect_all covers it, but pin it explicitly).
     hiddenimports += ["vtkmodules.qt.QVTKRenderWindowInteractor"]
 
-# --- optional InfluxDB support (db group: influxdb-client) ----------------
+# --- optional InfluxDB support (db extra: influxdb-client) ----------------
 # diive's InfluxDB engine (diive/core/io/db/influx) ships with diive; its only
 # third-party requirement is influxdb_client, bundled here when present in the
-# build env (uv sync --group db). The client is imported lazily (inside the
+# build env (uv sync --extra db). The client is imported lazily (inside the
 # engine's connection/upload code), so PyInstaller's static analysis can miss
-# it; collect_all pins it along with its submodules + data. Without the db group
+# it; collect_all pins it along with its submodules + data. Without the db extra
 # the GUI's Database tabs show an install notice (influxdb_available() -> False),
 # matching the runtime lazy-import design. reactivex/certifi are plain imports
 # the static analyzer already finds once influxdb_client is reached.
