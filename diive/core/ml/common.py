@@ -12,7 +12,6 @@ Part of the diive library: https://github.com/holukas/diive
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import shap
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -22,6 +21,7 @@ from rich.table import Table
 
 import diive.core.dfun.frames as fr
 from diive.core.ml.results import GapFillingResult
+from diive.core.ml.shap_import import import_shap
 from diive.core.times.times import vectorize_timestamps
 from diive.core.utils.console import (
     VERBOSE_DEBUG,
@@ -35,6 +35,8 @@ from diive.core.utils.console import (
     warn,
 )
 from diive.core.ml.scores import prediction_scores
+
+shap = import_shap()
 
 
 class MlRegressorGapFillingBase:

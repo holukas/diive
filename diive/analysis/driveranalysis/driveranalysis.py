@@ -104,7 +104,8 @@ def _stl_components(series: Series, period: int, robust: bool = True):
 def _mean_abs_shap(model, X: DataFrame) -> Series:
     """Mean |SHAP| per feature for a fitted tree model."""
     import numpy as _np
-    import shap
+    from diive.core.ml.shap_import import import_shap
+    shap = import_shap()
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X)
     if isinstance(shap_values, list):
@@ -514,7 +515,8 @@ class DriverAnalysis:
             warn("SHAP interactions skipped: not defined per-driver with a FeatureEngineer.",
                  verbose=self.verbose)
             return None
-        import shap
+        from diive.core.ml.shap_import import import_shap
+        shap = import_shap()
         X = self._X
         # Interaction values are O(n_features^2 * trees) per row, so subsample.
         sample = X.sample(min(len(X), 150), random_state=self.random_state).sort_index()
