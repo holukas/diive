@@ -390,6 +390,9 @@ GUI only:
 - **Projects:** reopening a project returns the data exactly as saved, also when they mix time resolutions.
 - **Flux post-processing chain, site:** the tab uses the coordinates from Project settings instead of
   fixed Swiss coordinates and refuses to run without them.
+- **Overview, text columns:** adding or selecting a column that is not numeric no longer freezes the
+  app, the Overview shows a short note instead of plots.
+- **Overview, new columns:** every newly added numeric column is selected, not only the first one.
 
 Examples:
 

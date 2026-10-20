@@ -150,6 +150,10 @@ The first tab, focused on every load. Click a variable to see, for that variable
   mean/median markers), and a **cumulative waterfall**. The cumulative and waterfall
   panels show their running total inside the axes.
 
+A column that is not numeric (text, dates or true/false values) has no figure.
+Selecting it shows a short note instead of the panels, and adding it does not change
+the selected variable.
+
 The datetime panels (time series, cumulative, daily mean, waterfall) share an x-axis,
 so panning or zooming one zooms them all to the same period. The heatmap follows the
 zoomed dates right away; the diel cycle and the distribution are recomputed for the
