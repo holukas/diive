@@ -5,7 +5,8 @@ PyInstaller spec for the diive desktop GUI (Windows, one-folder build).
 Build with the helper script:  packaging/build_gui.ps1
 Or directly:                   uv run pyinstaller packaging/diive_gui.spec --noconfirm
 
-Produces  dist/diive-gui/  containing diive-gui.exe + all dependencies.
+Produces  dist/diive-gui/  containing diive-gui.exe + all dependencies
+(dist/diive-gui-internal/ for the internal build with DIIVE_BUILD_DB=1).
 Zip that folder and hand it to users; they unzip and run diive-gui.exe.
 No Python / uv / pip needed on their machine.
 
@@ -219,5 +220,7 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="diive-gui",
+    # Separate output folders, so the internal build never shares files with
+    # the public one (COLLECT overwrites but never removes old files).
+    name="diive-gui-internal" if _WITH_DB else "diive-gui",
 )

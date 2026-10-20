@@ -28,9 +28,21 @@ uv sync --extra all --group build
 ```
 
 `-WithDb` sets `DIIVE_BUILD_DB=1` for the spec, which then bundles
-`influxdb-client` (and stops if it is not installed). The zip gets an
-`-internal` tag (`...-internal-win64.zip`). Share it within the group only, not
-on GitHub.
+`influxdb-client` (and stops if it is not installed). The internal build has its
+own folders (`dist\diive-gui-internal\`, `build\diive-gui-internal\`), and its
+zip gets an `-internal` tag (`...-internal-win64.zip`). Share it within the
+group only, not on GitHub.
+
+The two builds never share files, so you can make both from one environment in
+any order:
+
+```powershell
+.\packaging\build_gui.ps1 -Clean            # public zip, for the GitHub release
+.\packaging\build_gui.ps1 -Clean -WithDb    # internal zip, for the group
+```
+
+As a safety net, the public build stops with an error if `influxdb_client` ends
+up in its folder.
 
 `build_gui.ps1` automatically **renders the GUI user manual** (`diive/gui/MANUAL.md`
 → `diive/gui/MANUAL.html`) before PyInstaller runs, so the exe always ships a
@@ -46,18 +58,20 @@ source of truth, `MANUAL.html` is generated — don't hand-edit the HTML.
 
 Output:
 
-- `dist\diive-gui\` — the runnable app folder (`diive-gui.exe` + dependencies)
+- `dist\diive-gui\` — the runnable app folder (`diive-gui.exe` + dependencies),
+  `dist\diive-gui-internal\` with `-WithDb`
 - `dist\diive-gui-<version>+build.<stamp>-win64.zip` (`...-internal-win64.zip`
   with `-WithDb`) — share this; users unzip and
   run the exe. `<stamp>` is the build timestamp (`yyyyMMdd.HHmmss`), so each build
   of the same version gets its own name, e.g.
   `diive-gui-0.91.0+build.20260716.101500-win64.zip`
 
-Useful flags: `.\packaging\build_gui.ps1 -Clean` (wipe `build\`/`dist\` first),
+Useful flags: `.\packaging\build_gui.ps1 -Clean` (empty this build's app and work
+folders first, zips are kept),
 `-NoZip` (skip the archive), `-WithDb` (internal build with the database tabs).
 
 **Use `-Clean` for release builds.** PyInstaller's `COLLECT` step overwrites but
-never *prunes* `dist\`, so files from a previous build linger and get shipped —
+never *prunes* the app folder, so files from a previous build linger and get shipped —
 e.g. packages you've since removed from the build env (hundreds of MB). `-Clean`
 guarantees the output folder matches exactly this build. (Skipping it is fine
 for dev iteration.)

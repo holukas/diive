@@ -9,8 +9,9 @@
     Users unzip the archive and run diive-gui.exe. No Python / uv / pip needed.
 
     The default build is the public one: it leaves out the InfluxDB database
-    tabs. -WithDb makes an internal build with them; its zip is named
-    ...-internal-win64.zip and is meant for the working group only.
+    tabs. -WithDb makes an internal build with them, for the working group only:
+    dist\diive-gui-internal\ and ...-internal-win64.zip. The two builds use
+    separate folders, so either can be built without touching the other.
 
 .NOTES
     Requires the build deps:  uv sync --extra gui --group build
@@ -20,7 +21,7 @@
 [CmdletBinding()]
 param(
     [switch]$NoZip,     # build the folder but skip zipping
-    [switch]$Clean,     # remove build\ and dist\ first
+    [switch]$Clean,     # remove this build's old app and work folders first
     [switch]$WithDb     # internal build: bundle the InfluxDB database tabs
 )
 
@@ -28,9 +29,15 @@ $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
 
+# Public and internal builds get their own app and work folders. -Clean empties
+# only the folders of the build being made, and keeps all zips.
+$appName = if ($WithDb) { "diive-gui-internal" } else { "diive-gui" }
+$appDir = Join-Path $repo "dist\$appName"
+$workDir = Join-Path $repo "build\$appName"
+
 if ($Clean) {
-    Write-Host "Cleaning build\ and dist\ ..." -ForegroundColor Cyan
-    Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
+    Write-Host "Cleaning dist\$appName\ and build\$appName\ ..." -ForegroundColor Cyan
+    Remove-Item -Recurse -Force $appDir, $workDir -ErrorAction SilentlyContinue
 }
 
 # Render the GUI user manual (MANUAL.md -> MANUAL.html) so the exe bundles a
@@ -58,15 +65,18 @@ if ($WithDb) {
 
 Write-Host "Running PyInstaller (this takes a few minutes) ..." -ForegroundColor Cyan
 try {
-    uv run pyinstaller "packaging\diive_gui.spec" --noconfirm --clean
+    uv run pyinstaller "packaging\diive_gui.spec" --noconfirm --clean --workpath $workDir
 } finally {
     Remove-Item Env:DIIVE_BUILD_DB -ErrorAction SilentlyContinue
 }
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }
 
-$appDir = Join-Path $repo "dist\diive-gui"
 if (-not (Test-Path (Join-Path $appDir "diive-gui.exe"))) {
-    throw "Expected dist\diive-gui\diive-gui.exe was not produced."
+    throw "Expected dist\$appName\diive-gui.exe was not produced."
+}
+# Safety net: the public build must not contain the database client.
+if (-not $WithDb -and (Get-ChildItem -Path $appDir -Recurse -Directory -Filter "influxdb_client*" -ErrorAction SilentlyContinue)) {
+    throw "Public build contains influxdb_client. Rebuild with -Clean."
 }
 
 if ($NoZip) {
