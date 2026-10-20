@@ -154,12 +154,12 @@ class TimeSince:
         time-based interpretation.
     upper_lim : float, optional
         Upper limit of the range. Records <= upper_lim (or < upper_lim if
-        include_lim=False) are considered "inside range". If None, defaults to
-        series maximum (no upper constraint). Default is None.
+        include_lim=False) are considered "inside range". If None, there is
+        no upper limit. Default is None.
     lower_lim : float, optional
         Lower limit of the range. Records >= lower_lim (or > lower_lim if
-        include_lim=False) are considered "inside range". If None, defaults to
-        series minimum (no lower constraint). Default is None.
+        include_lim=False) are considered "inside range". If None, there is
+        no lower limit. Default is None.
     include_lim : bool, optional
         If True (default), limits are inclusive (<=, >=).
         If False, limits are exclusive (<, >).
@@ -170,9 +170,9 @@ class TimeSince:
     series : pd.Series
         Input time series.
     upper_lim : float
-        Upper limit (or series max if not specified).
+        Upper limit (None if not specified).
     lower_lim : float
-        Lower limit (or series min if not specified).
+        Lower limit (None if not specified).
     include_lim : bool
         Whether limits are inclusive.
     timesince_col : str
@@ -338,13 +338,15 @@ class TimeSince:
         df = pd.DataFrame()
         df[self.series.name] = self.series.copy()
 
+        # A missing limit leaves that side open. The series maximum or minimum
+        # would exclude the extreme value itself with include_lim=False (L341).
         if self.upper_lim is None:
-            df[self.upper_lim_col] = self.series.max()
+            df[self.upper_lim_col] = np.inf
         else:
             df[self.upper_lim_col] = self.upper_lim
 
         if self.lower_lim is None:
-            df[self.lower_lim_col] = self.series.min()
+            df[self.lower_lim_col] = -np.inf
         else:
             df[self.lower_lim_col] = self.lower_lim
 

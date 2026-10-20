@@ -127,7 +127,10 @@ class TestCreateVar(unittest.TestCase):
         self.assertEqual(less_stats['Tair_f']['max'], 4.99)
         self.assertEqual(less_stats['FLAG_IS_OUTSIDE_RANGE']['min'], 0)
         self.assertEqual(less_stats['FLAG_IS_OUTSIDE_RANGE']['max'], 0)
-        self.assertEqual(ts_full_results.sum().sum(), -7223.621999999999)
+        # The missing lower limit is open (L341), so the limit column holds -inf.
+        self.assertTrue((ts_full_results['LOWER_LIMIT'] == -np.inf).all())
+        self.assertAlmostEqual(
+            ts_full_results.drop(columns=['UPPER_LIMIT', 'LOWER_LIMIT']).sum().sum(), 3598.602)
         # from pathlib import Path
         # outpath = Path(r"F:\TMP") / 'ts_full_results.csv'
         # ts_full_results.to_csv(outpath, index=False)
@@ -267,10 +270,6 @@ class TestCreateVar(unittest.TestCase):
         # halves to even gives ~0.32 here; rounding half up gives ~0.02.
         unevenness = np.abs(np.diff(steep)).max() / np.median(steep)
         self.assertLess(unevenness, 0.1)
-
-
-if __name__ == '__main__':
-    unittest.main()
 
 
 class TestLaggedVariantsSingleColumn(unittest.TestCase):
@@ -547,3 +546,26 @@ class TestDaytimeNighttimeFlagFromSwinpot(unittest.TestCase):
         self.assertEqual(daytime.name, 'IS_DAY')
         self.assertEqual(nighttime.name, 'IS_NIGHT')
         self.assertTrue(daytime.index.equals(self.swinpot.index))
+
+
+class TestTimeSinceOpenLimits(unittest.TestCase):
+    """L341: a missing limit leaves that side open, also with include_lim=False."""
+
+    def _prec(self):
+        import pandas as pd
+        idx = pd.date_range('2024-01-01', periods=8, freq='D')
+        return pd.Series([0, 0, 1.2, 0, 0, 0.3, 0, 0.], index=idx, name='PREC')
+
+    def test_largest_event_resets_the_count(self):
+        ts = TimeSince(self._prec(), lower_lim=0, include_lim=False)
+        ts.calc()
+        self.assertEqual(ts.get_timesince().tolist(), [1, 2, 0, 1, 2, 0, 1, 2])
+
+    def test_smallest_value_counts_without_lower_limit(self):
+        ts = TimeSince(-self._prec(), upper_lim=0, include_lim=False)
+        ts.calc()
+        self.assertEqual(ts.get_timesince().tolist(), [1, 2, 0, 1, 2, 0, 1, 2])
+
+
+if __name__ == '__main__':
+    unittest.main()
