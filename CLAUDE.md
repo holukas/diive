@@ -24,7 +24,7 @@ uv sync --all-extras --all-groups    # everything (extras gui/db/all + groups de
 uv run pytest tests/test_gapfilling.py -v
 ```
 
-Optional parts are extras: `gui` (PySide6 plus PyVista/VTK for the 3-D tabs), `db` (`influxdb-client`, imported lazily) and `all` (= `diive[gui,db]` plus JupyterLab for the working group's database notebooks; JupyterLab deliberately has no public extra, users bring their own notebook setup). `dev` and `build` are dependency groups. `--all-extras` leaves out only `build`. pip users get the dev tools with `python -m pip install -e ".[gui]" --group dev` (pip 25.1+). The `db` group was removed on 2026-10-20 (it duplicated the extra), so `uv sync --group db` now fails: use `--extra db`. The `gui3d` extra was folded into `gui` the same day. The database tabs are internal for now: without `influxdb-client` the GUI hides **File ▸ Database**, and the public exe leaves it out even if installed (internal build: `build_gui.ps1 -WithDb`, which sets `DIIVE_BUILD_DB=1` for the spec).
+Optional parts are extras: `gui` (PySide6 plus PyVista/VTK for the 3-D tabs), `db` (`influxdb-client`, imported lazily) and `all` (= `diive[gui,db]` plus JupyterLab for the working group's database notebooks; JupyterLab deliberately has no public extra, users bring their own notebook setup). `dev` and `build` are dependency groups. `--all-extras` leaves out only `build`. pip users get the dev tools with `python -m pip install -e ".[all]" --group dev` (pip 25.1+). The `db` group was removed on 2026-10-20 (it duplicated the extra), so `uv sync --group db` now fails: use `--extra db`. The `gui3d` extra was folded into `gui` the same day. The database tabs are internal for now: without `influxdb-client` the GUI hides **File ▸ Database**, and the public exe leaves it out even if installed (internal build: `build_gui.ps1 -WithDb`, which sets `DIIVE_BUILD_DB=1` for the spec).
 
 ## Repository rules
 
@@ -184,4 +184,4 @@ pytest tests/ -v
 
 ---
 
-**Last Updated:** 2026-10-18 | **Version:** v0.92.0
+**Last Updated:** 2026-10-20 | **Version:** v0.92.0

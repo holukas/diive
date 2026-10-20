@@ -70,7 +70,7 @@ python-preference = "managed"
 
 [dependency-groups]
 # Development tools, synced by default with uv. With pip (25.1 or newer):
-# python -m pip install -e ".[gui]" --group dev
+# python -m pip install -e ".[all]" --group dev
 dev = [
     "jupyterlab>=4.3.6,<5.0.0",
     "ipykernel>=7.2.0",

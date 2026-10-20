@@ -32,8 +32,9 @@ The following notebooks provide specialized functionality for data processing an
 migrated to Python scripts — **use the Python examples above for learning and standard workflows**.
 
 **Note:** the two `FormatMeteo*` notebooks and the four InfluxDB notebooks read from an InfluxDB database, so they
-need a database connection and a config directory to run. `FormatEddyProFluxnetFileForUpload` reads EddyPro output
-files from disk instead.
+need a database connection and a config directory to run. They also need `diive[all]`, which installs the database
+access and JupyterLab. See the working group setup in [docs/installation.rst](../docs/installation.rst).
+`FormatEddyProFluxnetFileForUpload` reads EddyPro output files from disk instead.
 
 ### Flux Workflows
 

@@ -17,31 +17,21 @@ A: Python 3.12 and 3.13. Check your version:
 
 **Q: I get "ModuleNotFoundError: No module named 'diive'"**
 
-A: Install the package:
-
-   .. code-block:: bash
-
-      pip install diive
-
-   Or with uv:
-
-   .. code-block:: bash
-
-      uv pip install diive
-
-   For development, clone the repository and sync:
-
-   .. code-block:: bash
-
-      git clone https://github.com/holukas/diive.git
-      cd diive
-      uv sync
-
-   If you installed into a conda environment, activate it first:
+A: diive is not installed in the active environment. If you installed it into a
+   conda environment, activate it first:
 
    .. code-block:: bash
 
       conda activate diive
+
+   Otherwise, install the package:
+
+   .. code-block:: bash
+
+      python -m pip install diive
+
+   :doc:`installation` describes all ways to install diive, including the
+   development setup.
 
 **Q: Which version of diive am I using?**
 
@@ -59,12 +49,16 @@ A: Yes. The installation steps are the same on all three.
 
 **Q: Is there a graphical user interface?**
 
-A: Yes, a PySide6 desktop app. It ships as the optional ``gui`` extra:
+A: Yes, a PySide6 desktop app. Install it with the optional ``gui`` extra and
+   start it with ``diive-gui``:
 
    .. code-block:: bash
 
-      uv sync --extra gui
-      uv run diive-gui
+      python -m pip install "diive[gui]"
+      diive-gui
+
+   On Windows, each release also includes the app as a download that runs
+   without Python. See :doc:`installation`.
 
    The GUI only calls into the library, so anything you can do there can also
    be scripted.

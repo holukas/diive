@@ -220,8 +220,9 @@ Notebook (meteo screening notebook v20):
 - **New `all` extra:** `pip install "diive[all]"` installs the desktop app, InfluxDB access and JupyterLab in one step.
 - **InfluxDB in a clone:** the `db` dependency group is removed because it duplicated the `db` extra. Use
   `uv sync --extra db` instead of `uv sync --group db`.
-- **Installation guide:** the README shows one recommended setup and a development setup for pip and uv.
-  The full guide, with Jupyter, updates and common problems, is in the online documentation.
+- **Installation guide:** the README shows how to install the library, the desktop app and the Windows
+  app, and links to the full guide in the online documentation with the development setup, Jupyter,
+  updates and common problems.
 
 ### Bugfixes
 
