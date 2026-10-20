@@ -84,7 +84,18 @@ def init_flux_data(
     Returns:
         FluxLevelData ready to be passed to run_level2().
 
+    Raises:
+        ValueError: If ``df.index`` has no frequency set and its time
+            resolution cannot be detected.
+
     Note:
+        **Regular time grid:** the levels need a timestamp index without
+        missing timestamps. If ``df.index`` has no frequency set, the data are
+        put on a regular grid at the detected time resolution: missing
+        timestamps are added as empty (NaN) records, and records that are not
+        on the grid are removed with a warning that gives their number.
+        ``df`` itself is not changed.
+
         **FC → NEE rename:** when ``fluxcol='FC'``, the output column produced
         by Level-3.1 (storage-corrected flux) is automatically named ``NEE``
         following the FLUXNET convention.  All subsequent level outputs and
@@ -120,6 +131,22 @@ def init_flux_data(
             f"before calling init_flux_data()."
         )
 
+    # The levels need a regular index: L3.2 outlier detection regularizes its
+    # series, and its result must line up with fpc_df again. An index without
+    # a set frequency (missing timestamps) is put on a regular grid once, here.
+    from diive.core.times.times import DetectFrequency, continuous_timestamp_freq
+    try:
+        detected = DetectFrequency(df.index).get()
+    except Exception as e:
+        if df.index.freq is None:
+            raise ValueError(
+                "init_flux_data() cannot detect the time resolution of the input "
+                "data, and the chain needs a regular timestamp index. Check the "
+                "timestamp index (sorted, no duplicates, mostly one time step), or "
+                "set the time step yourself, for example df = df.asfreq('30min')."
+            ) from e
+        detected = None
+
     # Frequency sanity check. The flux post-processing chain's defaults
     # (``outlier_window_length=48*13``, ``_default_engineer`` rolling
     # windows of 4/12/48 records, the 13-day Hampel window) assume a
@@ -127,11 +154,6 @@ def init_flux_data(
     # silently get a window that does not correspond to the documented
     # duration. Warn (don't fail) so users with hourly or finer-resolution
     # data can scale the relevant FluxConfig fields themselves.
-    try:
-        from diive.core.times.times import DetectFrequency
-        detected = DetectFrequency(df.index).get()
-    except Exception:
-        detected = None
     if detected is not None and detected != '30min':
         import warnings
         warnings.warn(
@@ -149,6 +171,17 @@ def init_flux_data(
         )
 
     rule(f"Initializing flux data: {fluxcol}")
+
+    if df.index.freq is None:
+        # Records off the grid are removed and announced by the helper.
+        # continuous_timestamp_freq returns a new frame, so the caller's df
+        # stays unchanged.
+        regular = continuous_timestamp_freq(data=df, freq=detected)
+        n_added = int((~regular.index.isin(df.index)).sum())
+        if n_added:
+            info(f"Added {n_added} missing timestamps as empty records "
+                 f"(regular {detected} time grid)")
+        df = regular
 
     full_df = df.copy()
     fluxbasevar = detect_fluxbasevar(fluxcol=fluxcol)

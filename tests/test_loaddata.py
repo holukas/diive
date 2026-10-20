@@ -281,5 +281,47 @@ class TestMultiDataFileReaderEmptyFiles(unittest.TestCase):
         self.assertEqual(type(reader.metadata_df), DataFrame)
 
 
+class TestLoadParquetMany(unittest.TestCase):
+    """load_parquet_many puts files with a time gap between them on one grid (L352)"""
+
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.tempdir = Path(self._tempdir.name)
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+    def _write_day(self, day: str, filename: str) -> Path:
+        # One day of 30-min data, timestamps at the end of each period
+        ix = pd.date_range(f'{day} 00:30', periods=48, freq='30min', name='TIMESTAMP_END')
+        df = DataFrame({'TA': range(48)}, index=ix, dtype=float)
+        filepath = self.tempdir / filename
+        df.to_parquet(filepath)
+        return filepath
+
+    def test_files_with_a_time_gap_get_a_regular_index(self):
+        from diive.core.io.files import load_parquet_many
+        files = [self._write_day('2024-01-01', 'a.parquet'),
+                 self._write_day('2024-01-05', 'b.parquet')]
+        df = load_parquet_many(filepaths=files)
+        self.assertEqual(df.index.freqstr, '30min')
+        expected_ix = pd.date_range(df.index[0], df.index[-1], freq='30min')
+        self.assertTrue(df.index.equals(expected_ix))
+        self.assertEqual(len(df), 4 * 48 + 48)
+        # Both files are complete, the days between them are empty
+        self.assertEqual(int(df['TA'].notna().sum()), 2 * 48)
+        self.assertTrue(df.loc['2024-01-02 12:00':'2024-01-04 12:00', 'TA'].isna().all())
+
+    def test_contiguous_files_load_as_before(self):
+        from diive.core.io.files import load_parquet, load_parquet_many
+        files = [self._write_day('2024-01-01', 'a.parquet'),
+                 self._write_day('2024-01-02', 'b.parquet')]
+        df = load_parquet_many(filepaths=files)
+        expected = load_parquet(files[0]).combine_first(load_parquet(files[1]))
+        pd.testing.assert_frame_equal(df, expected)
+        self.assertEqual(df.index.freqstr, '30min')
+        self.assertEqual(len(df), 96)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1038,6 +1038,119 @@ class TestChainReports(unittest.TestCase):
         plt.close('all')
 
 
+def _eddypro_input():
+    """EddyPro example data without the columns init_flux_data computes."""
+    from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+    df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+    df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+    df['TA_1_1_1'] = df['TA_1_1_1'].bfill()
+    df['SW_IN_1_1_1'] = df['SW_IN_1_1_1'].bfill()
+    df['VPD_kPa'] = df['VPD_EP'].bfill().multiply(0.1)  # hPa -> kPa for MDS
+    return df
+
+
+class TestInitIrregularIndex(unittest.TestCase):
+    """init_flux_data puts data with missing timestamps on a regular grid (L332)."""
+
+    def test_chain_runs_on_data_with_missing_timestamps(self):
+        import pandas as pd
+        from diive.flux.postprocessingchain import FluxConfig, init_flux_data, run_chain
+
+        df = _eddypro_input()
+        dropped = df.index[500:510]
+        df = df.drop(index=dropped)
+        self.assertIsNone(df.index.freq)
+        df_before = df.copy()
+
+        data = init_flux_data(df=df, fluxcol='FC',
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        # The caller's frame is not changed
+        pd.testing.assert_frame_equal(df, df_before)
+        self.assertIsNone(df.index.freq)
+        # The missing timestamps are back, as empty records
+        self.assertEqual(len(data.fpc_df), len(df) + len(dropped))
+        self.assertTrue(data.fpc_df.loc[dropped, 'FC'].isna().all())
+        self.assertTrue(data.full_df.loc[dropped, 'TA_1_1_1'].isna().all())
+        self.assertIsNotNone(data.fpc_df.index.freq)
+
+        cfg = FluxConfig(
+            fluxcol='FC',
+            ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+            outlier_sigma_daytime=5.5, outlier_sigma_nighttime=5.5,
+            level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+            gapfill_rf=False, gapfill_xgb=False, gapfill_mds=True,
+            mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa',
+        )
+        out = run_chain(data, cfg)
+        for lvl in ('L2', 'L3.1', 'L3.2', 'L3.3', 'L4.1'):
+            self.assertIn(lvl, out.level_ids)
+        self.assertTrue(out.levels.filteredseries_level32_qcf.loc[dropped].isna().all())
+        self.assertIn(out.gapfilled_cols()['mds']['CUT_50'], out.fpc_df.columns)
+
+    def test_undetectable_frequency_raises_a_clear_error(self):
+        import numpy as np
+        import pandas as pd
+        from diive.flux.postprocessingchain import init_flux_data
+
+        # Time steps between 1 and 300 minutes, no step dominates
+        steps = np.random.default_rng(1).integers(1, 300, size=200)
+        ix = pd.DatetimeIndex(pd.Timestamp('2024-01-01')
+                              + pd.to_timedelta(np.cumsum(steps), unit='min'),
+                              name='TIMESTAMP_MIDDLE')
+        df = pd.DataFrame({'FC': 1.0, 'USTAR': 0.3}, index=ix)
+        with self.assertRaises(ValueError) as ctx:
+            init_flux_data(df=df, fluxcol='FC',
+                           site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        self.assertIn('time resolution', str(ctx.exception))
+        self.assertIn("asfreq", str(ctx.exception))
+
+
+class TestUstarNoneKeepsMissingUstar(unittest.TestCase):
+    """thresholds=[0] with CUT_NONE flags nothing, also without USTAR (L347)."""
+
+    @staticmethod
+    def _run_to_l33(fluxcol, thresholds, labels, no_ustar):
+        from diive.flux.postprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar)
+        df = _eddypro_input()
+        df.loc[no_ustar, 'USTAR'] = float('nan')
+        data = init_flux_data(df=df, fluxcol=fluxcol,
+                              site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        if fluxcol == 'FC':
+            data = run_level31(data, gapfill_storage_term=True)
+        else:
+            data = run_level31(data, set_storage_to_zero=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_abslim_test(minval=-1000, maxval=1000, showplot=False, verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        data = run_level33_constant_ustar(data, thresholds=thresholds,
+                                          threshold_labels=labels, showplot=False)
+        results = data.levels.level33.get_results()
+        flagcol = [c for c in results.columns if str(c).startswith('FLAG') and 'USTAR' in str(c)]
+        return data, results[flagcol[0]]
+
+    def test_cut_none_keeps_records_without_ustar(self):
+        df = _eddypro_input()
+        # Records with a measured flux, USTAR removed
+        no_ustar = df.index[df['LE'].notna() & df['USTAR'].notna()][100:130]
+        data, flag = self._run_to_l33('LE', [0], ['CUT_NONE'], no_ustar)
+        self.assertTrue((flag.loc[no_ustar] == 0).all())
+        self.assertEqual(int((flag == 2).sum()), 0)
+        # Nothing is lost between L3.2 and L3.3
+        l32 = data.levels.filteredseries_level32_qcf
+        l33 = data.levels.filteredseries_level33_qcf['CUT_NONE']
+        self.assertEqual(l33.dropna().count(), l32.dropna().count())
+
+    def test_real_threshold_still_rejects_records_without_ustar(self):
+        df = _eddypro_input()
+        no_ustar = df.index[df['FC'].notna() & df['USTAR'].notna()][100:130]
+        _, flag = self._run_to_l33('FC', [0.1], ['CUT_50'], no_ustar)
+        self.assertTrue((flag.loc[no_ustar] == 2).all())
+
+
 
 class TestFluxProcessingChainAlias(unittest.TestCase):
     """The old import path keeps working and points at the same modules."""

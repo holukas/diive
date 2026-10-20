@@ -429,6 +429,32 @@ class TestUstarFlagNeedsAMeasuredUstar(unittest.TestCase):
         self.assertEqual(flagger.results[flagcol].tolist()[3], 0)
         self.assertEqual(flagger.results[flagcol].tolist()[0], 2)
 
+    def test_threshold_zero_flags_nothing_not_even_missing_ustar(self):
+        # thresholds=[0] with CUT_NONE is the no-filter setting for H and LE (L347)
+        from diive.flux.lowres.ustarthreshold import FlagSingleConstantUstarThreshold
+        nee, ustar = self._frame()
+        flag = FlagSingleConstantUstarThreshold(series=nee, ustar=ustar, threshold=0).run().get_flag()
+        self.assertEqual(flag.iloc[0], 0)   # flux present, USTAR unknown
+        self.assertEqual(flag.iloc[4], 0)
+        self.assertEqual(flag.iloc[2], 0)
+        self.assertEqual(int((flag == 2).sum()), 0)
+        self.assertTrue(np.isnan(flag.iloc[1]))   # missing flux stays NaN
+
+    def test_threshold_series_with_zeros_keeps_those_records_only(self):
+        import pandas as pd
+        from diive.flux.lowres.ustarthreshold import FlagMultipleVariableUstarThresholds
+        nee, ustar = self._frame()
+        thr = pd.Series([0.0, 0.3, 0.3, 0.3, 0.3, 0.3], index=nee.index)
+        flagger = FlagMultipleVariableUstarThresholds(
+            series=nee, ustar=ustar, threshold_series={'VUT_50': thr},
+            showplot=False, verbose=False)
+        flagger.calc()
+        flagcol = [c for c in flagger.results.columns if c.startswith('FLAG_')][0]
+        flag = flagger.results[flagcol]
+        self.assertEqual(flag.iloc[0], 0)   # threshold 0: kept without USTAR
+        self.assertEqual(flag.iloc[4], 2)   # threshold 0.3: rejected without USTAR
+        self.assertEqual(flag.iloc[2], 2)   # measured USTAR below 0.3
+
 
 class TestScenarioPlotCountsAreAddressedPositionally(unittest.TestCase):
     """The bar annotations index a label-indexed count Series.

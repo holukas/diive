@@ -111,9 +111,9 @@ def run_level33_constant_ustar(
 
         **H and LE (energy fluxes):** USTAR filtering must not be applied
         to these variables.  To keep all records, pass
-        ``thresholds=[0], threshold_labels=['CUT_NONE']`` — this flags
-        nothing (USTAR is always ≥ 0) and satisfies Level-4.1's ordering
-        requirement.
+        ``thresholds=[0], threshold_labels=['CUT_NONE']``. A threshold of 0
+        flags nothing, not even records without a USTAR value, and satisfies
+        Level-4.1's ordering requirement.
     """
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level33_constant_ustar().")
@@ -139,7 +139,7 @@ def run_level33_constant_ustar(
     # silently drop nighttime records based on a quantity that has no physical
     # interpretation for those fluxes. The documented escape hatch for keeping
     # the chain's level ordering is to pass thresholds=[0], which flags nothing
-    # (USTAR is always >= 0); we therefore only reject *positive* thresholds.
+    # (not even missing USTAR). We therefore only reject *positive* thresholds.
     # Case-fold both sides because detect_fluxbasevar() returns uppercase for
     # FluxNet-output files and lowercase for full-output files.
     _energy_basevars_lower = {'h2o', 't_sonic', 'sonic_temperature'}

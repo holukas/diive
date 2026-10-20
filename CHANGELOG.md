@@ -369,6 +369,12 @@ Library (also used by the notebook and the GUI):
   timestamps are off the regular time grid, and records that still do not fit are reported in a warning.
 - **Outlier detection, records off the time grid:** a single record off the time grid no longer makes
   outlier detection lose all data, and such records are reported in a warning.
+- **Flux post-processing chain, missing timestamps:** the chain adds missing timestamps as empty
+  records instead of stopping at Level 3.2.
+- **Several parquet files with a gap:** loading them gives a continuous time index with empty
+  records in the gap.
+- **u\* filtering for H and LE (changes results):** with the no-filter setting (threshold 0,
+  `CUT_NONE`), records without a u\* value are kept.
 
 GUI only:
 

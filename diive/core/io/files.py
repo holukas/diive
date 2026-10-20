@@ -15,7 +15,8 @@ from typing import Callable, Optional
 
 from pandas import Series, DataFrame, read_parquet
 
-from diive.core.times.times import TimestampSanitizer, validate_timestamp_naming
+from diive.core.times.times import (TimestampSanitizer, validate_timestamp_naming, DetectFrequency,
+                                    continuous_timestamp_freq)
 from diive.core.utils.console import info, detail
 
 #: Allowed names for a timestamp index in a diive parquet file.
@@ -194,6 +195,12 @@ def load_parquet_many(filepaths: list, output_middle_timestamp: bool = True,
     :class:`diive.core.io.filereader.MultiDataFileReader` and shares its
     ``progress_callback`` contract.
 
+    With ``sanitize_timestamp=True``, the merged data are put on a regular
+    time grid when the files leave a time gap between them: missing
+    timestamps are added as empty (NaN) records. Records that are not on the
+    grid (for example from a file with a different time resolution) are
+    removed, with a warning that gives their number.
+
     Args:
         filepaths: Parquet file paths to read and merge, in order.
         output_middle_timestamp: Forwarded to :func:`load_parquet`.
@@ -218,6 +225,11 @@ def load_parquet_many(filepaths: list, output_middle_timestamp: bool = True,
         merged = df if merged is None else merged.combine_first(df)
         if progress_callback:
             progress_callback('done', idx + 1, total, filepath)
+    if sanitize_timestamp and merged is not None and merged.index.freq is None:
+        # Files with a time gap between them leave missing timestamps in the
+        # merged index
+        freq = DetectFrequency(index=merged.index).get()
+        merged = continuous_timestamp_freq(data=merged, freq=freq)
     return merged
 
 
