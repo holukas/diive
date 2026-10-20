@@ -179,7 +179,7 @@ git checkout indev
 uv sync --all-extras
 ```
 
-Both install everything, including the database tabs and JupyterLab. To also build the Windows app, use
+Both install all optional parts. To also build the Windows app, use
 `uv sync --all-extras --all-groups`.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) describes the tests, the code style and further uv options. The
