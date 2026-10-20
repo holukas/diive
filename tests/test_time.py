@@ -1077,5 +1077,34 @@ class TestCommonTimeGrid(unittest.TestCase):
         self.assertIsNone(common_time_grid(one, one))
 
 
+class TestNominalFreqSpelling(unittest.TestCase):
+    """L322: nominal_freq is compared as a duration, not as text."""
+
+    def _sanitize(self, freq, nominal, periods=24 * 30):
+        import diive as dv
+        idx = pd.date_range('2024-01-01 01:00', periods=periods, freq=freq,
+                            name='TIMESTAMP_END')
+        df = pd.DataFrame({'TA': np.arange(len(idx), dtype=float)}, index=idx)
+        return dv.times.TimestampSanitizer(data=df, nominal_freq=nominal).get()
+
+    def test_hourly_spellings_are_accepted(self):
+        for nominal in ['h', '1h', '1H', '60min']:
+            with self.subTest(nominal=nominal):
+                self.assertEqual(self._sanitize('h', nominal).index.freqstr, 'h')
+
+    def test_daily_given_as_d_is_accepted(self):
+        out = self._sanitize('D', 'D', periods=60)
+        self.assertEqual(len(out), 60)
+
+    def test_half_hourly_spellings_are_accepted(self):
+        for nominal in ['30min', '0.5h']:
+            with self.subTest(nominal=nominal):
+                self.assertEqual(len(self._sanitize('30min', nominal)), 24 * 30)
+
+    def test_a_different_step_is_still_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'frequency validation failed'):
+            self._sanitize('h', '30min')
+
+
 if __name__ == '__main__':
     unittest.main()

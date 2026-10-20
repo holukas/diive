@@ -375,6 +375,8 @@ Library (also used by the notebook and the GUI):
   records in the gap.
 - **u\* filtering for H and LE (changes results):** with the no-filter setting (threshold 0,
   `CUT_NONE`), records without a u\* value are kept.
+- **Expected time resolution:** `nominal_freq` and the file readers' `data_freq` accept any spelling
+  of the same step, for example `'1h'`, `'60min'` or `'h'` for hourly data and `'D'` for daily data.
 
 GUI only:
 

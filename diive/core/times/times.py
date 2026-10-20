@@ -295,7 +295,7 @@ class TimestampSanitizer:
         self._freq_alternatives = freq_detector.alternatives
 
         # If data had pre-existing freq, validate consistency
-        if self.inferred_freq and detected_freq != str(self.inferred_freq):
+        if self.inferred_freq and not _same_step(detected_freq, self.inferred_freq):
             if self.verbose:
                 warn(f"Frequency mismatch ({self.inferred_freq} -> {detected_freq})", verbose=self.verbose)
 
@@ -304,7 +304,9 @@ class TimestampSanitizer:
 
         # Compare nominal with detected time resolution
         if self.nominal_freq:
-            if self.inferred_freq != self.nominal_freq:
+            # Compare durations, not spellings: '1h', '60min' and 'h' are the same
+            # step, and daily data are detected as '24h' (L322).
+            if not _same_step(self.inferred_freq, self.nominal_freq):
                 raise ValueError(
                     f"Timestamp frequency validation failed: detected frequency "
                     f"'{self.inferred_freq}' does not match expected frequency "
@@ -2085,6 +2087,30 @@ def _step_ns(freq: str) -> Optional[int]:
         return int(to_offset(freq).nanos)
     except ValueError:
         return None
+
+
+def _lenient_freq(freq):
+    """*freq* as pandas accepts it. pandas 3 rejects old uppercase aliases such
+    as '1H', so try lower case, but only for a string pandas rejects ('MS' is
+    month start and must stay)."""
+    try:
+        to_offset(freq)
+        return freq
+    except ValueError:
+        return str(freq).lower()
+
+
+def _same_step(a, b) -> bool:
+    """True if the frequencies *a* and *b* describe the same time step,
+    e.g. '1h', '1H', '60min' and 'h', or 'D' and '24h'."""
+    a, b = _lenient_freq(a), _lenient_freq(b)
+    step_a, step_b = _step_ns(a), _step_ns(b)
+    if step_a is not None and step_b is not None:
+        return step_a == step_b
+    try:
+        return to_offset(a) == to_offset(b)
+    except ValueError:
+        return str(a) == str(b)
 
 
 def _freq_text(freq: str) -> str:
