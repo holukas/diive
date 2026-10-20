@@ -1202,7 +1202,9 @@ def remove_rows_nat(df: Union[Series, DataFrame], verbose: bool = False) -> tupl
     n_rows = no_date.sum()
     original_length = len(df)
     if n_rows > 0:
-        df = df.loc[df.index[~no_date]].copy()
+        # Select by position: selecting by label returns a timestamp that
+        # occurs k times k*k times (L348).
+        df = df[~no_date].copy()
         pct_removed = 100 * n_rows / original_length
         if verbose:
             if pct_removed > 10:

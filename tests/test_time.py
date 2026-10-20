@@ -1106,5 +1106,21 @@ class TestNominalFreqSpelling(unittest.TestCase):
             self._sanitize('h', '30min')
 
 
+class TestRemovedRowCounts(unittest.TestCase):
+    """L348: one NaT and one duplicate timestamp are counted once each."""
+
+    def test_nat_and_duplicate_counts(self):
+        import diive as dv
+        idx = pd.DatetimeIndex(['2024-01-01 00:30', '2024-01-01 01:00', '2024-01-01 01:00', None,
+                                '2024-01-01 01:30', '2024-01-01 02:00'], name='TIMESTAMP_MIDDLE')
+        df = pd.DataFrame({'TA': [1., 2, 3, 4, 5, 6]}, index=idx)
+        san = dv.times.TimestampSanitizer(data=df, nominal_freq='30min')
+        out = san.get()
+        status = san.get_status()
+        self.assertEqual(status['rows_removed_nat'], 1)
+        self.assertEqual(status['rows_removed_duplicates'], 1)
+        self.assertEqual(len(out), 4)
+
+
 if __name__ == '__main__':
     unittest.main()
