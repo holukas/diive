@@ -493,7 +493,8 @@ git push origin feature/my-new-feature
 
 1. Bump the version in `pyproject.toml` and the fallback `__version__` in
    `diive/__init__.py`.
-2. Update `CHANGELOG.md`.
+2. Update `CHANGELOG.md`. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
+   with the sections Added, Changed, Deprecated, Removed and Fixed.
 3. Push a `vX.Y.Z` tag.
 
 `.github/workflows/publish.yml` checks that the tag and both version strings match,

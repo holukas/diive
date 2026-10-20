@@ -143,6 +143,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 - **[CRITICAL] Always pass `verbose=` when the caller has one**, even inside an `if self.verbose >= N:` guard. A bare `detail(msg)` resolves to the module default (PROGRESS), below `detail`'s own DEBUG level, so it never prints.
 - **Module docstring:** `MODULE_NAME: DESCRIPTIVE_TITLE`, `===` underline, one-line scope, then `Part of the diive library: https://github.com/holukas/diive`.
 - **Written text** (docs, comments, commit messages, examples): use the `/llm-detox` skill.
+- **CHANGELOG** follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/): headings `## [x.y.z] - YYYY-MM-DD`, sections Added, Changed, Deprecated, Removed, Fixed (Fixed last), a 2-3 sentence summary on top of each release, short user-level entries (one sentence, no internals or file paths), and "(changes results)" on entries that change results.
 - **Examples** (Sphinx Gallery): `# %%` cells, no file I/O, one year of data. `showplot=True` is fine: the gallery captures those figures (run examples unattended with `MPLBACKEND=Agg`). New example: register in `examples/run_all_examples.py` + `examples/CATALOG.md`, category README, source docstring "Example" section, `examples/README.md` count, CHANGELOG, verify it runs.
 
 ## Plotting

@@ -2,447 +2,299 @@
 
 ![diive](images/logo_diive1_256px.png)
 
-## v0.92.0 | Unreleased
+All notable changes to diive, newest first. The format follows
+[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions before 0.92.0 use
+older section names.
 
-### Changes
+## [0.92.0] - 2026-10-21
+
+This release makes gap-filling and NEE partitioning match their reference code, ONEFlux and
+REddyProc, and you choose between them with one setting. Many fixes stop data from being dropped or
+changed without notice, in loading, outlier detection, meteo screening and the desktop app. Some
+results change: look for entries marked "changes results".
+
+### Added
+
+Library (also used by the notebook and the GUI):
+
+- **NEE partitioning:** `PartitioningNEE` and `partition_nee()` choose the method (`'nighttime'`,
+  `'daytime'`) and the mode (`'oneflux'`, the default, or `'reddyproc'`), also in the chain with
+  `run_level42_partitioning()` and `FluxConfig(partition_method=, partition_mode=)`.
+- **MDS gap-filling, driver QC:** optional QC flag columns for SW_IN, TA and VPD let only measured
+  driver values count as similar conditions, as in ONEFlux.
+- **Driver flag columns:** `dv.variables.driver_flag_columns` finds the QC flag columns of a driver.
+- **Daytime partitioning (ONEFlux), gap-filled NEE:** `DaytimePartitioningOneFlux` takes an optional
+  gap-filled NEE (`nee_f`), which the chain passes from Level 4.1, as in ONEFlux.
+- **Time-span windows:** Hampel, Local SD and rolling z-score take the window as a time span,
+  e.g. `'7D'`.
+- **Meteo screening, new methods:** `set_corrections()`, `records_count()`, `resolutions()` and
+  `meteoscreening_to_code()`, which writes a script of the screening.
+- **Meteo screening, options:** Local SD and z-score take separate daytime and nighttime thresholds,
+  `showplot=False` turns correction plots off, and the nighttime zero-offset correction takes
+  `clamp_negatives`.
+- **Nighttime zero offset:** `remove_nighttime_zero_offset` takes an optional `swin_pot`.
+- **Offset correction figures:** `showplot=True` shows a new figure for the nighttime zero offset and
+  the relative humidity offset, with every step and its counts, and
+  `relativehumidity_offset_diagnostics()` returns the intermediate series.
+- **Time series plot, statistics:** `TimeSeries.plot()` shows the time resolution, period and basic
+  statistics above the plot (`show_stats`).
+- **Time resolution text:** `describe_time_resolution()` describes the time resolution of an index
+  as text.
+- **Documentation:** the meteo screening methods and the outlier classes have usage examples.
+- **Database upload:** `upload_singlevar` can delete a whole period before the upload
+  (`delete_start`, `delete_stop`).
+
+GUI only:
+
+- **Screening tabs:** absolute limits can be added as a step.
+
+Packaging:
+
+- **New `all` extra:** `diive[all]` installs the desktop app, database access and JupyterLab.
+
+### Changed
 
 Library (also used by the notebook and the GUI):
 
 - **Flux post-processing chain:** the flux processing chain is now called the flux post-processing
-  chain and lives in `diive.flux.postprocessingchain`, and its examples and notebook (now
-  `FluxPostProcessingChain.ipynb`) are renamed to match.
-- **Flux post-processing chain, old import path:** `diive.flux.fluxprocessingchain` still works but
-  gives a `FutureWarning` and will be removed in a future release.
-- **MDS gap-filling, new default mode (changes results):** `FluxMDS` and `run_level41_mds` take
-  `mode=`, and `FluxConfig` takes `mds_mode=`: `'diive'` (new default), `'oneflux'` or `'reddyproc'`.
+  chain, in `diive.flux.postprocessingchain`, with renamed examples and notebook.
+- **MDS gap-filling, modes (changes results):** `FluxMDS`, `run_level41_mds` and
+  `FluxConfig(mds_mode=)` take `mode='diive'` (new default), `'oneflux'` or `'reddyproc'`.
   - `'diive'` fills daytime gaps with the symmetric mean of Vekuri et al. (2023), which removes a
-    bias in the filled fluxes and the carbon balance (on CH-DAV 2020 the daytime bias dropped from
-    +0.041 to +0.004 µmol m⁻² s⁻¹ with almost the same RMSE).
-  - `'oneflux'` uses the plain mean of the old default and reproduces ONEFlux bit for bit, for
-    comparisons with FLUXNET or ICOS data.
-  - `'reddyproc'` fills gaps as REddyProc does, with REddyProc's windows, and leaves gaps longer
-    than 60 days unfilled.
-  - The scores of `'diive'` leave each measured record out of its own prediction, so they are
-    lower than the in-sample scores of `'oneflux'`.
-  - `sym_mean` is replaced by `mode` and now raises an error.
-- **MDS gap-filling, driver QC:** `FluxMDS`, `run_level41_mds` and `FluxConfig` take optional QC
-  columns for SW_IN, TA and VPD, so NEE can be gap-filled exactly as in ONEFlux, where only
-  measured driver values serve as similar samples.
-- **Driver flag columns:** `dv.variables.driver_flag_columns` finds the QC flag columns of a driver
-  by name.
-- **NEE partitioning, method and mode:** the new `PartitioningNEE` and `partition_nee()` select the
-  partitioning with `method='nighttime'|'daytime'` and `mode='oneflux'|'reddyproc'`, like
-  `FluxMDS(mode=)`, with ONEFlux (as used by ICOS and FLUXNET) as the default.
-  - In the flux post-processing chain, `run_level42_partitioning()` and
-    `FluxConfig(partition_method=, partition_mode=)` do the same.
-  - The four partitioning classes and `run_level42_*` functions stay as they are.
-- **Daytime partitioning (ONEFlux), gap-filled NEE:** `DaytimePartitioningOneFlux` takes an optional
-  gap-filled NEE (`nee_f`), which Level 4.2 of the chain passes from Level 4.1, so windows without
-  measured nighttime NEE are fitted as in ONEFlux.
-- **Daytime partitioning (ONEFlux), u\* scenarios:** Level 4.2 of the flux post-processing chain
-  and the new `partition_nee_daytime_oneflux_scenarios()` remove the measured NEE around a failed
-  fit from all u\* scenarios of that year, as ONEFlux does, and
-  `DaytimePartitioningOneFlux.removed_days` lists the removed days.
-- **Meteo screening dates:** manual removal and `correction_setto_value` take dates as they appear
-  in the downloaded data (local time, end of each period), and dates that match no record give a
-  warning.
-- **Meteo screening, new methods:** `set_corrections()` applies a list of corrections in one call,
-  `records_count()` and `resolutions()` describe the loaded data, and `meteoscreening_to_code()`
-  writes a script of a screening setup.
-- **Meteo screening options:** Local SD and z-score take separate daytime and nighttime thresholds,
-  correction plots can be switched off with `showplot=False`, and the nighttime zero-offset
-  correction takes `clamp_negatives`.
-- **Meteo screening, irregular timestamps:** records a few seconds off the regular time grid and
-  inputs too small to screen raise a clear error.
-- **Meteo screening, short stretches:** fewer than three records at one resolution are left
-  unscreened, with a warning.
-- **Time-span windows:** Hampel, Local SD and rolling z-score also take the window as a time span,
-  e.g. `'7D'`.
-- **Local outlier factor:** `repeat` defaults to `False` in stepwise screening, because each pass
-  flags the `contamination` fraction again.
+    bias (CH-DAV 2020: daytime bias from +0.041 to +0.004 µmol m⁻² s⁻¹).
+  - `'oneflux'` is the old default and matches ONEFlux exactly.
+  - `'reddyproc'` fills gaps as REddyProc does and leaves gaps longer than 60 days unfilled.
+  - The scores of `'diive'` leave each record out of its own prediction, so they are lower than
+    those of `'oneflux'`.
+- **Daytime partitioning (ONEFlux), u\* scenarios:** after a failed fit, the measured NEE around it
+  is removed from all u\* scenarios of that year, as in ONEFlux, and `removed_days` lists the days.
+- **Local outlier factor (changes results):** it runs a single pass by default, in the class, in
+  stepwise screening and in the GUI tab, because repeated passes removed most of a series.
+- **`Hampel`, daytime and nighttime (changes results):** with `separate_day_night=True`, each period
+  is judged against its own median and spread, as in ONEFlux, so a quiet night no longer removes
+  too many daytime records.
+- **`Hampel`, ends and gaps (changes results):** records at the series ends and next to gaps are
+  tested like the others.
+- **Outlier classes:** they are plain classes, so `isinstance` and subclassing work and their
+  arguments show in the documentation.
 - **Console output:** outlier tests, corrections and resampling no longer print a
   `running <name> ...` line.
-- **Outlier classes:** they are plain classes now, so `isinstance` and subclassing work and their
-  arguments show in the documentation.
-- **Documentation:** the meteo screening methods and the outlier classes show usage examples, e.g.
-  all date formats for manual removal.
-- **Meteo screening, resampling coverage (changes results):** coverage is measured by the time the
-  kept records cover, so other resolutions in the same download no longer change which periods are
-  kept. A sum needs `mincounts_perc` of the period covered, with no one-record minimum. Means of
-  data with one resolution are unchanged.
-- **Meteo screening, new detection round:** calling `start_outlier_detection()` again drops the
-  previous round's flags and tests all records again, including those the last finalize removed.
-- **Meteo screening, warnings:** `resample()` warns about flags that `finalize_outlier_detection()`
-  has not applied yet, and finalize warns when a test ran but its flag was not added.
-- **Database upload:** writes are synchronous and retried on connection and server errors, and
-  `upload_singlevar` takes `delete_start` and `delete_stop` to delete a whole period before the
-  upload.
-- **Database download:** when a variable is stored with several tag sets, the series that starts
-  later wins at shared timestamps, and a warning reports conflicting values.
-- **Database config:** an incomplete config folder gives an error that names the file, and
-  `units.yaml` and `dirs.yaml` are optional.
-- **Meteo screening, outdated resample:** after `resample()`, any change to the screened data makes
-  `resampled_detailed` raise an error until `resample()` runs again, so outdated values cannot be
-  uploaded.
-- **Set exact value to missing:** values match within a relative tolerance of 1e-6, so values stored
-  as float32 (e.g. 0.1) are found. 0 matches only 0, and entries that are not numbers raise an
-  error.
-- **Meteo screening, sums:** resampled sums are rounded to 12 significant digits, which removes
-  floating-point noise such as 1.2000000000000002.
-- **Nighttime zero offset:** `remove_nighttime_zero_offset` takes an optional `swin_pot`, the
-  potential radiation of each record.
-- **`Hampel`, daytime and nighttime (changes results):** with `separate_day_night=True`, daytime
-  records are judged against the median and spread of the daytime records in the window, and
-  nighttime records against the nighttime ones, as in ONEFlux. Double differences use records of
-  one period only. Before, the quiet night set the spread for both, so variables with a quiet
-  night lost too many daytime records, e.g. latent heat flux more than twice as many as now.
-- **`Hampel`, records next to gaps (changes results):** records at the series ends and next to gaps
-  are tested with the same sign as the other records, which changes a few flags also without
-  day/night separation.
-- **Meteo screening, time resolutions (changes results):** only odd time resolutions are dropped,
-  each with a warning. Short blocks whose resolution is a whole multiple or divisor of the data
-  around them are kept, e.g. a 3-day block of 10-min data in a year of 1-min data, and 2-5
-  ten-minute records inside 1-min data are recognised as 10-min records, also next to a gap or at
-  the end of the data. Stray timestamps (fewer than 3 records finer than the data around them)
-  and resolutions that would make the screening grid finer and need more than 2 million rows are
-  dropped. Before, any resolution with at most 0.2 % of the records was dropped.
-- **Meteo screening, freq tag:** the detected time resolution of each record is compared with its
-  `freq` tag, and differences are listed in a warning. The detected resolution is used.
-- **Meteo screening, short fields:** a field with fewer than 2 records is left out with a warning,
-  and the other fields are screened.
-- **Meteo screening, speed:** screening runs about 20-50 % faster and previews draw faster, with
-  identical results.
-- **InfluxDB download:** the summary lists each variable with its number of records, period, time
-  resolution detected from the timestamps and `freq` tag.
-- **Time series plot, new look:** `TimeSeries.plot()` without a `FormatStyle` draws a white plot
-  with an open frame, light horizontal gridlines, a left-aligned title, concise date labels with
-  the year and a thinner line (`linewidth` default 1.2, was 2.2). A given `FormatStyle` keeps the
-  previous look.
-- **Time series plot, stats:** `TimeSeries.plot()` writes the time resolution, period, number of
-  values, share of missing values, mean, median, SD, min and max above the plot. It is on for a
-  figure the plot creates itself and off on a given axes, set with `show_stats`.
-- **Time resolution text:** `describe_time_resolution()` in `diive.core.times.times` gives the
-  detected time resolution of an index as text, with the number of records for each resolution
-  where it changes.
-- **Nighttime zero offset, figure:** `remove_nighttime_zero_offset(showplot=True)` and the meteo
-  screening correction show a new figure (`NighttimeZeroOffsetPlot`). A strip shows the five steps in
-  order with their counts: find night, daily offset, subtract, night to 0, clamp negatives. Below it:
-  measured and corrected series, the daily offset as one value per calendar day with the spread of
-  each night, the diel cycle near zero after each step, the night values before and after subtracting
-  the offset, and a summary.
-- **Relative humidity offset, figure:** `remove_relativehumidity_offset(showplot=True)` and the meteo
-  screening correction show a new figure (`RelativeHumidityOffsetPlot`), in the style of the nighttime
-  zero-offset figure: the five steps with their counts, series, offset per record, values near 100 %,
-  daily maximum and a summary. `relativehumidity_offset_diagnostics()` returns all intermediate series.
-- **QCF reports:** `report_qcf_series()`, `report_qcf_flags()` and `report_qcf_evolution()` of
-  `FlagQCF` (also called by the meteo screening) print one aligned table each, readable in
-  notebooks.
-  - The summary adds the time resolution, the timestamp type, the accept rule and daytime and
-    nighttime counts.
-  - The test table counts measured records once, with the records a test did not reach.
-  - The evolution table adds how many records each test failed and warned.
-  - The missing-values test flags no measured record, so the test table gives its count above the
-    table and the evolution table leaves it out.
-- **Projects, timestamps:** `load_project` returns the time index as it was saved and no longer
-  converts a `TIMESTAMP_END` index to `TIMESTAMP_MIDDLE`.
+- **Meteo screening, dates:** manual removal and `correction_setto_value` take dates as they appear
+  in the downloaded data (local time, end of each period), and dates without a record give a warning.
+- **Meteo screening, checks:** records a few seconds off the time grid and data too small to screen
+  raise a clear error, and fewer than three records at one resolution stay unscreened with a warning.
+- **Meteo screening, time resolutions (changes results):** short blocks at a resolution that fits
+  the data around them are kept, and only odd resolutions and stray timestamps are dropped, each with
+  a warning.
+- **Meteo screening, resampling coverage (changes results):** coverage is the time the kept records
+  cover, so other resolutions in a download no longer change which periods are kept.
+- **Meteo screening, freq tag:** differences between the detected resolution and the `freq` tag are
+  listed in a warning, and the detected resolution is used.
+- **Meteo screening, short fields:** a field with fewer than 2 records is skipped with a warning.
+- **Meteo screening, new detection round:** calling `start_outlier_detection()` again tests all
+  records again.
+- **Meteo screening, warnings:** `resample()` warns about flags that are not applied yet, and
+  finalize warns when a test ran but its flag was not added.
+- **Meteo screening, outdated results:** after a change to the screened data, `resampled_detailed`
+  raises an error until `resample()` runs again, so outdated values cannot be uploaded.
+- **Meteo screening, sums:** resampled sums are rounded to 12 significant digits to remove
+  floating-point noise.
+- **Meteo screening, speed:** screening is about 20-50 % faster, with identical results.
+- **Set exact value to missing:** values match within a relative tolerance of 1e-6, so float32
+  values such as 0.1 are found.
+- **Time series plot, look:** without a `FormatStyle`, `TimeSeries.plot()` draws a cleaner plot with
+  concise date labels and a thinner line.
+- **QCF reports:** the `FlagQCF` reports print aligned tables with more detail, such as the time
+  resolution, the accept rule and daytime and nighttime counts.
+- **Projects, timestamps:** `load_project` returns the time index as it was saved, without converting
+  `TIMESTAMP_END` to `TIMESTAMP_MIDDLE`.
+- **Database upload:** writes are retried on connection and server errors.
+- **Database download and config:** the download summary lists each variable with its records and
+  time resolution, a variable stored with several tag sets keeps the later series with a warning,
+  and an incomplete config folder names the missing file.
 
 GUI only:
 
-- **Flux menu:** the chain tab is now called "Flux post-processing chain", and saved projects still
-  reopen it.
-- **UTC offset:** the offset is set only in Project settings, and tabs that need it show it
-  read-only, with a red mark where it is not set yet.
-- **Database connection:** the config directory is saved with the project instead of in the app
-  settings, so the field starts empty without a project.
-- **Database menu:** **File ▸ Database** appears only when the optional `db` extra is installed. The
-  database tabs are for internal use for now.
-- **Meteo screening (database):** the tab screens through `StepwiseMeteoScreeningDb` like the
-  library, follows changes to the site coordinates and shows loading errors in the status line.
-- **Meteo screening (database), Copy Python:** writes a `StepwiseMeteoScreeningDb` script, also
-  when only corrections are set. The script and the screening use the UTC offset the data were
-  downloaded in.
-- **Hampel step:** separates daytime and nighttime by default when the project site is set, and
-  the daytime and nighttime thresholds follow the global value until they are edited.
-- **Meteo screening (database), status line:** messages after corrections, resampling and Add say
-  what happened, and the UTC offset warning disappears once the offsets match again.
-- **Meteo screening (database), add to dataset:** results finer than the working dataset or off its
-  time grid are refused with a hint to resample. A coarser result on the grid is added with a
-  note.
-- **Meteo screening (database), set to value:** the dates are marked as END timestamps, and dates
-  that match no record show a warning in the status line.
-- **Meteo screening (database), add to dataset:** the data version shows the processed version,
-  not the download's.
-- **Meteo screening (database), resolution:** typing a resolution resamples once, after typing
-  stops.
-- **Screening tabs:** absolute limits can be added as a step.
-- **NEE partitioning:** the four partitioning tabs are now one tab with a Method choice (nighttime,
-  daytime) and a Mode choice (ONEFlux, REddyProc), and projects saved before open in it.
-- **MDS gap-filling, mode:** the MDS tab and Level 4.1 of the flux post-processing chain have a
-  Mode choice ("diive" by default, "ONEFlux" or "REddyProc"), which replaces the symmetric-mean
-  checkbox.
-- **MDS gap-filling, older projects:** projects saved before the Mode choice load with the mode
-  that matches their old setting.
-- **MDS gap-filling, driver QC:** the MDS tab and Level 4.1 of the flux post-processing chain
-  take an optional QC flag column for SW_IN, TA and VPD, and Copy Python includes it.
+- **Flux menu:** the chain tab is called "Flux post-processing chain", and saved projects still open
+  it.
+- **UTC offset:** it is set only in Project settings, and other tabs show it read-only, with a red
+  mark when it is missing.
+- **NEE partitioning:** one tab with a Method choice (nighttime, daytime) and a Mode choice (ONEFlux,
+  REddyProc) replaces the four tabs, and older projects open in it with their settings.
+- **MDS gap-filling:** the MDS tab and Level 4.1 of the chain have a Mode choice ("diive" by default)
+  instead of the symmetric-mean checkbox, take optional QC flag columns for the drivers, and older
+  projects load with the matching mode.
+- **Hampel step:** it separates daytime and nighttime by default when the site is set, and the
+  daytime and nighttime thresholds follow the global value until they are edited.
+- **Database tabs:** **File ▸ Database** appears only with the `db` extra, and the config directory
+  is saved with the project.
+- **Meteo screening (database):** the tab works like the library class, Copy Python writes a
+  matching script, results that do not fit the dataset's time grid are refused, and the status line
+  says what happened.
 
 Notebook (meteo screening notebook v20):
 
-- **Run All:** no longer applies outlier tests with example settings. All outlier tests are
-  commented out, with notes on the variables each one does not suit.
-- **Windows:** window settings are time spans, e.g. `'7D'`.
-- **Descriptions:** method descriptions are shorter and link to the documentation.
-- **Skipping outlier detection:** a note after the first plot says when it can be skipped.
-- **Resampling:** `mincounts_perc` is 0.5 (was 0.25), and the notes explain how it works for means
-  and for sums.
-- **Upload:** deletes the whole screened period, from `START` to `STOP`, so older screened values
-  at its edges are removed.
-- **Upload check:** compares the stored values with the uploaded ones and reports a failed upload.
-- **UTC offset:** the notes say to keep one fixed offset all year, without daylight saving time.
-- **Upload switch:** nothing is uploaded unless `UPLOAD = True`.
-- **Time range check:** START and STOP must be one second after a resampling boundary, and the
-  notebook stops with a suggested value otherwise.
-- **Frequency check:** the upload stops before anything is deleted when the resampled frequency
-  differs from `RESAMPLING_FREQ`.
-- **Hampel note:** records with up to 20 W m-2 potential radiation count as night, and a sensor
-  stuck at one value is not flagged.
-- **Settings check:** the upload stops before anything is deleted if the UTC offset, START, STOP,
-  site or fields changed after the download or after the screening.
-- **Resampling note:** `'mean'` is an arithmetic mean, so angles such as wind direction need a
-  circular mean.
-- **Layout and texts:** more space above each section header, and shorter, clearer texts that
-  mention the download summary, the plot statistics and the QCF reports.
+- **Run All:** it no longer applies outlier tests with example settings.
+- **Settings:** windows are time spans (e.g. `'7D'`), and `mincounts_perc` is 0.5 (was 0.25).
+- **Upload safety:** nothing is uploaded unless `UPLOAD = True`, the upload stops before anything is
+  deleted when settings, time range or frequency do not match, and the stored values are checked
+  afterwards.
+- **Upload period:** the whole screened period is deleted before the upload, so older values at its
+  edges are removed.
+- **Notes:** shorter texts with links to the documentation, and notes on the UTC offset, the Hampel
+  test, wind direction means and when outlier detection can be skipped.
 
-### Packaging
+Packaging:
 
-- `threadpoolctl` is now a declared dependency, no longer installed only through scikit-learn.
-- **3-D views in the `gui` extra:** `pip install "diive[gui]"` now also installs the 3-D surface tabs. The
-  `gui3d` extra is removed.
-- **Windows app without database tabs:** the release build leaves out the InfluxDB database tabs.
-  `build_gui.ps1 -WithDb` makes an internal build with them.
-- **New `all` extra:** `pip install "diive[all]"` installs the desktop app, InfluxDB access and JupyterLab in one step.
-- **InfluxDB in a clone:** the `db` dependency group is removed because it duplicated the `db` extra. Use
-  `uv sync --extra db` instead of `uv sync --group db`.
-- **Installation guide:** the README shows how to install the library, the desktop app and the Windows
-  app, and links to the full guide in the online documentation with the development setup, Jupyter,
-  updates and common problems.
+- **Desktop app with 3-D views:** `diive[gui]` now includes the 3-D surface tabs.
+- **Windows app:** the release build has no database tabs.
+- **`threadpoolctl`:** it is now a declared dependency.
+- **Installation guide:** the README covers the library, the desktop app and the Windows app, and
+  links to the full guide.
 
-### Bugfixes
+### Deprecated
+
+- **Old import path:** `diive.flux.fluxprocessingchain` still works with a `FutureWarning` and will
+  be removed later. Use `diive.flux.postprocessingchain`.
+
+### Removed
+
+- **`sym_mean`:** `FluxMDS(sym_mean=)` raises an error. Use `mode=` instead.
+- **`gui3d` extra:** the 3-D views come with `diive[gui]`.
+- **`db` dependency group:** use `uv sync --extra db` instead of `uv sync --group db`.
+
+### Fixed
 
 Library (also used by the notebook and the GUI):
 
-- **Remove after date:** `remove_after_date` no longer changes the data passed to it.
-- **u* scenarios:** `UstarThresholdConstantScenarios` now removes records with missing USTAR from
-  every scenario, as the u* filter does elsewhere in diive.
-- **EddyPro drop-out test (changes results):** a failed VM97 drop-out test now counts as a hard
-  flag, so these records are rejected at Level 2. Before, it counted as one soft flag.
-- **Nighttime partitioning (ONEFlux):** results now match ONEFlux bit for bit (CH-DAV 2016
-  and 2019, CH-LAE 2017-2019), up from an RMSE of 0.0003 µmol m⁻² s⁻¹.
-- **Nighttime partitioning (ONEFlux), polar day and night:** on days without sunrise or sunset, no
-  record counts as night any more, as in ONEFlux (annual GPP at FI-Var was up to 1.5% off).
-- **Daytime partitioning (ONEFlux):** every light-response fit now matches ONEFlux, also at sites
-  with little measured NEE, and annual sums agree to 0.0001% (were up to 1.2% apart on CH-DAV 2019
-  and 1.5% on CH-LAE 2018).
-- **Daytime partitioning (ONEFlux), failed fits:** when a window's fit fails, the measured NEE
-  of the surrounding 12 days is now removed and the year partitioned again, as in ONEFlux,
-  instead of skipping only that window.
-- **Daytime partitioning (ONEFlux), sparse nights:** a window after a rejected temperature fit now
-  takes its E0 as ONEFlux does, which moved annual GPP at GF-Guy 2024 by 0.1%.
-- **Daytime partitioning (ONEFlux), hourly data:** an hourly year is now partitioned on a
-  half-hourly grid as ONEFlux does, so hourly results match ONEFlux (annual daytime GPP was up to
-  7.8% off at US-Ha1 and US-MMS).
-- **Nighttime partitioning (REddyProc):** results change and now match REddyProc to about 1e-15.
-- **Nighttime partitioning (REddyProc), E0 limit:** the upper limit of E0 was 350 instead of
-  REddyProc's 450, which on CH-DAV 2016 lowered E0 from 281 to 231 and annual GPP by 1.3%.
-- **Daytime partitioning (REddyProc):** results change slightly and now match REddyProc, with
-  annual sums mostly within 0.001%.
-- **Daytime partitioning (REddyProc), E0 uncertainty:** the reported SD of the smoothed E0 was
-  50-84% too low.
-- **Daytime partitioning (REddyProc), BLAS threads:** runs no longer slow down or change with the
-  number of BLAS threads.
-- **Daytime partitioning (REddyProc), first days:** records without nighttime data in their first
-  days now also match REddyProc.
-- **MDS gap-filling:** with `mode='oneflux'`, results now match ONEFlux's `gf_mds` bit for bit.
-- **MDS gap-filling, mean diurnal cycle:** gaps filled from the mean diurnal cycle used other
-  records than ONEFlux (none from before midnight, wider windows), which moved annual NEE by up to
-  3 gC m⁻² on CH-LAE.
-- **MDS gap-filling, VPD in hPa:** with `vpd_in_kpa=False`, records exactly 5 hPa apart counted as
-  similar, unlike in ONEFlux.
-- **Meteo screening, timestamps:** data that already had the target resolution kept the internal
-  middle-of-period timestamps after resampling and would be uploaded half a period early.
-- **Meteo screening, mixed time resolutions:** sums counted coarse records several times, manual
-  removal missed parts of coarse records, outlier tests rejected or skipped valid coarse
-  records, and records such as 15 min after 10 min were dropped. The nighttime zero offset and the
-  potential radiation correlation used the wrong period for coarse records.
-- **Meteo screening, gaps:** records next to a gap in the timestamps were dropped, and records
-  between gaps could get a coarser time resolution than their own. With 30 % of 10-min records
-  missing, almost half of the records were lost.
-- **Meteo screening, corrections:** corrections made before `finalize_outlier_detection()` were
-  lost.
-- **Meteo screening, finalize:** running `finalize_outlier_detection()` again with looser
-  thresholds did not bring back records a stricter run removed.
-- **Meteo screening, QCF thresholds:** the accept thresholds of `finalize_outlier_detection()` had
-  no effect.
-- **Daily resampling:** `StepwiseMeteoScreeningDb.resample('1D')` and
-  `resample_series_to_freq(..., '1D')` failed under pandas 3.
-- **Meteo screening, upload:** screening again could leave older screened values at the start or
-  end of the period in the database.
-- **Database upload:** the delete before an upload removed that variable for every site in a
-  shared bucket, not only for the uploaded site.
-- **`Hampel` with differencing:** with `use_differencing=True`, a spike on the first or last record
-  or next to a gap was never flagged. With `repeat=True` as well, each pass removed good records
-  next to those removed before, often up to the next gap, e.g. all daytime shortwave radiation or a
-  whole day at a level shift. Blocks of up to four bad values are now removed, also at the series
-  ends and next to gaps. This also affected the flux post-processing chain (L3.2) and the GUI
-  screening tabs.
-- **`Hampel`:** a whole-number nighttime threshold combined with a decimal daytime threshold
-  raised a `TypeError`.
-- **`setto_value`:** a bare date now covers the whole day, as documented.
-- Smaller fixes in `StepwiseMeteoScreeningDb`: `fields` as a single string, repeated `addflag()` and
-  `finalize_outlier_detection()` calls, LOF on fewer than 200 records, and missing tags uploaded
-  as the text "nan".
-- **`StepwiseMeteoScreeningDb.flag_outliers_hampel_test`:** the default window is now 13 days
-  (`'13D'`) instead of 13 records, which were only about two hours of 10-minute data.
-- **Plotting:** `has_twin` no longer fails, `ScatterXY` keeps its layout without a warning, and
-  `CompoundExtremesPlot(legend=False)` draws no legend.
-- **Heatmaps:** `HeatmapDateTime` and `HeatmapYearMonth` raise an error when `plot()` gets an
-  orientation that differs from the one set at creation, instead of mislabelling the axes.
-- **Driver analysis plots:** `AleCurve.plot`, `Ale2DResult.plot` and the `DriverAnalysis` plots
-  (`plot_importance`, `plot_lagged`, `plot_scale_resolved`, `plot_convergence`) take their title
-  through `format_style=FormatStyle(...)` like the other plots, and a flat `title=` raises an
-  error that says so.
-- **Diel cycle and compound extremes plots:** a standalone plot keeps its layout without a warning.
-- **Time-lag analysis:** a histogram range that would keep fewer than two bins now keeps all bins
-  with a warning, instead of failing.
-- **Offset corrections:** `WindDirOffset` and `MeasurementOffsetFromReplicate` take `verbose`.
-- **Histogram:** the `'uniques'` method gives the largest value its own bin, so the time-lag
-  analysis now counts one bin per distinct lag (its reported lag ranges are unchanged on the
-  example data).
-- **Bin fits:** `BinFitterCP.showplot` works without bins and unbinned data, and its bin points
-  follow `bins_y_agg`.
-- **Decoupling:** saving the plot works when an `ax` is passed.
-- **No changes to inputs:** `resample_to_monthly_agg_matrix` and `get_encoded_value_series` no
-  longer modify the series passed in.
-- **RH offset correction:** its description now says what the correction does.
-- **Database upload, failed writes:** a write that failed after the delete was only logged, so the
-  period stayed empty while the upload reported success. It now raises an error.
-- **Database upload, empty data:** an empty table raises a clear error before anything is deleted,
-  and a table with only missing values gives a warning that nothing was written.
-- **Meteo screening, corrections after finalize:** a correction no longer brings back records the
-  last finalize removed or gives a value to records missing in the download, e.g. night records set
-  to zero by the zero-offset correction.
-- **Meteo screening, finalize first:** `finalize_outlier_detection()` without
-  `start_outlier_detection()` raises a clear error.
-- **Nighttime zero offset, polar day:** at sites in polar day one record near midnight counted as
-  night, so its value was removed from the whole day. A day without any night record now gets an
-  offset of 0, where 30-min data gave only missing values.
-- **Meteo screening, set to value:** `correction_setto_value` raises for dates in a form it cannot
-  read, instead of ignoring them.
-- **Meteo screening, resample periods:** records with END timestamps off the clock grid (e.g. 10-min
-  records at :03 and :13) went into the previous period.
-- **Meteo screening, one period:** `resample()` failed when the result had a single period, e.g.
-  one hour of 10-min records resampled to `'1h'`.
-- **Meteo screening, failed resample:** a resample that failed for one variable left the others at
-  the new frequency.
-- **Meteo screening, manual removal:** a removed record came back when it had no value at test time
-  and a later correction gave it one.
-- **Meteo screening, odd-second grids:** manual removal and set to value hit the neighbouring
-  record, or none, on grids with an odd number of seconds, e.g. 5-second data.
-- **Time resolution detection:** a record next to a change of resolution could get the neighbouring
-  resolution, which weighted it wrong in resampling, and an empty index raised a shape error.
-- **Heatmaps:** they failed for data with a time resolution under one minute, e.g. 5-second data.
-- **Database download, changed tags:** a variable stored with two tag sets (e.g. after a gain
-  correction) kept old and new values at random at shared timestamps.
-- **Database upload, missing tags:** data without some tags could not be uploaded. A missing
-  `gain` is now written as 1.0 and a missing `offset` as 0.0, as in the raw data.
-- **Time resolution detection, regular outages:** records in data with a regular outage pattern
-  (e.g. every third record missing) got no time resolution and were dropped, and the last coarse
-  record before finer data could get the finer resolution.
-- **Set to threshold or value:** a decimal value failed on data stored as integers.
-- **QCF summary, duration:** the period was one day short (272 instead of 273 days), because it
-  ran from the first to the last timestamp without the time step of the last record.
-- **Set-to corrections, console:** their reports follow `verbose`.
-- **Absolute limits, day/night:** with separate daytime and nighttime limits and repeat on, the
-  test no longer runs forever, also in the GUI tab.
-- **Local outlier factor (changes results):** `LocalOutlierFactor` and its GUI tab now run a single
-  pass by default, because repeated passes removed most of a series (79 % of NEE in one example).
-- **Loading, records off the time grid:** loading no longer drops records silently when a few
-  timestamps are off the regular time grid, and records that still do not fit are reported in a warning.
-- **Outlier detection, records off the time grid:** a single record off the time grid no longer makes
-  outlier detection lose all data, and such records are reported in a warning.
-- **Flux post-processing chain, missing timestamps:** the chain adds missing timestamps as empty
-  records instead of stopping at Level 3.2.
-- **Several parquet files with a gap:** loading them gives a continuous time index with empty
-  records in the gap.
+- **Nighttime partitioning (ONEFlux):** results match ONEFlux exactly, also at polar day and night
+  (annual GPP at FI-Var was up to 1.5 % off).
+- **Daytime partitioning (ONEFlux):** every fit matches ONEFlux, including failed fits, sparse nights
+  and hourly data, and annual sums agree to 0.0001 % (hourly data were up to 7.8 % off).
+- **Nighttime partitioning (REddyProc):** results match REddyProc, with REddyProc's upper limit of
+  450 for E0 (350 before, which lowered annual GPP on CH-DAV 2016 by 1.3 %).
+- **Daytime partitioning (REddyProc):** results match REddyProc (annual sums mostly within
+  0.001 %), the SD of E0 is no longer 50-84 % too low, and results no longer depend on the number of
+  BLAS threads.
+- **MDS gap-filling:** with `mode='oneflux'`, results match ONEFlux `gf_mds` exactly, also for the
+  mean diurnal cycle (annual NEE moved by up to 3 gC m⁻² on CH-LAE) and for VPD in hPa.
+- **MDS gap-filling, missing timestamps:** `FluxMDS` fills missing timestamps instead of silently
+  changing the fills.
+- **Flux post-processing chain, missing timestamps:** missing timestamps are added as empty records
+  instead of stopping the chain at Level 3.2.
 - **u\* filtering for H and LE (changes results):** with the no-filter setting (threshold 0,
   `CUT_NONE`), records without a u\* value are kept.
-- **Expected time resolution:** `nominal_freq` and the file readers' `data_freq` accept any spelling
-  of the same step, for example `'1h'`, `'60min'` or `'h'` for hourly data and `'D'` for daily data.
-- **File readers, units:** the units in the metadata belong to the right variables again. Before, they
-  moved by one place for every timestamp column in the file.
-- **File readers, separator:** files separated by `;` or tabs can be read with a matching filetype.
-- **File readers, timestamp columns by position:** date and time columns given by position, for example
-  `[0, 1]`, are read correctly.
-- **Timestamp shift detection, FFT method:** works on hourly data.
-- **Timestamp shift detection, noon peak method:** a day without data no longer stops the check.
-- **TimeSince (changes results):** a limit that is not given leaves that side open. Before, the
-  largest or smallest value of the series was missed with `include_lim=False`.
-- **Local outlier factor, too few values:** a series or day/night period with too few values is
-  left untested with a warning instead of raising an error.
-- **Wind direction offset:** an error is raised when the reference years have no data, and a year
-  without a valid correlation stays uncorrected with a warning, instead of being rotated silently.
-- **Offset from a replicate:** an error is raised when the measurement and the replicate never
-  overlap, instead of shifting the series by the first candidate offset.
-- **Set to value:** works on data with an unsorted timestamp index.
-- **Linear interpolation:** filling short gaps is much faster on long records (10 years of 30-min data
-  in 0.02 s instead of 15 s), with the same results.
-- **Generated L4.2 scripts:** they keep `gapfill_method=None` instead of falling back to `'mds'`.
-- **Yearly cumulative, histogram and ridgeline plots:** they no longer fail on infinite values or on
-  a series without finite values, and show a note when nothing is left to plot.
-- **MDS gap-filling, missing timestamps:** `FluxMDS` adds missing timestamps as empty records and
-  fills them, instead of silently changing the fills.
+- **u\* scenarios:** `UstarThresholdConstantScenarios` removes records with missing USTAR from every
+  scenario.
+- **EddyPro drop-out test (changes results):** a failed VM97 drop-out test is a hard flag, so these
+  records are rejected at Level 2.
+- **Generated L4.2 scripts:** they keep `gapfill_method=None`.
+- **Loading, records off the time grid:** records off the regular time grid are no longer dropped
+  silently, and those that do not fit are reported in a warning.
+- **Several parquet files with a gap:** loading them fills the gap with empty records.
+- **Expected time resolution:** `nominal_freq` and `data_freq` accept any spelling of the same step,
+  e.g. `'1h'`, `'60min'` or `'D'`.
+- **File readers:** units belong to the right variables, files separated by `;` or tabs can be
+  read, and timestamp columns given by position (e.g. `[0, 1]`) work.
+- **Time resolution detection:** records next to a change of resolution or in data with regular
+  outages get the right resolution, and an empty index no longer fails.
+- **Outlier detection, records off the time grid:** a single off-grid record no longer makes outlier
+  detection lose all data.
+- **`Hampel` with differencing:** spikes at the series ends and next to gaps are flagged, and
+  `repeat=True` no longer removes good records next to removed ones.
+- **`Hampel`:** a whole-number nighttime threshold with a decimal daytime threshold no longer raises
+  a `TypeError`.
+- **Absolute limits, day/night:** with repeat on, the test no longer runs forever.
+- **Local outlier factor, too few values:** too few values are left untested with a warning instead
+  of raising an error.
+- **`setto_value`:** a bare date covers the whole day, and an unsorted index works.
+- **Set to threshold or value:** a decimal value works on integer data.
+- **Set-to corrections:** their console reports follow `verbose`.
+- **Nighttime zero offset, polar day:** a day without night records gets an offset of 0 instead of
+  losing its values.
+- **Wind direction offset:** reference years without data raise an error, and a year without a valid
+  correlation stays uncorrected with a warning.
+- **Offset from a replicate:** no overlap with the replicate raises an error instead of applying the
+  first candidate offset.
+- **Offset corrections:** `WindDirOffset` and `MeasurementOffsetFromReplicate` take `verbose`.
+- **RH offset correction:** its description says what the correction does.
+- **TimeSince (changes results):** a limit that is not given is open, so the largest or smallest
+  value is no longer missed with `include_lim=False`.
+- **Timestamp shift detection:** the FFT method works on hourly data, and the noon peak method on
+  data with empty days.
+- **Linear interpolation:** it is much faster on long records (10 years of 30-min data in 0.02 s
+  instead of 15 s), with the same results.
+- **Time-lag analysis:** a narrow histogram range keeps all bins with a warning instead of failing.
+- **Histogram:** the `'uniques'` method gives the largest value its own bin.
+- **Plots:** yearly cumulative, histogram and ridgeline plots handle infinite or missing values, and
+  `has_twin`, `ScatterXY`, `CompoundExtremesPlot(legend=False)` and standalone diel cycle plots work
+  as intended.
+- **Heatmaps:** they work for data finer than one minute, and an orientation in `plot()` that differs
+  from the one set at creation raises an error instead of mislabelling the axes.
+- **Driver analysis plots:** titles go through `format_style=FormatStyle(...)` like in the other
+  plots.
+- **Bin fits:** `BinFitterCP.showplot` works without bins, and its bin points follow `bins_y_agg`.
+- **Decoupling:** saving the plot works when an `ax` is passed.
+- **No changes to inputs:** `remove_after_date`, `resample_to_monthly_agg_matrix` and
+  `get_encoded_value_series` no longer modify their input.
+- **QCF summary:** the period is no longer one day short.
+- **Meteo screening, timestamps:** data already at the target resolution are no longer uploaded half
+  a period early.
+- **Meteo screening, mixed time resolutions:** coarse records are no longer counted several times
+  in sums, missed by manual removal, wrongly tested or dropped.
+- **Meteo screening, gaps:** records next to gaps in the timestamps are no longer dropped (almost
+  half of the records were lost with 30 % missing).
+- **Meteo screening, corrections:** corrections made before finalizing are kept, and corrections
+  after finalizing no longer bring back removed records.
+- **Meteo screening, finalize:** a second run with looser thresholds brings records back, the QCF
+  accept thresholds take effect, and finalizing first raises a clear error.
+- **Meteo screening, resampling:** `resample('1D')` works under pandas 3, a single result period
+  works, records off the clock grid go into the right period, and a failed resample leaves all
+  variables unchanged.
+- **Meteo screening, manual removal and set to value:** removed records stay removed, unreadable
+  dates raise an error, and grids with an odd number of seconds hit the right record.
+- **Meteo screening, Hampel window:** `flag_outliers_hampel_test` defaults to 13 days instead of
+  13 records.
+- **Meteo screening, other fixes:** `fields` as a single string, repeated `addflag()` and finalize
+  calls, LOF on fewer than 200 records, and missing tags uploaded as the text "nan".
+- **Meteo screening, upload:** screening again no longer leaves older values at the period edges.
+- **Database upload:** the delete before an upload no longer removes the variable for other sites, a
+  failed write raises an error, empty data raise before anything is deleted, and missing `gain` and
+  `offset` tags are written as 1.0 and 0.0.
+- **Database download:** a variable stored with two tag sets no longer mixes old and new values.
 
 GUI only:
 
-- **Meteo screening (database):** on 30-min data some records were classed as day or night half
-  a period off, and mixed-resolution downloads lost records or the whole coarse period.
-- **Screening tabs:** corrections saved in a GUI project were lost when it was opened again.
-- **Stepwise screening:** Local SD with separate daytime and nighttime failed with a
-  `TypeError`.
-- **Plot tabs with several panels:** *Update plot* became active again right after a render
-  or a switch between panels, although no setting had changed.
-- **Memory:** the first tab that loaded the machine-learning libraries stayed in memory after
-  it was closed and kept reacting to changes in Project settings.
-- **Projects:** reopening a project returns the data exactly as saved, also when they mix time resolutions.
-- **Flux post-processing chain, site:** the tab uses the coordinates from Project settings instead of
-  fixed Swiss coordinates and refuses to run without them.
-- **Overview, text columns:** adding or selecting a column that is not numeric no longer freezes the
-  app, the Overview shows a short note instead of plots.
-- **Overview, new columns:** every newly added numeric column is selected, not only the first one.
-- **Add to current data:** data with another time resolution or other time steps are refused, and
-  the time between two periods is filled with empty records.
+- **Unsaved changes:** the app asks whether to save before it closes, opens another project,
+  replaces the data or loads the example data.
+- **Projects:** reopening a project returns the data exactly as saved, and a reset variable subset
+  stays reset.
+- **Flux post-processing chain:** the tab uses the coordinates from Project settings instead of fixed
+  Swiss coordinates.
+- **Stepwise screening:** Local SD with separate daytime and nighttime no longer fails, and steps
+  that separate daytime and nighttime wait until a site is set.
+- **Screening tabs:** corrections saved in a project are kept when it opens again.
+- **Add to current data:** data with another time resolution are refused, and the time between two
+  periods is filled with empty records.
 - **New variables:** adding a variable with the name of an existing one asks before it replaces it.
-- **Events with the same name:** all of them mark their records in the shared event column.
-- **Plot tabs:** they keep their selected variables and settings when the data change, for example
-  after adding a variable in another tab.
-- **Unsaved changes:** the app asks whether to save before it closes, opens another project, replaces
-  the data or loads the example data.
-- **Rename after delete:** renaming a variable to the name of a deleted variable works and updates
-  every tab.
-- **Stepwise screening without a site:** a step that separates daytime and nighttime refuses to run
-  until a site is set in Project settings.
-- **Reset to all variables:** the reset is kept when the project is saved and reopened.
+- **Rename after delete:** renaming a variable to the name of a deleted one works.
+- **Events:** events with the same name all mark their records.
+- **Overview:** text columns no longer freeze the app, and every new numeric column is selected.
+- **Plot tabs:** they keep their variables and settings when the data change, and *Update plot* no
+  longer turns on without a change.
 - **Select records by condition:** only numeric variables are offered as the condition.
-- **Old daytime partitioning tabs:** projects saved with the old "Daytime partitioning (ONEFlux)" tab
-  reopen without a gap-filled NEE, so they give the same results as before.
+- **Memory:** the first tab that loaded the machine-learning libraries is freed when it is closed.
+- **Meteo screening (database):** day and night are classed correctly on 30-min data, and
+  mixed-resolution downloads keep all records.
 
 Examples:
 
-- **VPD units:** several examples and docstring examples passed VPD in hPa where kPa was expected,
-  or the other way round, which skewed their MDS, partitioning and random uncertainty results.
-- **Site coordinates:** the CH-LAE and CH-DAV examples and the post-processing chain notebook used
-  coordinates of other sites, which shifted potential radiation, day/night flags and partitioning.
+- **VPD units:** several examples passed VPD in hPa where kPa was expected, or the other way round,
+  which skewed their results.
+- **Site coordinates:** the CH-LAE and CH-DAV examples and the chain notebook used coordinates of
+  other sites.
 
-## v0.91.2 | 24 September 2026
+## [0.91.2] - 2026-09-24
 
 The ONEFlux partitioning ports now agree more closely with ONEFlux, and the desktop GUI is
 faster.
@@ -483,7 +335,7 @@ faster.
 - **`dv.events.overlay_events(axis='y')`** draws events above heatmap cells instead of hiding
   them below.
 
-## v0.91.1 | 19 September 2026
+## [0.91.1] - 2026-09-19
 
 ### Bugfixes
 
@@ -519,7 +371,7 @@ template.
     - Smaller cleanups: the notebook uses `showplot_outlier_detection_cleaned()` and
       `dv.__version__`, and has fewer setup cells.
 
-## v0.91.0 | 20 August 2026
+## [0.91.0] - 2026-08-20
 
 ### Highlights
 
@@ -821,7 +673,7 @@ These changes affect numbers calculated with earlier versions.
 
 - 1070/1070 unittests ran successfully (859 subtests).
 
-## v0.90.0 | 13 Jan 2026
+## [0.90.0] - 2026-01-13
 
 **Feature Highlights and Logic Changes**
 
@@ -981,7 +833,7 @@ These changes affect numbers calculated with earlier versions.
   `notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_1_CreateScalingFactorsTable.ipynb`
 * (42) `notebooks/FluxProcessingChain/self-heating_correction/SelfHeatingCorrectionNEE_2_ApplyScalingFactorsTable.ipynb`
 
-## v0.89.0 | 23 Jul 2025
+## [0.89.0] - 2025-07-23
 
 Version 0.89.0 introduces a new `GridAggregator` class for 2D data aggregation with support for quantile,
 equal-width, and custom binning methods, along with comprehensive documentation improvements and major dependency
@@ -1021,7 +873,7 @@ usage.
 - Added unittests for `dv.heatmap_xyz`
 - 66/66 unittests ran successfully
 
-## v0.88.0 | 18 Jul 2025
+## [0.88.0] - 2025-07-18
 
 ![plotHeatmapYearMonthMaxTA_diive_v0.88.0](images/plotHeatmapYearMonthMaxTA_diive_v0.88.0.png)
 *Heatmaps can now be plotted in horizontal orientation by setting the parameter `ax_orientation='horizontal'`. This
@@ -1056,7 +908,7 @@ their core functionality.
 - Updated test case for `tests.test_analyses.TestAnalyses.test_quantilegridaggregator`
 - 56/56 unittests ran successfully
 
-## v0.87.1 | 12 Jun 2025
+## [0.87.1] - 2025-06-12
 
 ### New features
 
@@ -1088,7 +940,7 @@ their core functionality.
 - Added test case for `.set_exact_values_to_missing()` (`tests.test_corrections.TestCorrections.test_settomissing`)
 - 56/56 unittests ran successfully
 
-## v0.87.0 | 17 May 2025
+## [0.87.0] - 2025-05-17
 
 ### Heatmap rank plot
 
@@ -1171,7 +1023,7 @@ See the notebook here for more examples:
 - `diive` is now using Python version `3.11` upwards
 - Updated environment, poetry `pyproject.toml` file now has the currently used structure
 
-## v0.86.0 | 20 Mar 2025
+## [0.86.0] - 2025-03-20
 
 ### New features
 
@@ -1244,7 +1096,7 @@ See the notebook here for more examples:
 
 - 53/53 unittests ran successfully
 
-## v0.85.7 | 26 Feb 2025
+## [0.85.7] - 2025-02-26
 
 ### New features
 
@@ -1254,7 +1106,7 @@ See the notebook here for more examples:
 
 - Added new notebook `notebooks/Formats/FormatMeteoForFluxnetUpload.ipynb`
 
-## v0.85.6 | 25 Feb 2025
+## [0.85.6] - 2025-02-25
 
 ### New features
 
@@ -1279,7 +1131,7 @@ See the notebook here for more examples:
 - Added new notebook `notebooks/Formats/FormatMeteoForEddyProFluxProcessing.ipynb`
 - Updated notebook `notebooks/Formats/notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb`
 
-## v0.85.5 | 3 Feb 2025
+## [0.85.5] - 2025-02-03
 
 ### Updates to MDS gap-filling
 
@@ -1380,13 +1232,13 @@ meteorological conditions.
   `diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain._get_ml_feature_settings`)
 - Fixed bug when plotting (`diive.pkgs.preprocessing.outlier_detection.localsd.LocalSD`)
 
-## v0.84.2 | 8 Nov 2024
+## [0.84.2] - 2024-11-08
 
 ### Changes
 
 - Adjust version number to avoid publishing conflict
 
-## v0.84.1 | 8 Nov 2024
+## [0.84.1] - 2024-11-08
 
 ### Bugfixes
 
@@ -1397,7 +1249,7 @@ meteorological conditions.
 - Added test case for `diive` imports (`tests.test_imports.TestImports.test_imports`)
 - 52/52 unittests ran successfully
 
-## v0.84.0 | 7 Nov 2024
+## [0.84.0] - 2024-11-07
 
 ### New features
 
@@ -1429,7 +1281,7 @@ meteorological conditions.
 - Added test case for `BinFitterCP` (`tests.test_fits.TestFits.test_binfittercp`)
 - 51/51 unittests ran successfully
 
-## v0.83.2 | 25 Oct 2024
+## [0.83.2] - 2024-10-25
 
 From now on Python version `3.11.10` is used for developing Python (up to now, version `3.9` was used). All unittests
 were successfully executed with this new Python version. In addition, all notebooks were re-run, all looked good.
@@ -1457,7 +1309,7 @@ need to install JupyterLab separately.
 - Adjusted flags check in QCF flag report, the progressive flag must be the same as the previously calculated overall
   flag (`diive.pkgs.preprocessing.qaqc.qcf.FlagQCF.report_qcf_evolution`)
 
-## v0.83.1 | 23 Oct 2024
+## [0.83.1] - 2024-10-23
 
 ### Changes
 
@@ -1480,7 +1332,7 @@ need to install JupyterLab separately.
 
 - 50/50 unittests ran successfully
 
-## v0.83.0 | 4 Oct 2024
+## [0.83.0] - 2024-10-04
 
 ### MDS gap-filling
 
@@ -1549,7 +1401,7 @@ gap-fill meteorological data) will follow.
   and ecosystem respiration: Review and improved algorithm. Global Change Biology, 11(9),
   1424–1439. https://doi.org/10.1111/j.1365-2486.2005.001002.x
 
-## v0.82.1 | 22 Sep 2024
+## [0.82.1] - 2024-09-22
 
 ### Notebooks
 
@@ -1586,7 +1438,7 @@ gap-fill meteorological data) will follow.
 - Corrected wind direction could be 360°, but will now be 0° (
   `diive.pkgs.preprocessing.corrections.winddiroffset.WindDirOffset._correct_degrees`)
 
-## v0.82.0 | 19 Sep 2024
+## [0.82.0] - 2024-09-19
 
 ### Long-term gap-filling
 
@@ -1657,7 +1509,7 @@ Here is an example for a dataset containing CO2 flux (`NEE`) measurements from 2
 
 - Fixed deprecation warning in (`diive.core.ml.common.prediction_scores_regr`)
 
-## v0.81.0 | 11 Sep 2024
+## [0.81.0] - 2024-09-11
 
 ### Expanding Flux Processing Capabilities
 
@@ -1739,7 +1591,7 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 - Added new package `scikit-optimize`
 - Added new package `category_encoders`
 
-## v0.80.0 | 28 Aug 2024
+## [0.80.0] - 2024-08-28
 
 ### Additions
 
@@ -1771,7 +1623,7 @@ With this update, the `FluxProcessingChain` class can handle various data proces
 - Fixed links in README, needed absolute links to notebooks
 - Fixed issue with return list in (`diive.pkgs.analysis.histogram.Histogram.peakbins`)
 
-## v0.79.1 | 26 Aug 2024
+## [0.79.1] - 2024-08-26
 
 ### Additions
 
@@ -1793,7 +1645,7 @@ With this update, the `FluxProcessingChain` class can handle various data proces
   `tests.test_fluxprocessingchain.TestFluxProcessingChain.test_fluxprocessingchain_level2`)
 - 36/36 unittests ran successfully
 
-## v0.79.0 | 22 Aug 2024
+## [0.79.0] - 2024-08-22
 
 This version introduces a histogram plot that has the option to display z-score as vertical lines superimposed on the
 distribution, which helps in assessing z-score settings used by some outlier removal functions.
@@ -1847,13 +1699,13 @@ time series. The bin with most counts is highlighted orange.*
 - Added unittest for plotting histograms (`tests.test_plots.TestPlots.test_histogram`)
 - Added unittest for calculating histograms (without plotting) (`tests.test_analyses.TestCreateVar.test_histogram`)
 
-## v0.78.1.1 | 19 Aug 2024
+## [0.78.1.1] - 2024-08-19
 
 ### Additions
 
 - Added CITATIONS file
 
-## v0.78.1 | 19 Aug 2024
+## [0.78.1] - 2024-08-19
 
 ### Changes
 
@@ -1872,7 +1724,7 @@ time series. The bin with most counts is highlighted orange.*
 - Updated unittest `test_hampel_filter_daytime_nighttime`
 - 35/35 unittests ran successfully
 
-## v0.78.0 | 18 Aug 2024
+## [0.78.0] - 2024-08-18
 
 ### New features
 
@@ -1943,7 +1795,7 @@ time series. The bin with most counts is highlighted orange.*
 - Added package [sktime](https://www.sktime.net/en/stable/index.html), a unified framework for machine learning with
   time series.
 
-## v0.77.0 | 11 Jun 2024
+## [0.77.0] - 2024-06-11
 
 ### Additions
 
@@ -1990,7 +1842,7 @@ time series. The bin with most counts is highlighted orange.*
 - Updated and fixed test case (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_increments`)
 - Updated and fixed test case (`tests.test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
 
-## v0.76.2 | 23 May 2024
+## [0.76.2] - 2024-05-23
 
 ### Additions
 
@@ -2017,7 +1869,7 @@ time series. The bin with most counts is highlighted orange.*
 - Added new test case
   for `LocalOutlierFactorAllData` (`tests.test_outlierdetection.TestOutlierDetection.test_lof_alldata`)
 
-## v0.76.1 | 17 May 2024
+## [0.76.1] - 2024-05-17
 
 ### Additions
 
@@ -2043,7 +1895,7 @@ time series. The bin with most counts is highlighted orange.*
 - Added new test case for `zScoreIncrements` (`tests.test_outlierdetection.TestOutlierDetection.test_zscore_increments`)
 - Added new test case for `LocalSD` (`tests.test_outlierdetection.TestOutlierDetection.test_localsd`)
 
-## v0.76.0 | 14 May 2024
+## [0.76.0] - 2024-05-14
 
 ### Diel cycle plot
 
@@ -2074,7 +1926,7 @@ for each month. The diel cycles have the same time resolution as the time compon
 
 - Added test case for new function `diel_cycle` (`tests.test_resampling.TestResampling.test_diel_cycle`)
 
-## v0.75.0 | 26 Apr 2024
+## [0.75.0] - 2024-04-26
 
 ### XGBoost gap-filling
 
@@ -2125,7 +1977,7 @@ Please see the notebook for some illustrative examples.
 - Harmonized test case for XGBoostTS with test case of RandomForestTS
 - Added test case for `TimeSince` variable creation (`tests.test_createvar.TestCreateVar.test_timesince`)
 
-## v0.74.1 | 23 Apr 2024
+## [0.74.1] - 2024-04-23
 
 This update adds the first notebooks (and tests) for outlier detection methods. Only two tests are included so far and
 both tests are relatively simple, but both notebooks already show in principle how outlier removal is handled. An
@@ -2153,7 +2005,7 @@ multiple outlier tests into one single overall outlier flag.
 - **Added**: test case for outlier detection: absolute
   limits (`tests.test_outlierdetection.TestOutlierDetection.test_absolute_limits`)
 
-## v0.74.0 | 21 Apr 2024
+## [0.74.0] - 2024-04-21
 
 ### Additions
 
@@ -2219,7 +2071,7 @@ multiple outlier tests into one single overall outlier flag.
   and `diive.core.times.times.TimestampSanitizer`)
 - **Fixed**: bug when plotting heatmap (`diive.core.plotting.heatmap_datetime.HeatmapDateTime`)
 
-## v0.73.0 | 17 Apr 2024
+## [0.73.0] - 2024-04-17
 
 ### New features
 
@@ -2265,14 +2117,14 @@ multiple outlier tests into one single overall outlier flag.
   files (`tests.test_loaddata.TestLoadFiletypes.test_load_exampledata_eddypro_full_output_CSV_30MIN`)
 - Updated test for frequency detection (`tests.test_timestamps.TestTime.test_detect_freq`)
 
-## v0.72.1 | 26 Mar 2024
+## [0.72.1] - 2024-03-26
 
 - `pyproject.toml` now uses the inequality syntax `>=` instead of caret syntax `^` because the version capping is
   restrictive and prevents compatibility in conda installations. See [#74](https://github.com/holukas/diive/pull/74)
 - Added badges in `README.md`
 - Smaller `diive` logo in `README.md`
 
-## v0.72.0 | 25 Mar 2024
+## [0.72.0] - 2024-03-25
 
 ### New feature
 
@@ -2296,7 +2148,7 @@ multiple outlier tests into one single overall outlier flag.
 
 - Fixed bug in `HeatmapDateTime` where the last record of each day was not shown
 
-## v0.71.6 | 23 Mar 2024
+## [0.71.6] - 2024-03-23
 
 ![diive](images/analysesZaggregatesInQuantileClassesOfXY_diive_v0.71.6.png)
 
@@ -2308,7 +2160,7 @@ multiple outlier tests into one single overall outlier flag.
   y  (`notebooks/Analyses/CalculateZaggregatesInQuantileClassesOfXY.ipynb`)
 - Updated notebook for `DaytimeNighttimeFlag` (`notebooks/CalculateVariable/DaytimeNighttimeFlag.ipynb`)
 
-## v0.71.5 | 22 Mar 2024
+## [0.71.5] - 2024-03-22
 
 ### Changes
 
@@ -2320,7 +2172,7 @@ multiple outlier tests into one single overall outlier flag.
 air temperature (z). All values shown are medians of the respective variable. The shaded errorbars refer to the
 interquartile range for the respective class. Plot was generated using the class `SortingBinsMethod`.*
 
-## v0.71.4 | 20 Mar 2024
+## [0.71.4] - 2024-03-20
 
 ### Changes
 
@@ -2332,7 +2184,7 @@ interquartile range for the respective class. Plot was generated using the class
 
 - Added new notebook for `LongtermAnomaliesYear` (`notebooks/Plotting/LongTermAnomalies.ipynb`)
 
-## v0.71.3 | 19 Mar 2024
+## [0.71.3] - 2024-03-19
 
 ### Changes
 
@@ -2352,7 +2204,7 @@ interquartile range for the respective class. Plot was generated using the class
 
 - From now on, `diive` is officially published on [pypi](https://pypi.org/project/diive/)
 
-## v0.71.2 | 18 Mar 2024
+## [0.71.2] - 2024-03-18
 
 ### Notebooks
 
@@ -2366,7 +2218,7 @@ interquartile range for the respective class. Plot was generated using the class
 - Updated README
 - Environment: Added [ruff](https://github.com/astral-sh/ruff) to dev dependencies for linting
 
-## v0.71.1 | 15 Mar 2024
+## [0.71.1] - 2024-03-15
 
 ### Bugfixes & changes
 
@@ -2377,7 +2229,7 @@ interquartile range for the respective class. Plot was generated using the class
 - Docs: Testing documentation generation using [Sphinx](https://www.sphinx-doc.org/en/master/), although it looks very
   rough at the moment.
 
-## v0.71.0 | 14 Mar 2024
+## [0.71.0] - 2024-03-14
 
 ### High-resolution update
 
@@ -2433,11 +2285,11 @@ covariance was calculated using the `MaxCovariance` class.*
 - Missing values are now defined for all files
   as: `NA_VALUES: [ -9999, -6999, -999, "nan", "NaN", "NAN", "NA", "inf", "-inf", "-" ]`
 
-## v0.70.1 | 1 Mar 2024
+## [0.70.1] - 2024-03-01
 
 - Updated (and cleaned) notebook `StepwiseMeteoScreeningFromDatabase.ipynb`
 
-## v0.70.0 | 28 Feb 2024
+## [0.70.0] - 2024-02-28
 
 ### New features
 
@@ -2470,7 +2322,7 @@ covariance was calculated using the `MaxCovariance` class.*
 
 - Updated notebook `FormatEddyProFluxnetFileForUpload.ipynb`
 
-## v0.69.0 | 23 Feb 2024
+## [0.69.0] - 2024-02-23
 
 ### New features
 
@@ -2481,12 +2333,12 @@ covariance was calculated using the `MaxCovariance` class.*
 - Added new filetype `RECORD_DAT_20HZ` (`diive/configs/filetypes/RECORD_DAT_20HZ.yml`) for eddy covariance
   high-resolution (20Hz) raw data files recorded by the ETH `rECord` logging script.
 
-## v0.68.1 | 5 Feb 2024
+## [0.68.1] - 2024-02-05
 
 - Fixed bugs in `FluxProcessingChain`, flag creation for missing values did not work because of the missing `repeat`
   keyword (`diive.pkgs.fluxprocessingchain.fluxprocessingchain.FluxProcessingChain`)
 
-## v0.68.0 | 30 Jan 2024
+## [0.68.0] - 2024-01-30
 
 ### Updates to stepwise outlier detection
 
@@ -2509,11 +2361,11 @@ adjusted accordingly.
   The test worked in principle, but at the moment it is unclear how to set reliable parameters. In addition
   the test is slow when used with multiple years of high-resolution data. De-activated for the moment.
 
-## v0.67.1 | 10 Jan 2024
+## [0.67.1] - 2024-01-10
 
 - Updated: many docstrings.
 
-## v0.67.0 | 9 Jan 2024
+## [0.67.0] - 2024-01-09
 
 ### Updates to flux processing chain
 
@@ -2561,7 +2413,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 
 - Removed `thymeboost`
 
-## v0.66.0 | 2 Nov 2023
+## [0.66.0] - 2023-11-02
 
 ### New features
 
@@ -2573,7 +2425,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 
 - Added notebook `notebooks/Plotting/ScatterXY.ipynb`
 
-## v0.64.0 | 31 Oct 2023
+## [0.64.0] - 2023-10-31
 
 ### New features
 
@@ -2590,7 +2442,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 
 - Added new notebook `notebooks/CalculateVariable/Daytime_and_nighttime_flag.ipynb`
 
-## v0.63.1 | 25 Oct 2023
+## [0.63.1] - 2023-10-25
 
 ### Changes
 
@@ -2613,7 +2465,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 - Added new package [xgboost](https://xgboost.readthedocs.io/en/stable/#)
 - Updated all packages
 
-## v0.63.0 | 5 Oct 2023
+## [0.63.0] - 2023-10-05
 
 ### New features
 
@@ -2639,7 +2491,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 - Updated testcase for gap-filling with random
   forest (`test_gapfilling.TestGapFilling.test_gapfilling_randomforest`)
 
-## v0.62.0 | 1 Oct 2023
+## [0.62.0] - 2023-10-01
 
 ### New features
 
@@ -2651,7 +2503,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 
 - Fixed bug in `StepwiseMeteoScreeningDb` where position of `return` during setup was incorrect
 
-## v0.61.0 | 28 Sep 2023
+## [0.61.0] - 2023-09-28
 
 ### New features
 
@@ -2698,7 +2550,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 - Added more args for better control of `TimestampSanitizer` (`core.times.times.TimestampSanitizer`)
 - Refined various docstrings
 
-## v0.60.0 | 17 Sep 2023
+## [0.60.0] - 2023-09-17
 
 ### New features
 
@@ -2741,7 +2593,7 @@ the updated `FluxProcessingChain`notebook (`notebooks/FluxProcessingChain/FluxPr
 - Updated all packages to their latest versions
 - Added new package [yellowbrick](https://www.scikit-yb.org/en/latest/)
 
-## v0.59.0 | 14 Sep 2023
+## [0.59.0] - 2023-09-14
 
 ### MeteoScreening from database - update
 
@@ -2762,7 +2614,7 @@ The following classes are no longer used and were removed from step-wise outlier
 
 - Updated notebook `notebooks/MeteoScreening/StepwiseMeteoScreeningFromDatabase.ipynb`
 
-## v0.58.1 | 13 Sep 2023
+## [0.58.1] - 2023-09-13
 
 ### Notebooks
 
@@ -2770,7 +2622,7 @@ The following classes are no longer used and were removed from step-wise outlier
 - Added new notebook `notebooks/GapFilling/QuickRandomForestGapFilling.ipynb`
 - Added new notebook `notebooks/Workbench/Remove_unneeded_cols.ipynb`
 
-## v0.58.0 | 7 Sep 2023
+## [0.58.0] - 2023-09-07
 
 ### Random forest update
 
@@ -2840,7 +2692,7 @@ df = load_exampledata_parquet()
 
 - Updated notebook `notebooks/CalculateVariable/Calculate_VPD_from_TA_and_RH.ipynb`
 
-## v0.57.1 | 23 Aug 2023
+## [0.57.1] - 2023-08-23
 
 ### Changes
 
@@ -2869,7 +2721,7 @@ output file to comply with [FLUXNET](https://fluxnet.org/) requirements for uplo
 
 - Updated notebook `notebooks/Formats\FormatEddyProFluxnetFileForUpload.ipynb` to version `3`
 
-## v0.57.0 | 22 Aug 2023
+## [0.57.0] - 2023-08-22
 
 ### Changes
 
@@ -2896,7 +2748,7 @@ output file to comply with [FLUXNET](https://fluxnet.org/) requirements for uplo
 - Added new notebook for simple (interactive) time series plotting `notebooks/Plotting/TimeSeries.ipynb`
 - Updated notebook `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb` to version 3
 
-## v0.55.0 | 18 Aug 2023
+## [0.55.0] - 2023-08-18
 
 This update focuses on the flux processing chain, in particular the creation of the extended
 quality flags, the flux storage correction and the creation of the overall quality flag `QCF`.
@@ -2959,7 +2811,7 @@ quality flags, the flux storage correction and the creation of the overall quali
 - **Flux processing chain**: Added new notebook for flux post-processing
   in `notebooks/FluxProcessingChain/FluxProcessingChain.ipynb`.
 
-## v0.54.0 | 16 Jul 2023
+## [0.54.0] - 2023-07-16
 
 ### New Features
 
@@ -2987,7 +2839,7 @@ quality flags, the flux storage correction and the creation of the overall quali
 - Added new notebook for formatting EddyPro output for upload to
   FLUXNET `notebooks/Formats/FormatEddyProFluxnetFileForUpload.ipynb`
 
-## v0.53.3 | 23 Apr 2023
+## [0.53.3] - 2023-04-23
 
 ### Notebooks
 
@@ -2999,7 +2851,7 @@ quality flags, the flux storage correction and the creation of the overall quali
 
 - New filetype `configs/filetypes/ICOS_H1R_CSVZIP_1MIN.yml`
 
-## v0.53.2 | 23 Apr 2023
+## [0.53.2] - 2023-04-23
 
 ### Changes
 
@@ -3009,7 +2861,7 @@ quality flags, the flux storage correction and the creation of the overall quali
     - Added new notebook (`notebooks/TimeStamps/Detect_time_resolution.ipynb` )
     - Added new unittest (`tests/test_timestamps.py`)
 
-## v0.53.1 | 18 Apr 2023
+## [0.53.1] - 2023-04-18
 
 ### Changes
 
@@ -3026,7 +2878,7 @@ quality flags, the flux storage correction and the creation of the overall quali
 - New repository branch `indev` is used as developement branch from now on
 - Branch `main` will contain code from the most recent release
 
-## v0.53.0 | 17 Apr 2023
+## [0.53.0] - 2023-04-17
 
 This update focuses on wind direction time series and adds the first example notebooks
 to `diive`. From now on, new example notebooks will be added regularly.
@@ -3052,7 +2904,7 @@ to `diive`. From now on, new example notebooks will be added regularly.
 
 - Added unittests for reading (some) filetypes
 
-## v0.52.7 | 16 Mar 2023
+## [0.52.7] - 2023-03-16
 
 ### Additions
 
@@ -3070,7 +2922,7 @@ to `diive`. From now on, new example notebooks will be added regularly.
 - Compression in filetypes is now given as `COMPRESSION: "None"` for no compression,
   and `COMPRESSION: "zip"` for zipped CSV files.
 
-## v0.52.6 | 12 Mar 2023
+## [0.52.6] - 2023-03-12
 
 ### Additions
 
@@ -3084,14 +2936,14 @@ to `diive`. From now on, new example notebooks will be added regularly.
 - Fixed bug: outlier test `LocalSD` did not consider user input `n_sd`
   (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_localsd_test`)
 
-## v0.52.4 and v0.52.5 | 10 Mar 2023
+## [0.52.4, 0.52.5] - 2023-03-10
 
 ### Bugfix
 
 - Fixed bug: during resampling, the info for the tag `data_version` was incorrectly
   stored in tag `freq`. (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.resample`)
 
-## v0.52.3 | 10 Mar 2023
+## [0.52.3] - 2023-03-10
 
 ### Additions
 
@@ -3109,7 +2961,7 @@ to `diive`. From now on, new example notebooks will be added regularly.
   (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb._harmonize_timeresolution`)
 - Updated dependencies to newest possible versions
 
-## v0.52.2 | 9 Mar 2023
+## [0.52.2] - 2023-03-09
 
 ### Changes
 
@@ -3120,7 +2972,7 @@ to `diive`. From now on, new example notebooks will be added regularly.
   `diive` because they are specifically for `jupyter` notebooks and not strictly
   related to `diive` functionality.
 
-## v0.52.1 | 7 Mar 2023
+## [0.52.1] - 2023-03-07
 
 ### Additions
 
@@ -3136,7 +2988,7 @@ to `diive`. From now on, new example notebooks will be added regularly.
 - `StepwiseMeteoScreeningDb` now works on a copy of the input data to avoid
   unintended data overwrite of input.
 
-## v0.52.0 | 6 Mar 2023
+## [0.52.0] - 2023-03-06
 
 ### New Features
 
@@ -3159,7 +3011,7 @@ to `StepwiseMeteoScreeningDb` (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningD
 - Added local outlier factor test, separately for daytime and nighttime
   (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.flag_outliers_lof_dtnt_test`)
 
-## v0.51.0 | 3 Mar 2023
+## [0.51.0] - 2023-03-03
 
 ### Random uncertainty
 
@@ -3179,7 +3031,7 @@ to `StepwiseMeteoScreeningDb` (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningD
   This allows to keep the original timestamp of the data.
 - Some minor plotting adjustments
 
-## v0.50.0 | 12 Feb 2023
+## [0.50.0] - 2023-02-12
 
 ### StepwiseMeteoScreeningDb
 
@@ -3233,7 +3085,7 @@ updates.
     - Added comparison plot before/after QC and
       corrections (`pkgs.qaqc.meteoscreening.StepwiseMeteoScreeningDb.showplot_resampled`)
 
-## v0.49.0 | 10 Feb 2023
+## [0.49.0] - 2023-02-10
 
 ### New Features
 
@@ -3276,7 +3128,7 @@ updates.
   and `pkgs.analyses.optimumrange.FindOptimumRange._values_in_optimum_range` and others.
 - Other typos
 
-## v0.48.0 | 1 Feb 2023
+## [0.48.0] - 2023-02-01
 
 ### New Features
 
@@ -3295,7 +3147,7 @@ updates.
 
 ![diive](images/fluxUstarthreshold_UstarThresholdConstantScenarios_diive_v0.48.0.png)
 
-## v0.47.0 | 28 Jan 2023
+## [0.47.0] - 2023-01-28
 
 ### New Features
 
@@ -3331,7 +3183,7 @@ updates.
       **L**OESS, based on **R**esidual analysis of the **I**nter**Q**uartile **R**ange using **Z**-scores
 - **Search files** can now search in subfolders of multiple base folders (`core.io.filereader.search_files`)
 
-## v0.46.0 | 23 Jan 2023
+## [0.46.0] - 2023-01-23
 
 ### New Features
 
@@ -3366,7 +3218,7 @@ updates.
   and runs - unsurprisingly - much faster (`pkgs.createvar.nighttime_latlon.nighttime_flag_from_latlon`)
 - Some smaller changes relating to text output to the console
 
-## v0.45.0 | 13 Jan 2023
+## [0.45.0] - 2023-01-13
 
 ### New Features
 
@@ -3385,7 +3237,7 @@ updates.
     - All flags can now be returned to the main data
 - Renamed `pkgs.qaqc.fluxes.FluxQualityControlFlag` to `pkgs.qaqc.fluxes.QualityFlagsLevel2`
 
-## v0.44.1 | 11 Jan 2023
+## [0.44.1] - 2023-01-11
 
 ### Changes
 
@@ -3394,7 +3246,7 @@ updates.
     - Improved code for calculation of overall flag `QCF`
     - Improved console output
 
-## v0.44.0 | 9 Jan 2023
+## [0.44.0] - 2023-01-09
 
 ### New Features
 
@@ -3435,7 +3287,7 @@ updates.
 
 - Added support for filetype `EDDYPRO_FLUXNET_30MIN` (`configs/filetypes/EDDYPRO_FLUXNET_30MIN.yml`)
 
-## v0.43.0 | 8 Dec 2022
+## [0.43.0] - 2022-12-08
 
 ### New Features
 
@@ -3478,7 +3330,7 @@ updates.
 - Removed display bug when showing data after high-res meteoscreening in heatmap. Plot showed
   original instead of meteoscreened data
 
-## v0.42.0 | 27 Nov 2022
+## [0.42.0] - 2022-11-27
 
 ### New Features
 
@@ -3508,7 +3360,7 @@ updates.
 
     - Some code refactoring in `pkgs.flux.co2penalty.CO2Penalty`, e.g. relating to plot appearances
 
-## v0.41.0 | 5 Oct 2022
+## [0.41.0] - 2022-10-05
 
 ### BinFitterBTS
 
@@ -3538,7 +3390,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
 - Fixed bug in `pkgs.gapfilling.randomforest_ts.RandomForestTS`: fallback option for
   gap-filling was never used and some gaps would remain in the time series.
 
-## v0.40.0 | 23 Sep 2022
+## [0.40.0] - 2022-09-23
 
 ### CO2 Penalty
 
@@ -3562,7 +3414,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
 - Fixed: `core.plotting.cumulative.CumulativeYear` now shows zero line if needed
 - Fixed: `core.plotting.cumulative.CumulativeYear` now shows proper axis labels
 
-## v0.39.0 | 4 Sep 2022
+## [0.39.0] - 2022-09-04
 
 ### Critical Days
 
@@ -3574,7 +3426,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
   ecosystem to the atmosphere).
   ![diive](images/fluxCriticalDays_diive_v0.39.0.png)
 
-## v0.38.0 | 3 Sep 2022
+## [0.38.0] - 2022-09-03
 
 ### Optimum Range Detection
 
@@ -3583,7 +3435,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
   range where CO2 uptake was highest (=most negative).  
   ![diive](images/analysesOptimumRange_diive_v0.38.0.png)
 
-## v0.37.0 | 2 Sep 2022
+## [0.37.0] - 2022-09-02
 
 ### Cumulative and Anomaly Plots
 
@@ -3593,7 +3445,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
   ![diive](images/plotBarLongtermAnomaliesYear_diive_v0.37.0.png)
 - Refactored various code bits for plotting
 
-## v0.36.0 | 27 Aug 2022
+## [0.36.0] - 2022-08-27
 
 ### Random Forest Update
 
@@ -3607,7 +3459,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
 - Removed old code in `.core.dfun.files` and moved files logistics to `.core.io.files` instead
 - Implemented saving and loading Python `pickles` in `.core.io.files`
 
-## v0.35.0 | 19 Aug 2022
+## [0.35.0] - 2022-08-19
 
 ### Meteoscreening PA, RH
 
@@ -3619,7 +3471,7 @@ It is now possible to show confidence intervals for the upper and lower predicti
 - Added first code for outlier detection via seasonal trends in `pkgs/outlierdetection/seasonaltrend.py`
 - Prepared `pkgs/analyses/optimumrange.py` for future updates
 
-## v0.34.0 | 29 Jul 2022
+## [0.34.0] - 2022-07-29
 
 ### MeteoScreening Radiation
 
@@ -3650,7 +3502,7 @@ Additions to `pkgs.corrections`:
 - Added decorator class `core.utils.prints.ConsoleOutputDecorator`, a wrapper to
   execute functions with additional info that is output to the console.
 
-## v0.33.0 | 26 Jul 2022
+## [0.33.0] - 2022-07-26
 
 ### MeteoScreening Preparations
 
@@ -3663,7 +3515,7 @@ Additions to `pkgs.corrections`:
 - Added `core.plotting.heatmap_datetime.HeatmapDateTime`
     - Class to generate a heatmap plot from timeseries data.
 
-## v0.32.0 | 22 Jul 2022
+## [0.32.0] - 2022-07-22
 
 ### MeteoScreening Air Temperature
 
@@ -3712,7 +3564,7 @@ Additions to `pkgs.outlierdetection`:
 
 [//]: # (- New package in env: `ThymeBoost` [GitHub]&#40;https://github.com/tblume1992/ThymeBoost/tree/main/ThymeBoost&#41; )
 
-## v0.31.0 | 4 Apr 2022
+## [0.31.0] - 2022-04-04
 
 ### Carbon cost
 
@@ -3737,7 +3589,7 @@ Additions to `pkgs.outlierdetection`:
 
 - None
 
-## v0.30.0 | 15 Feb 2022
+## [0.30.0] - 2022-02-15
 
 ### Starting diive library
 
