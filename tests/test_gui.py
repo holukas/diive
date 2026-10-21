@@ -75,6 +75,22 @@ def slot_exceptions():
             pytrace=False)
 
 
+@pytest.fixture(autouse=True)
+def _collect_leftover_tabs():
+    """Free the widgets a test leaves behind before the next test starts.
+
+    Many tests build tabs without keeping them, and those tabs often sit in
+    reference cycles, so they live on until a later garbage collection. In one
+    test order (L385: the flux chain Level 3.1 and 3.2 tests, then the meteo
+    screening state test) the leftovers made the run abort inside
+    ``processEvents()`` while a worker thread printed into pytest's output
+    capture. Collecting here, on the GUI thread, removes them first.
+    """
+    yield
+    QApplication.processEvents()
+    gc.collect()
+
+
 @pytest.fixture(scope="module", autouse=True)
 def _no_save_prompt():
     """Answer "Save changes?" with Don't save, so closing, opening or loading
