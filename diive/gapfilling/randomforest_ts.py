@@ -97,6 +97,7 @@ class QuickFillRFTS:
     and rapid prototyping. It is NOT meant for production/final gap-filling.
 
     Uses minimal feature engineering and model complexity for speed:
+
     - FeatureEngineer with a single lag of one record: [-1, -1]
     - Vectorized timestamp features, but no rolling statistics, differencing,
       EMA, polynomial or STL features

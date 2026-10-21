@@ -28,10 +28,8 @@ class GridAggregator:
 
     Properties:
         df_long: Input records with their x and y bin labels (not aggregated).
-        df_agg_wide: Aggregated z as a grid, y bins as rows and x bins as columns.
-            Empty bins stay in the grid as NaN cells.
-        df_agg_long: The same aggregates in long format, one row per cell. Empty
-            cells are dropped, except for custom binning.
+        df_agg_wide: Aggregated z as a grid (y bins as rows, x bins as columns, empty bins NaN).
+        df_agg_long: The same aggregates, one row per cell (empty cells dropped, except for custom bins).
 
     Example:
         See `examples/analysis/analysis_gridaggregator.py` for complete examples demonstrating

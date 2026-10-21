@@ -53,8 +53,7 @@ class StratifiedAnalysis:
             agg: Aggregation method for binning, e.g. 'median', 'mean'.
 
         Properties:
-            .results: All binned results as a single DataFrame with z_bin_label column
-                (needs .calcbins() first)
+            .results: All binned results in one DataFrame with a z_bin_label column (after .calcbins())
             .binaggs: Dict of DataFrames, one per z bin
             .n_records_input / .n_records_used: Records received vs. records analyzed
 

@@ -46,8 +46,7 @@ class TimestampSanitizer:
     6. Validate timestamp monotonicity (if sorting enabled)
     7. Detect time resolution from timestamp
     8. Validate detected frequency against expected frequency (if provided)
-    9. Make timestamp continuous without date gaps (records that are not on
-       the time grid are removed and counted)
+    9. Make timestamp continuous (records off the time grid are removed and counted)
     10. Convert to middle-of-period timestamp (optional)
 
     Attributes
@@ -189,6 +188,7 @@ class TimestampSanitizer:
         -------
         dict
             Dictionary with keys:
+
             - 'original_shape': Original data shape (rows, columns)
             - 'final_shape': Final data shape after processing
             - 'rows_removed': Total rows removed during cleaning

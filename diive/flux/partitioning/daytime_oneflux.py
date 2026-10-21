@@ -1394,9 +1394,8 @@ def partition_nee_daytime_oneflux_scenarios(
     Args:
         nee: ``{label: measured NEE}``, one Series per scenario, all with the
             same index. The order is the partitioning order.
-        ta, sw_in, ta_f, sw_in_f, vpd, vpd_in_kpa, reject_alpha_at_start,
-        verbose: As in :class:`DaytimePartitioningOneFlux`, shared by all
-            series.
+        ta, sw_in, ta_f, sw_in_f, vpd, vpd_in_kpa, reject_alpha_at_start, verbose: As in
+            :class:`DaytimePartitioningOneFlux`, shared by all series.
         nee_f: ``{label: gap-filled NEE}``, optional, the gap-filled NEE of
             each scenario (see :class:`DaytimePartitioningOneFlux`). A label
             missing from it partitions without gap-filled NEE.
