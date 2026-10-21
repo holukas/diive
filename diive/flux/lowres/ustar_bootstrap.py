@@ -4,10 +4,15 @@ USTAR BOOTSTRAP THRESHOLDS: MULTI-YEAR ANNUAL THRESHOLD ESTIMATION
 
 Multi-year bootstrap wrapper for USTAR threshold detection.
 
+Deprecated: use ``UstarThresholdDetection``, which bootstraps each year on its
+own data and pools the thresholds as ONEFlux does. This module will be removed
+in a future release.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 
 import os
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -74,6 +79,13 @@ def _bootstrap_window_worker(
 class UstarBootstrapThresholds:
     r"""
     Multi-year bootstrap USTAR threshold estimation — VUT and CUT.
+
+    .. deprecated:: 0.93.0
+       Use :class:`~diive.flux.lowres.ustar_detection.UstarThresholdDetection`.
+       This class bootstraps a 3-year block of data per year, which gives higher
+       thresholds than ONEFlux (it bootstraps each year on its own data and pools
+       the thresholds of the neighbouring years). It will be removed in a future
+       release.
 
     Wrapper around any USTAR detection class that implements detect() and
     get_annual_thresholds(). For each central year, bootstrap resampling is run
@@ -181,6 +193,10 @@ class UstarBootstrapThresholds:
         window year, so the result does not depend on ``n_jobs`` or on the order windows
         finish in, and separate years still draw independently.
         """
+        warnings.warn(
+            "UstarBootstrapThresholds is deprecated and will be removed. Use "
+            "UstarThresholdDetection (mode='oneflux', 'oneflux_mp', 'oneflux_cp' or "
+            "'reddyproc').", FutureWarning, stacklevel=2)
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if not isinstance(df.index, pd.DatetimeIndex):

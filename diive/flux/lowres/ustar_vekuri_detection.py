@@ -4,8 +4,13 @@ USTAR VEKURI THRESHOLD DETECTION: QUANTILE-BASED APPROACH
 
 Detect friction velocity (u*) threshold using quantile-based stratification.
 
+Deprecated: use ``UstarThresholdDetection`` (``mode='oneflux'`` or
+``mode='reddyproc'``). This class will be removed in a future release.
+
 Part of the diive library: https://github.com/holukas/diive
 """
+
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -17,6 +22,12 @@ from diive.core.utils.console import info, detail, warn
 class UstarVekuriThresholdDetection:
     """
     Detect USTAR threshold using quantile-based stratification approach.
+
+    .. deprecated:: 0.93.0
+       Use :class:`~diive.flux.lowres.ustar_detection.UstarThresholdDetection`.
+       This class is not a published method. It is loosely based on the FMI
+       ``ustar_threshold`` package (a simplified Papale et al. 2006 test) and does
+       not reproduce it. REddyProc mode covers the same 95 % plateau idea.
 
     This class implements a simplified USTAR threshold detection workflow that is
     more computationally efficient than the full ONEFlux method while maintaining
@@ -117,6 +128,10 @@ class UstarVekuriThresholdDetection:
         reproducible; pass None for a different draw on every call. It was
         previously unseeded, so the percentiles moved between runs.
         """
+        warnings.warn(
+            "UstarVekuriThresholdDetection is deprecated and will be removed. Use "
+            "UstarThresholdDetection(mode='oneflux') or mode='reddyproc'.",
+            FutureWarning, stacklevel=2)
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
 

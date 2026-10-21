@@ -35,7 +35,11 @@ from diive.flux.lowres.uncertainty import JointUncertaintyPAS20
 from diive.flux.lowres.uncertainty import RandomUncertaintyPAS20
 from diive.flux.lowres.uncertainty import joint_uncertainty_pas20
 from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+from diive.flux.lowres.ustar_cp_detection import UstarChangePointDetection
+from diive.flux.lowres.ustar_detection import USTAR_MODES
+from diive.flux.lowres.ustar_detection import UstarThresholdDetection
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
+from diive.flux.lowres.ustar_reddyproc_detection import UstarReddyProcDetection
 from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
 from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
 from diive.flux.lowres.ustarthreshold import FlagMultipleVariableUstarThresholds
@@ -67,6 +71,10 @@ __all__ = [
     'JointUncertaintyPAS20',
     'joint_uncertainty_pas20',
     'UstarBootstrapThresholds',
+    'UstarThresholdDetection',
+    'USTAR_MODES',
+    'UstarChangePointDetection',
+    'UstarReddyProcDetection',
     'UstarMovingPointDetection',
     'UstarVekuriThresholdDetection',
     'FlagMultipleConstantUstarThresholds',
