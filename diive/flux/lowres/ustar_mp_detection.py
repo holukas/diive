@@ -2,103 +2,119 @@
 USTAR MOVING POINT DETECTION: FRICTION VELOCITY THRESHOLD
 ==========================================================
 
-Detect friction velocity (u*) threshold using the ONEFlux moving point algorithm (Papale et al., 2006).
-
-This is a faithful, vectorized port of the reference C implementation in ONEFlux
-(`oneflux_steps/ustar_mp/src/ustar.c`). The defaults reproduce the ONEFlux default
-configuration: forward-mode-2 only (``no_forward_mode_2 = 0``, all other modes off),
-percentile check off, calendar-quarter seasons (``1,2,3;4,5,6;7,8,9;10,11,12``).
+Detect the friction velocity (u*) threshold with the ONEFlux moving point method (Papale et al., 2006).
 
 Part of the diive library: https://github.com/holukas/diive
+
+This is a faithful port of ONEFlux ``ustar_mp`` 1.3.7 (``oneflux_steps/ustar_mp/src``).
+For one calendar year it reproduces the compiled C bitwise: every season and
+TA-class threshold, the annual threshold and, given the same drawn rows, every
+bootstrap value. The defaults are the ONEFlux defaults: forward mode 2 only,
+percentile check off, calendar-quarter seasons ``1,2,3;4,5,6;7,8,9;10,11,12``.
+The loops run as numba kernels in ``_ustar_mp_kernels``.
 """
+
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional, List
 
-from diive.core.utils.console import info, detail, warn
+from diive.core.utils.console import detail, info, warn
+
+# Days per month (main.c:94), used for the bootstrap season boundaries
+_MONTHS_DAYS = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+
+def _kernels():
+    """Import the numba kernels on first use, so importing this module stays cheap."""
+    from diive.flux.lowres import _ustar_mp_kernels
+    return _ustar_mp_kernels
 
 
 class UstarMovingPointDetection:
     r"""
-    Detect USTAR threshold using ONEFlux moving point method (Papale et al., 2006).
+    Detect the USTAR threshold with the ONEFlux moving point method (Papale et al., 2006).
 
-    This class implements the complete USTAR threshold detection workflow for eddy covariance
-    flux measurements. It identifies the friction velocity (u*) above which flux measurements
-    are reliable by analyzing the stability of nighttime respiration across USTAR classes.
+    At night NEE is ecosystem respiration. At low u* the measured flux
+    underestimates it, because storage and poor mixing hide part of it. Above a
+    threshold u* the nighttime flux no longer increases with u*. The method finds
+    that threshold.
 
-    The key insight is that during nighttime, without photosynthesis, NEE represents pure
-    ecosystem respiration. At low u* (poor turbulence), measured respiration is systematically
-    underestimated due to storage and vertical mixing limitations. At high u* (good turbulence),
-    respiration stabilizes. The threshold is where respiration stops changing with increasing u*.
+    Algorithm (``ustar.c::ustar_threshold``):
 
-    Algorithm steps (mirrors ``ustar.c::ustar_threshold``):
+    1. Keep night records (SW_IN < 10 W m-2) with NEE, TA and USTAR present.
+    2. Split them into seasons (calendar quarters by default).
+    3. Sort each season by TA and split it into 7 TA classes.
+    4. Skip a TA class with fewer than 100 records or with ``|r(TA, USTAR)| > 0.5``.
+    5. Sort each TA class by USTAR and split it into 20 USTAR classes. Compute the
+       mean USTAR and NEE of each class.
+    6. Skip the TA class when the first USTAR class mean is above 0.2 m s-1.
+    7. Forward mode: the threshold is the mean USTAR of the first class where
+       NEE in this class and the next ``forward_mode_n - 1`` classes is at
+       least the mean NEE of the following 10 classes.
+    8. The season threshold is the median over the TA classes. The annual
+       threshold is the highest season threshold.
 
-    1. FILTER DATA: Select nighttime records only (SW_IN < 10 W/m2) for pure respiration signal
-    2. STRATIFY BY SEASON: Divide year into 4 seasons (calendar quarters by default)
-    3. STRATIFY BY TEMPERATURE: Within each season, divide into 7 temperature classes
-    4. STRATIFY BY USTAR: Within each temperature class, divide into 20 USTAR classes
-    5. COMPUTE STATISTICS: Calculate mean respiration per USTAR class
-    6. VALIDATE: Check temperature-USTAR independence and first USTAR validity
-    7. DETECT THRESHOLD: Use forward mode detection (ascending search) to find stability point
-    8. AGGREGATE: Median across temperature classes gives season threshold;
-       maximum across seasons gives the annual (conservative) threshold
-
-    Class boundaries are tie-aware: equal TA / USTAR values are never split across adjacent
-    classes (matches the C boundary-extension loop), so quantized USTAR data is binned exactly
-    as ONEFlux does.
+    Class boundaries never split equal TA or USTAR values (the C extends a
+    class over a run of ties).
 
     Parameters
     ----------
     df : pd.DataFrame
-        Time series data with datetime index and required columns: NEE, TA, USTAR, SW_IN
+        Data with a DatetimeIndex and columns for NEE, TA, USTAR and SW_IN.
+        For ONEFlux parity pass one calendar year on its full grid (17520 or
+        17568 half-hourly records, or 8760 or 8784 hourly records), with NaN
+        for missing values. See Notes for other inputs.
     nee_col : str, optional
-        Net ecosystem exchange column name (auto-detected if None)
-        Looks for columns containing 'NEE' and 'QCF' preferentially
+        NEE column. Auto-detected if None: a column containing 'NEE' and 'QCF',
+        else the first column containing 'NEE'.
     ta_col : str, optional
-        Air temperature column name (auto-detected if None)
-        Looks for columns containing 'TA\_' or similar
+        Air temperature column. Auto-detected if None (first column containing 'TA\_').
     ustar_col : str, optional
-        Friction velocity column name (auto-detected if None)
-        Looks for columns containing 'USTAR' or 'U_STAR'
+        Friction velocity column. Auto-detected if None (first column containing 'USTAR').
     swin_col : str, optional
-        Shortwave radiation column name (auto-detected if None)
-        Used to identify nighttime (SW_IN < 10 W/m2)
+        Shortwave radiation column, used to identify night (SW_IN < 10 W m-2).
+        Auto-detected if None (first column containing 'SW_IN').
     ta_classes_count : int, default=7
-        Number of temperature stratification classes per season (matches ONEFlux default)
+        Number of TA classes per season (ONEFlux default).
     ustar_classes_count : int, default=20
-        Number of USTAR stratification classes per temperature class (matches ONEFlux default)
+        Number of USTAR classes per TA class (ONEFlux default).
     forward_mode_n : int, default=2
-        Number of consecutive USTAR classes that must satisfy the plateau condition before a
-        threshold is accepted (forward-mode order). n=2 is "Fw2", the default in both ONEFlux
-        (only forward_mode_2 is enabled by default) and REddyProc (usEstUstarThresholdSingleFw2Binned).
-        n=1 is "Fw1": looser, fires on a single bin, and never yields a higher threshold than Fw2.
-        Higher n is stricter (requires a longer confirmed plateau), giving an equal-or-higher
-        threshold that is more robust to single-bin noise.
+        Number of consecutive USTAR classes that must pass the plateau test.
+        2 is ONEFlux "forward mode 2", the only mode ONEFlux runs by default.
+        1 and 3 are ONEFlux forward modes 1 and 3.
     season_groups : List[List[int]], optional
-        Custom season grouping by month numbers [1-12].
-        Default: [[1,2,3], [4,5,6], [7,8,9], [10,11,12]] (calendar quarters), matching the
-        ONEFlux default ``default_seasons_group = "1,2,3;4,5,6;7,8,9;10,11,12"``.
+        Months (1-12) per season, each month in one season only (as the C
+        parser requires by default). Default ``[[1, 2, 3], [4, 5, 6], [7, 8, 9],
+        [10, 11, 12]]``, the ONEFlux ``default_seasons_group``.
     bootstrapping_times : int, default=100
-        Number of bootstrap resampling iterations for uncertainty estimation
+        Number of bootstrap draws.
     random_state : int or None, default=42
-        Seed for the bootstrap resampling, so ``bootstrap()`` returns the same
-        distribution for the same input. Pass None for a fresh draw each call.
-        ``detect()`` is deterministic and unaffected. Seeding selects which resamples
-        are drawn, not how a threshold is computed, so ONEFlux parity is unaffected.
+        Seed for the bootstrap draws. None gives a fresh draw on each call.
+        ``detect()`` does not use it.
     verbose : int, default=0
-        Verbosity level: 0=silent, 1=progress, 2=detailed debug output
+        0 silent, 1 progress, 2 details.
 
     Attributes
     ----------
     results_ : pd.DataFrame
-        Detected thresholds with column: 'threshold'
-        Index contains season labels (Season 1, 2, 3, 4)
-        NaN for a season whose threshold could not be detected
+        Season thresholds (column 'threshold', rows 'Season 1'...). NaN where
+        no threshold was found. After a collapse to one big season (see Notes)
+        every row holds the one-season value.
     annual_thresholds_ : dict
-        Annual threshold with key: 'threshold' (maximum across seasons),
-        NaN if no season yielded a threshold. Same value as
-        ``get_annual_thresholds()`` returns.
+        ``{'threshold': value}``, the highest season threshold, NaN if none.
+    ta_class_thresholds_ : pd.DataFrame
+        Threshold per TA class (rows) and season (columns), NaN where the class
+        was skipped or no threshold was found.
+    one_big_season_ : bool
+        True when the main run collapsed all seasons into one.
+    bootstrap_failed_ : np.ndarray of bool
+        After a bootstrap: True for each draw where ONEFlux ``ustar_threshold``
+        fails (too few records in the draw).
+    bootstrap_dropped_ : bool
+        After a bootstrap: True when at least one draw failed. ONEFlux then
+        stops bootstrapping and writes no bootstrap percentiles for that year
+        (bootstrapping.c:194-201), so nee_proc has no MP thresholds for it.
 
     Examples
     --------
@@ -109,37 +125,75 @@ class UstarMovingPointDetection:
 
     Notes
     -----
-    The algorithm requires:
+    Record minimum and method, as in ONEFlux (``ustar.c:500-535``, ``main.c:991,1093``).
+    "Night records" are night records with NEE, TA and USTAR present. "Day
+    records" are all records that are not night, including records without SW_IN.
 
-    - At least 3000 valid records for valid detection (MIN_VALUE_PERIOD)
-    - At least 700 (= 100 \* 7) records per season for per-season detection
-      (TA_CLASS_MIN_SAMPLE \* ta_classes_count); seasons below this are skipped
-    - If every season is below 700, all night data is pooled into one season
-      (ONEFlux "second method", one big season)
+    - Fewer than ``ta_classes_count * ustar_classes_count`` (140) night records:
+      no detection, ``ValueError``.
+    - Night + day records >= 3000: one threshold per season.
+    - Otherwise, more than 160 night records: all seasons pooled into one big season.
+    - Otherwise: no detection, ``ValueError``.
+    - When every season has fewer than ``100 * ta_classes_count`` (700) night
+      records, the seasons are pooled into one big season too.
+    - A season (or the big season) with fewer than 700 night records gets no
+      threshold.
 
-    Nighttime filtering is critical: SW_IN < 10 W/m2 selects purely dark conditions
-    where respiration is the only flux component, free from photosynthetic variability.
+    ONEFlux quirks reproduced on purpose (this is a port, not a redesign):
+
+    - Bootstrap seasons are cut by row position, not by date
+      (``main.c:1014-1038``, ``bootstrapping.c:173-180``). In a leap year the
+      February end adds 1 row instead of 48 (``main.c:1018-1019``). So in a leap
+      year each bootstrap season boundary sits 47 rows (about one day) early,
+      and the last 47 records of the year are counted to the first season.
+    - Once the main run or one bootstrap draw collapses to one big season, all
+      later bootstrap draws stay collapsed (``ustar.c:509-533`` overwrite the
+      global ``seasons_group_count``).
+    - A failed bootstrap draw makes ONEFlux drop the whole bootstrap. diive
+      returns NaN for that draw, keeps the other draws and sets
+      ``bootstrap_dropped_``.
+    - ``IS_INVALID_VALUE`` truncates to int, so values in (-10000, -9999] count
+      as missing.
+    - After a tie run reaches the end of a season or TA class, the C assigns one
+      more class that overlaps the previous one (``ustar.c:633-637,728-732``).
+      The TA loop has no "start == end" branch, the USTAR loop has
+      (``ustar.c:620-625,711-720``). An inverted class window gives a NaN mean.
+    - Rows are sorted with the Microsoft UCRT ``qsort`` of the reference build.
+      Its order of equal TA or USTAR values sets the order of the NEE sums. A
+      glibc build of ONEFlux can differ in the last bits.
+
+    Input that is not one calendar year: the main run follows the same rules
+    on all records. The bootstrap then cuts seasons by month instead of by row
+    position, since the C row rule only exists for one calendar year. The
+    month of a record is the month of its timestamp, except that a record
+    stamped on the 1st at 00:00 belongs to the previous month (``dataset.c:438-448``).
+    This gives the C months for both TIMESTAMP_MIDDLE and TIMESTAMP_END stamps.
+
+    The bootstrap draws row positions uniformly from all records, as ONEFlux
+    does on Linux. The Windows build of ONEFlux can only draw the first 16384
+    rows, because ``RAND_MAX`` is 32767 there (``common.c:738-741``).
 
     See Also
     --------
-    UstarBootstrapThresholds : Multi-year sliding-window bootstrap wrapper.
+    UstarThresholdDetection : One entry point for all u* detection modes, with
+        the ONEFlux pooling of the bootstrap thresholds into VUT and CUT.
 
     Example
     -------
-    See `examples/flux/lowres/flux_ustar_mp_detection.py` for complete examples
-    of USTAR threshold detection using the moving point method with bootstrap uncertainty estimation.
+    See `examples/flux/lowres/flux_ustar_detection.py` and
+    `examples/flux/lowres/flux_ustar_method_comparison.py`.
     """
 
-    # Constants from ONEFlux (types.h) - DO NOT MODIFY without consulting Papale et al. (2006)
-    NIGHT_THRESHOLD = 10.0  # W/m2 - threshold for identifying nighttime (SWIN_FOR_NIGHT in C code)
-    MIN_SAMPLES_PERIOD = 3000  # Minimum total valid records required (MIN_VALUE_PERIOD)
-    MIN_SAMPLES_SEASON = 160  # MIN_VALUE_SEASON: one-big-season eligibility threshold
-    MIN_SAMPLES_TA_CLASS = 100  # Minimum records per temperature class (TA_CLASS_MIN_SAMPLE)
-    CORRELATION_CHECK = 0.5  # Maximum |correlation(TA, USTAR)| allowed for valid TA class
-    FIRST_USTAR_MEAN_CHECK = 0.2  # Maximum first USTAR class mean in m/s (validation threshold)
-    THRESHOLD_CHECK = 1.0  # Plateau ratio (THRESHOLD_CHECK)
-    WINDOW_SIZE_FORWARD_MODE = 10  # WINDOWS_SIZE_FOR_FORWARD_MODE
-    THRESHOLD_NOT_FOUND = 10.0  # Marker: threshold could not be detected (USTAR_THRESHOLD_NOT_FOUND)
+    # Constants from ONEFlux types.h. Do not change: the port reproduces the C.
+    NIGHT_THRESHOLD = 10.0  # SWIN_FOR_NIGHT
+    MIN_SAMPLES_PERIOD = 3000  # MIN_VALUE_PERIOD: night + day records for seasonal detection
+    MIN_SAMPLES_SEASON = 160  # MIN_VALUE_SEASON: night records for one big season
+    MIN_SAMPLES_TA_CLASS = 100  # TA_CLASS_MIN_SAMPLE
+    CORRELATION_CHECK = 0.5  # maximum |r(TA, USTAR)| in a TA class
+    FIRST_USTAR_MEAN_CHECK = 0.2  # maximum mean USTAR of the first USTAR class (m s-1)
+    THRESHOLD_CHECK = 1.0  # plateau ratio
+    WINDOW_SIZE_FORWARD_MODE = 10  # WINDOWS_SIZE_FOR_FORWARD_MODE(_2, _3)
+    THRESHOLD_NOT_FOUND = 10.0  # USTAR_THRESHOLD_NOT_FOUND, never returned to users
 
     def __init__(
         self,
@@ -156,49 +210,28 @@ class UstarMovingPointDetection:
         random_state: Optional[int] = 42,
         verbose: int = 0,
     ):
-        # Validate input
-        """Set up moving-point USTAR threshold detection. See the class docstring.
-
-        ``random_state`` seeds the bootstrap resampling so a threshold is reproducible;
-        pass None for a fresh draw on every call. It does not affect ``detect()``, which
-        is deterministic. Seeding changes which resamples are drawn, not the algorithm,
-        so ONEFlux parity is unaffected.
-        """
+        """Set up moving-point USTAR threshold detection. See the class docstring."""
         if df is None or df.empty:
             raise ValueError("Input DataFrame cannot be None or empty")
         if forward_mode_n < 1:
             raise ValueError(f"forward_mode_n must be >= 1, got {forward_mode_n}")
+        if ta_classes_count < 1 or ustar_classes_count < 1:
+            raise ValueError("ta_classes_count and ustar_classes_count must be >= 1")
 
-        # Auto-detect columns if not specified
         if nee_col is None:
             candidates = [col for col in df.columns if 'NEE' in col and 'QCF' in col]
             if not candidates:
                 candidates = [col for col in df.columns if 'NEE' in col]
-            if candidates:
-                nee_col = candidates[0]
-            else:
-                nee_col = self._find_column(df, ['NEE', 'NEE_CUT_REF', 'NEE_L3'])
-
+            nee_col = candidates[0] if candidates else self._find_column(df, ['NEE', 'NEE_CUT_REF', 'NEE_L3'])
         if ta_col is None:
             candidates = [col for col in df.columns if 'TA_' in col]
-            if candidates:
-                ta_col = candidates[0]
-            else:
-                ta_col = self._find_column(df, ['TA', 'TSYS', 'TAIR'])
-
+            ta_col = candidates[0] if candidates else self._find_column(df, ['TA', 'TSYS', 'TAIR'])
         if ustar_col is None:
             candidates = [col for col in df.columns if 'USTAR' in col]
-            if candidates:
-                ustar_col = candidates[0]
-            else:
-                ustar_col = self._find_column(df, ['U_STAR'])
-
+            ustar_col = candidates[0] if candidates else self._find_column(df, ['U_STAR'])
         if swin_col is None:
             candidates = [col for col in df.columns if 'SW_IN' in col]
-            if candidates:
-                swin_col = candidates[0]
-            else:
-                swin_col = self._find_column(df, ['SWIN', 'RAD'])
+            swin_col = candidates[0] if candidates else self._find_column(df, ['SWIN', 'RAD'])
 
         if nee_col is None:
             raise ValueError("Could not find NEE column. Specify with nee_col parameter.")
@@ -209,28 +242,28 @@ class UstarMovingPointDetection:
         if swin_col is None:
             raise ValueError("Could not find SW_IN (shortwave radiation) column. Specify with swin_col parameter.")
 
-        # Keep a reference (not a copy) - this class never mutates df, and the per-iteration
-        # copies in bootstrap workflows make a defensive copy here pure overhead.
+        if season_groups is None:
+            season_groups = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
+        flat = [int(m) for g in season_groups for m in g]
+        if any(m < 1 or m > 12 for m in flat) or len(flat) != len(set(flat)) or not all(season_groups):
+            # parser.c:165-185 (duplicates are rejected unless -seasons_group_allow_duplicates)
+            raise ValueError("season_groups must hold months 1-12, each month in one non-empty group only")
+
+        # A reference, not a copy: this class never mutates df.
         self.df = df
         self.nee_col = nee_col
         self.ta_col = ta_col
         self.ustar_col = ustar_col
         self.swin_col = swin_col
-
         self.ta_classes_count = ta_classes_count
         self.ustar_classes_count = ustar_classes_count
         self.forward_mode_n = forward_mode_n
         self.bootstrapping_times = bootstrapping_times
         self.random_state = random_state
         self.verbose = verbose
-
-        # Default season groups: calendar quarters (ONEFlux default)
-        if season_groups is None:
-            season_groups = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]
         self.season_groups = season_groups
         self.seasons_count = len(season_groups)
 
-        # Ensure datetime index
         if not isinstance(self.df.index, pd.DatetimeIndex):
             if 'TIMESTAMP' in self.df.columns:
                 self.df = self.df.set_index(pd.to_datetime(self.df['TIMESTAMP']))
@@ -238,10 +271,14 @@ class UstarMovingPointDetection:
                 raise ValueError("DataFrame must have datetime index or TIMESTAMP column")
 
         self._month = self._month_per_group(self.df.index)
+        self._prep: Optional[dict] = None
 
-        # Results storage
         self.results_ = pd.DataFrame()
         self.annual_thresholds_: Dict[str, float] = {}
+        self.ta_class_thresholds_ = pd.DataFrame()
+        self.one_big_season_ = False
+        self.bootstrap_failed_ = np.zeros(0, dtype=bool)
+        self.bootstrap_dropped_ = False
 
     # ------------------------------------------------------------------ helpers
 
@@ -258,10 +295,10 @@ class UstarMovingPointDetection:
         """
         Month (1-12) used for season grouping, with the ONEFlux end-of-period shift.
 
-        FLUXNET timestamps mark the END of the averaging period, so a record stamped
-        day-1 00:00 actually belongs to the previous month (matches ``dataset.c``: "day 1
-        and 00:00 belongs to previous month"). Records at midnight on the 1st are shifted
-        back one month; January wraps to December.
+        ONEFlux reads TIMESTAMP_END, so a record stamped on the 1st at 00:00
+        belongs to the previous month (``dataset.c:438-448``). January wraps to
+        December. TIMESTAMP_MIDDLE stamps never sit at 00:00, so for them this
+        is the month of the timestamp, which is the same month.
         """
         month = index.month.to_numpy().astype(np.int64).copy()
         boundary = (
@@ -273,255 +310,184 @@ class UstarMovingPointDetection:
         month[month == 0] = 12
         return month
 
-    @staticmethod
-    def _pearson(x: np.ndarray, y: np.ndarray) -> float:
-        """Pearson correlation, matching ustar.c::correlation (NaN -> not-a-number)."""
-        xm = x.mean()
-        ym = y.mean()
-        dx = x - xm
-        dy = y - ym
-        denom = np.sqrt((dx * dx).sum()) * np.sqrt((dy * dy).sum())
-        if denom == 0.0:
-            return np.nan
-        return float((dx * dy).sum() / denom)
+    def _rows_per_day(self) -> int:
+        """Records per day from the median time step, 0 if the index has no regular step."""
+        idx = self.df.index
+        if len(idx) < 2:
+            return 0
+        # asi8 counts in the index unit (ns, us, ms or s), so convert the day to it
+        diffs = np.diff(idx.asi8)
+        step = int(np.median(diffs))
+        if step <= 0 or not np.all(diffs == step):
+            return 0
+        day = int(pd.Timedelta(days=1) / pd.Timedelta(1, unit=getattr(idx, 'unit', 'ns')))
+        return day // step if day % step == 0 else 0
 
-    def _class_bounds(self, vals_sorted: np.ndarray, n_classes: int, n_per_class: int) -> np.ndarray:
+    def _is_year_grid(self, rows_per_day: int) -> bool:
+        """True for one calendar year on its full half-hourly or hourly grid.
+
+        ONEFlux reads exactly such a year (``dataset.c:507-512``). The first
+        record must belong to the first period of the year: stamped 1 January
+        between 00:00 and one time step later (START, MIDDLE or END stamp).
         """
-        Faithful ONEFlux class binning with tie extension.
+        n = len(self.df)
+        if rows_per_day not in (24, 48) or n not in (365 * rows_per_day, 366 * rows_per_day):
+            return False
+        first = self.df.index[0]
+        jan1 = pd.Timestamp(year=first.year, month=1, day=1, tz=first.tz)
+        offset = (first - jan1).total_seconds()
+        return 0 <= offset <= 86400 / rows_per_day
 
-        Returns an (n_classes, 2) int array of inclusive (start, end) indices into
-        ``vals_sorted``; empty classes are (-1, -1). Mirrors the boundary-extension loop
-        in ustar.c so that equal values are never split across adjacent classes.
+    def _prepare(self) -> dict:
+        """Per-record arrays shared by the main run and the bootstrap (cached)."""
+        if self._prep is not None:
+            return self._prep
+        # Writable copies: pandas can hand out read-only views, and numba compiles
+        # (and caches) a separate kernel version for read-only arrays.
+        nee = self.df[self.nee_col].to_numpy(dtype='float64', copy=True)
+        ta = self.df[self.ta_col].to_numpy(dtype='float64', copy=True)
+        ustar = self.df[self.ustar_col].to_numpy(dtype='float64', copy=True)
+        swin = self.df[self.swin_col].to_numpy(dtype='float64', copy=True)
+        n = len(nee)
+
+        def present(v):
+            # IS_INVALID_VALUE (common.h:40) plus NaN, which dataset.c:459 maps to -9999
+            return ~np.isnan(v) & ~((v > -10000.0) & (v <= -9999.0))
+
+        all_valid = present(nee) & present(ta) & present(ustar)  # ALL_VALID flag
+        is_night = present(swin) & (swin < self.NIGHT_THRESHOLD)  # dataset.c:483-485
+        is_day = ~is_night
+        night_valid = all_valid & is_night
+
+        # Main run order (main.c:1014-1036): season after season, month after
+        # month in the order given, then record order.
+        group_of_month = np.full(13, -1, dtype=np.int64)
+        rank_of_month = np.zeros(13, dtype=np.int64)
+        for g, months in enumerate(self.season_groups):
+            for r, m in enumerate(months):
+                group_of_month[int(m)] = g
+                rank_of_month[int(m)] = r
+        group = group_of_month[self._month]
+        pos = np.arange(n)
+        sel = np.flatnonzero(night_valid & (group >= 0))
+        main_order = sel[np.lexsort((pos[sel], rank_of_month[self._month[sel]], group[sel]))]
+        main_samples = np.bincount(group[main_order], minlength=self.seasons_count).astype(np.int64)
+
+        rpd = self._rows_per_day()
+        year_grid = self._is_year_grid(rpd)
+        if year_grid:
+            # Season end rows (main.c:1013-1038), with the leap-year February
+            # adding 1 row instead of one day of rows (main.c:1018-1019).
+            leap = n == 366 * rpd
+            ends = []
+            days = 0
+            for months in self.season_groups:
+                for m in months:
+                    if m == 2 and leap:
+                        days += 1
+                    days += _MONTHS_DAYS[m - 1] * rpd
+                ends.append(days)
+            ends = np.asarray(ends, dtype=np.int64)
+            # bootstrapping.c:173-180: first season whose end lies beyond the row, else season 0
+            boot_season = np.searchsorted(ends, pos, side='right').astype(np.int64)
+            boot_season[boot_season >= self.seasons_count] = 0
+            key_of_row = pos.astype(np.int64)
+        else:
+            boot_season = group.astype(np.int64)
+            rest = np.setdiff1d(pos, main_order, assume_unique=True)
+            row_of_key_tmp = np.concatenate([main_order, rest])
+            key_of_row = np.empty(n, dtype=np.int64)
+            key_of_row[row_of_key_tmp] = np.arange(n)
+        row_of_key = np.empty(n, dtype=np.int64)
+        row_of_key[key_of_row] = np.arange(n)
+
+        self._prep = dict(
+            nee=nee, ta=ta, ustar=ustar, is_day=is_day, all_valid=all_valid,
+            rows_count=int(night_valid.sum()), days=int(is_day.sum()),
+            main_order=main_order, main_samples=main_samples,
+            boot_season=boot_season, key_of_row=key_of_row, row_of_key=row_of_key,
+            year_grid=year_grid,
+        )
+        return self._prep
+
+    def _main_rows(self) -> np.ndarray:
+        """NEE, TA, USTAR of the main-run records in the C order (the C ``rows`` array)."""
+        p = self._prepare()
+        o = p['main_order']
+        return np.ascontiguousarray(np.column_stack((p['nee'][o], p['ta'][o], p['ustar'][o])))
+
+    def _main_run(self) -> dict:
+        """Run ``ustar_threshold`` once on all records (main.c:979-1141).
+
+        Raises ``ValueError`` where ONEFlux skips the year without a result.
         """
-        N = len(vals_sorted)
-        bounds = np.full((n_classes, 2), -1, dtype=np.int64)
-
-        class_end = 0
-        broke = False
-        for i in range(n_classes - 1):
-            class_start = class_end
-            class_end = n_per_class * (i + 1) - 1
-            if class_start >= N:
-                broke = True
-                break
-            if class_end >= N:
-                class_end = N - 1
-            value = vals_sorted[class_end]
-            # Extend the boundary forward across tied values, mirroring the C loop
-            # `while ( ++ustar_class_end < total ) { ... }`. The `class_start ==
-            # class_end` branch is load-bearing and was missing: when the previous
-            # class's tie extension ran past this class's nominal end, `class_end`
-            # restarts *behind* `class_start`, and without adopting the next value
-            # and carrying on, the class comes out as (start, start-1) - an inverted
-            # window whose mean is 0/0 = NaN. `_forward_mode` then skips every
-            # candidate whose look-ahead window touches that NaN.
-            while True:
-                class_end += 1
-                if class_end >= N:
-                    break
-                if vals_sorted[class_end] != value:
-                    if class_start == class_end:
-                        value = vals_sorted[class_end]
-                        continue
-                    break
-            bounds[i, 0] = class_start
-            bounds[i, 1] = class_end - 1
-
-        # last class gets the remainder (C assigns window[i], i == n_classes-1 on full loop)
-        if not broke and class_end < N:
-            bounds[n_classes - 1, 0] = class_end
-            bounds[n_classes - 1, 1] = N - 1
-
-        return bounds
-
-    @staticmethod
-    def _class_means(arr_sorted: np.ndarray, bounds: np.ndarray) -> np.ndarray:
-        """
-        Mean of each class window via cumulative sums (empty classes -> 0.0, as in C).
-        """
-        cs = np.concatenate(([0.0], np.cumsum(arr_sorted, dtype=np.float64)))
-        means = np.zeros(len(bounds), dtype=np.float64)
-        for k in range(len(bounds)):
-            s = bounds[k, 0]
-            e = bounds[k, 1]
-            if s < 0 or e < s:
-                # Leave 0.0, which is what C computes for both: its accumulation
-                # loop `for (y = start; y <= end; y++)` never runs, so the sum
-                # stays at the reset value. An inverted window (end < start) is a
-                # real C outcome when a tie run overshoots the next class, and the
-                # cumulative-sum shortcut used below does *not* reproduce it: with
-                # a negative count the two negatives cancel and it returns a
-                # plausible-looking class mean (0.215 where C has 0.0), or 0/0 =
-                # NaN when the count is exactly zero.
-                continue
-            means[k] = (cs[e + 1] - cs[s]) / (e - s + 1)
-        return means
-
-    @staticmethod
-    def _meanws(arr: np.ndarray, index: int, element_count: int) -> float:
-        """Mean-with-start, matching ustar.c::meanws (empty range -> NaN/invalid)."""
-        n = len(arr)
-        if index > n:
-            return 0.0
-        seg = arr[index:index + element_count]
-        if seg.size == 0:
-            return np.nan
-        return float(seg.mean())
-
-    def _forward_mode(self, ustar_mean: np.ndarray, fx_mean: np.ndarray, n: int) -> float:
-        """
-        Forward-mode threshold (ustar.c::forward_mode, percentile check disabled).
-
-        For each USTAR class i (i <= n_classes - n), require that NEE in the next ``n``
-        classes is >= the forward window mean: ``fx_mean[i+y] >= meanws(...)`` for all y.
-        The first i that satisfies this returns ``ustar_mean[i]``.
-        """
-        n_classes = len(ustar_mean)
-        if n < 1 or n_classes - n <= 0:
-            return self.THRESHOLD_NOT_FOUND
-
-        ws = self.WINDOW_SIZE_FORWARD_MODE
-        tc = self.THRESHOLD_CHECK
-        for i in range(n_classes - n + 1):  # inclusive upper bound, matches C
-            means = np.empty(n, dtype=np.float64)
-            invalid = False
-            for y in range(n):
-                m = self._meanws(fx_mean, i + 1 + y, ws)
-                if not np.isfinite(m):
-                    invalid = True
-                    break
-                means[y] = m
-            if invalid:
-                continue
-            if np.all(fx_mean[i:i + n] >= means * tc):
-                return float(ustar_mean[i])
-
-        return self.THRESHOLD_NOT_FOUND
-
-    # ------------------------------------------------------------------ core
-
-    def _detect_ta_class(self, nee_c: np.ndarray, ustar_c: np.ndarray) -> float:
-        """Detect USTAR threshold for one temperature class via USTAR stratification."""
-        m = len(ustar_c)
-        n_per_ustar = m // self.ustar_classes_count
-        if n_per_ustar < 1:
-            return self.THRESHOLD_NOT_FOUND
-
-        order = np.argsort(ustar_c, kind='stable')
-        ustar_s = ustar_c[order]
-        nee_s = nee_c[order]
-
-        bounds = self._class_bounds(ustar_s, self.ustar_classes_count, n_per_ustar)
-        ustar_mean = self._class_means(ustar_s, bounds)
-        fx_mean = self._class_means(nee_s, bounds)
-
-        # First USTAR class must be in the low-turbulence regime
-        if ustar_mean[0] > self.FIRST_USTAR_MEAN_CHECK:
-            return self.THRESHOLD_NOT_FOUND
-
-        return self._forward_mode(ustar_mean, fx_mean, n=self.forward_mode_n)
-
-    def _detect_season(self, nee: np.ndarray, ta: np.ndarray, ustar: np.ndarray) -> float:
-        """Detect USTAR threshold for one season (median across temperature classes)."""
-        N = len(nee)
-        n_per_ta = N // self.ta_classes_count
-        if n_per_ta < self.MIN_SAMPLES_TA_CLASS:
-            return self.THRESHOLD_NOT_FOUND
-
-        order = np.argsort(ta, kind='stable')
-        ta_s = ta[order]
-        ustar_s = ustar[order]
-        nee_s = nee[order]
-
-        bounds = self._class_bounds(ta_s, self.ta_classes_count, n_per_ta)
-
-        thresholds = []
-        for k in range(self.ta_classes_count):
-            s = bounds[k, 0]
-            e = bounds[k, 1]
-            if s < 0 or (e - s + 1) < self.MIN_SAMPLES_TA_CLASS:
-                continue
-
-            ta_c = ta_s[s:e + 1]
-            ustar_cc = ustar_s[s:e + 1]
-            nee_cc = nee_s[s:e + 1]
-
-            corr = self._pearson(ta_c, ustar_cc)
-            if not np.isfinite(corr) or abs(corr) > self.CORRELATION_CHECK:
-                continue
-
-            th = self._detect_ta_class(nee_cc, ustar_cc)
-            if np.isfinite(th) and th != self.THRESHOLD_NOT_FOUND:
-                thresholds.append(th)
-
-        return float(np.median(thresholds)) if thresholds else self.THRESHOLD_NOT_FOUND
-
-    def _compute_seasonal(
-        self, nee: np.ndarray, ta: np.ndarray, ustar: np.ndarray, month: np.ndarray
-    ) -> List[float]:
-        """
-        Per-season thresholds from night+valid arrays (NaN where season is too small).
-
-        Implements the ONEFlux "one big season" fallback: when every season has fewer than
-        TA_CLASS_MIN_SAMPLE * ta_classes_count samples, all data is pooled into a single
-        season and the resulting threshold is broadcast to all season slots.
-        """
-        min_per_season = self.MIN_SAMPLES_TA_CLASS * self.ta_classes_count  # 700
-        season_counts = [int(np.isin(month, months).sum()) for months in self.season_groups]
-
-        if all(c < min_per_season for c in season_counts):
-            # one big season (second method) - pool everything
-            if len(nee) < self.MIN_SAMPLES_SEASON:
-                return [np.nan] * self.seasons_count
-            th = self._detect_season(nee, ta, ustar)
-            th = th if (np.isfinite(th) and th != self.THRESHOLD_NOT_FOUND) else np.nan
-            return [th] * self.seasons_count
-
-        thresholds: List[float] = []
-        for months, c in zip(self.season_groups, season_counts, strict=False):
-            if c < min_per_season:
-                thresholds.append(np.nan)
-                continue
-            mask = np.isin(month, months)
-            th = self._detect_season(nee[mask], ta[mask], ustar[mask])
-            thresholds.append(th if (np.isfinite(th) and th != self.THRESHOLD_NOT_FOUND) else np.nan)
-        return thresholds
-
-    def _aggregate_annual(self, thresholds: List[float]) -> float:
-        """Annual threshold = maximum across valid seasonal thresholds (conservative)."""
-        valid = [t for t in thresholds if np.isfinite(t) and t != self.THRESHOLD_NOT_FOUND]
-        return float(np.max(valid)) if valid else np.nan
-
-    def _night_valid_arrays(self):
-        """Extract night+valid (NEE, TA, USTAR, month) numpy arrays plus the valid count.
-
-        Also enforces the record minimum. This is the one point every public entry
-        goes through — ``detect()``, ``bootstrap()`` and ``bootstrap_annual_samples()``
-        — so the check belongs here rather than in ``detect()`` alone: the bootstrap
-        paths used to skip it, and they are the ones ``UstarBootstrapThresholds`` and
-        the flux chain's L3.3 detection actually call. A record too short for
-        ``detect()`` therefore still produced a confident threshold through the chain,
-        and that threshold decides which nighttime fluxes are discarded.
-        """
-        nee = self.df[self.nee_col].to_numpy(dtype='float64')
-        ta = self.df[self.ta_col].to_numpy(dtype='float64')
-        ustar = self.df[self.ustar_col].to_numpy(dtype='float64')
-        swin = self.df[self.swin_col].to_numpy(dtype='float64')
-
-        valid = np.isfinite(nee) & np.isfinite(ta) & np.isfinite(ustar) & np.isfinite(swin)
-        night = valid & (swin < self.NIGHT_THRESHOLD)
-
-        if len(self.df) < self.MIN_SAMPLES_PERIOD:
+        k = _kernels()
+        p = self._prepare()
+        tacl, ucl = self.ta_classes_count, self.ustar_classes_count
+        rows_count, days = p['rows_count'], p['days']
+        if rows_count == 0:
+            raise ValueError("Insufficient data: no nighttime records with NEE, TA and USTAR.")
+        if rows_count < tacl * ucl:
+            # main.c:1093-1099
             raise ValueError(
-                f"Insufficient data: {len(self.df)} records, need at least {self.MIN_SAMPLES_PERIOD}"
-            )
-        n_valid = int(valid.sum())
-        if n_valid < self.MIN_SAMPLES_PERIOD:
+                f"Insufficient data: {rows_count} nighttime records with NEE, TA and USTAR, "
+                f"need at least {tacl * ucl} (ta_classes_count * ustar_classes_count).")
+        samples = p['main_samples'].copy()
+        # Slots of seasons merged into one big season are never written: keep them -9999
+        container = np.full(self.seasons_count * tacl, -9999.0)
+        ok, sgc = k.ustar_threshold(
+            self._main_rows(), rows_count, days, samples, self.seasons_count, tacl, ucl,
+            self.forward_mode_n, self.WINDOW_SIZE_FORWARD_MODE, self.THRESHOLD_CHECK, container)
+        if not ok:
             raise ValueError(
-                f"Insufficient valid data: {n_valid} records, need at least {self.MIN_SAMPLES_PERIOD}"
-            )
+                f"Insufficient data: {rows_count} nighttime records with NEE, TA and USTAR and "
+                f"{days} daytime records. ONEFlux needs night + day records >= "
+                f"{self.MIN_SAMPLES_PERIOD}, or more than {self.MIN_SAMPLES_SEASON} night records.")
+        medians = np.array([k.median_ustar_threshold(container, tacl, s) for s in range(sgc)])
+        return dict(container=container, sgc=int(sgc), medians=medians, samples=samples)
 
-        return nee, ta, ustar, self._month, valid, night
+    def _check_indices(self, indices, n_iter):
+        n = len(self.df)
+        indices = np.ascontiguousarray(indices, dtype=np.int64)
+        if indices.ndim != 2:
+            raise ValueError("indices must be a 2-D array (n_iter, n_draws)")
+        if n_iter is not None and indices.shape[0] != n_iter:
+            raise ValueError(f"indices has {indices.shape[0]} rows, n_iter is {n_iter}")
+        if indices.size and (indices.min() < 0 or indices.max() >= n):
+            raise ValueError(f"indices must be row positions in [0, {n})")
+        return indices
+
+    def _run_bootstrap(self, n_iter, rng, indices):
+        """Season medians, annual values and failure flags for each bootstrap draw."""
+        if indices is None:
+            if n_iter is None:
+                n_iter = self.bootstrapping_times
+            if rng is None:
+                rng = np.random.default_rng(self.random_state)
+            n = len(self.df)
+            indices = np.empty((n_iter, n), dtype=np.int64)
+            for b in range(n_iter):
+                # one call per draw keeps the stream of earlier diive versions
+                indices[b] = rng.integers(0, n, n)
+        else:
+            indices = self._check_indices(indices, n_iter)
+
+        # ONEFlux bootstraps only after a successful main run, which also
+        # sets the season count the draws start from (sticky collapse).
+        main = self._main_run()
+        p = self._prepare()
+        season_med, annual, failed, _ = _kernels().bootstrap(
+            p['nee'], p['ta'], p['ustar'], p['is_day'], p['all_valid'],
+            p['boot_season'], p['row_of_key'], p['key_of_row'], indices,
+            main['sgc'], self.seasons_count, self.ta_classes_count,
+            self.ustar_classes_count, self.forward_mode_n,
+            self.WINDOW_SIZE_FORWARD_MODE, self.THRESHOLD_CHECK)
+        self.bootstrap_failed_ = failed
+        self.bootstrap_dropped_ = bool(failed.any())
+        if self.bootstrap_dropped_ and self.verbose >= 1:
+            warn(f"{int(failed.sum())} of {len(failed)} bootstrap draws had too few records. "
+                 f"ONEFlux drops the whole bootstrap for such a year.", verbose=self.verbose)
+        return season_med, annual
 
     # ------------------------------------------------------------------ public
 
@@ -532,171 +498,126 @@ class UstarMovingPointDetection:
         Returns
         -------
         pd.DataFrame
-            Seasonal thresholds with column 'threshold' (m/s), or NaN where detection failed.
-            Rows: Season 1..N. Annual threshold (max across seasons) stored in
-            ``annual_thresholds_`` and retrievable via ``get_annual_thresholds()``.
+            Season thresholds in column 'threshold' (m s-1), NaN where none was found.
+            The annual threshold (highest season threshold) is in
+            ``annual_thresholds_`` and ``get_annual_thresholds()``.
         """
         if self.verbose >= 1:
             info(f"Detecting USTAR thresholds (Papale et al., 2006) | "
                  f"{len(self.df)} records, {self.seasons_count} seasons, "
-                 f"{self.ta_classes_count} TA classes, {self.ustar_classes_count} USTAR classes")
+                 f"{self.ta_classes_count} TA classes, {self.ustar_classes_count} USTAR classes",
+                 verbose=self.verbose)
 
-        # The record minimum is enforced by _night_valid_arrays, so every entry
-        # point shares it (see there).
-        nee, ta, ustar, month, valid, night = self._night_valid_arrays()
+        main = self._main_run()
+        k = _kernels()
+        tacl = self.ta_classes_count
+        sgc = main['sgc']
+        self.one_big_season_ = sgc == 1 and self.seasons_count > 1
 
-        nee_n = nee[night]
-        ta_n = ta[night]
-        ustar_n = ustar[night]
-        month_n = month[night]
+        def clean(v):
+            return np.nan if (k.is_invalid(v) or v == self.THRESHOLD_NOT_FOUND) else float(v)
 
-        thresholds_list = self._compute_seasonal(nee_n, ta_n, ustar_n, month_n)
+        # After a collapse the C keeps one season. Every season shows its value.
+        seasons = [clean(main['medians'][min(s, sgc - 1)]) for s in range(self.seasons_count)]
+        table = np.array([[clean(main['container'][min(s, sgc - 1) * tacl + c])
+                           for s in range(self.seasons_count)] for c in range(tacl)])
+        season_labels = [f'Season {i + 1}' for i in range(self.seasons_count)]
+        self.results_ = pd.DataFrame({'threshold': seasons}, index=season_labels)
+        self.ta_class_thresholds_ = pd.DataFrame(
+            table, index=[f'TA class {c + 1}' for c in range(tacl)], columns=season_labels)
 
-        if self.verbose >= 2:
-            for i, t in enumerate(thresholds_list):
-                if np.isfinite(t):
-                    detail(f"  Season {i + 1}: {t:.4f} m/s", verbose=self.verbose)
-                else:
-                    detail(f"  Season {i + 1}: not found", verbose=self.verbose)
-
-        self.results_ = pd.DataFrame(
-            {'threshold': thresholds_list},
-            index=[f'Season {i + 1}' for i in range(self.seasons_count)],
-        )
-
-        # NaN, not THRESHOLD_NOT_FOUND: the sentinel is 10.0 m/s, a plausible-looking
-        # threshold that would filter out every record. It used to be stored here and
-        # converted back to NaN only by get_annual_thresholds(), so reading the
-        # documented attribute directly after a failed detection was a trap.
-        annual = self._aggregate_annual(thresholds_list)
+        # Highest season value, as write_results selects it (main.c:305-309)
+        valid = [v for v in seasons if np.isfinite(v)]
+        annual = float(max(valid)) if valid else np.nan
         self.annual_thresholds_ = {'threshold': annual}
 
+        if self.verbose >= 2:
+            if self.one_big_season_:
+                detail("  Too few records per season: one big season", verbose=self.verbose)
+            for label, t in zip(season_labels, seasons, strict=True):
+                detail(f"  {label}: {t:.4f} m/s" if np.isfinite(t) else f"  {label}: not found",
+                       verbose=self.verbose)
         if self.verbose >= 1:
-            if np.isfinite(annual):
-                info(f"Annual threshold (max across seasons): {annual:.4f} m/s")
-            else:
-                info("Annual threshold: Not found")
-
+            info(f"Annual threshold (max across seasons): {annual:.4f} m/s" if np.isfinite(annual)
+                 else "Annual threshold: Not found", verbose=self.verbose)
         return self.results_
 
-    def _iter_bootstrap_seasonal(self, n_iter: int, rng: np.random.Generator):
-        """
-        Yield the per-season threshold list for each bootstrap resample.
-
-        Extracts the night+valid arrays once, then per iteration resamples the full record
-        with replacement (matching ONEFlux: draw from all rows, keep the night+valid ones)
-        and recomputes seasonal thresholds. No per-iteration object construction or
-        DataFrame copy. Resamples producing no night data, or that fail, are skipped.
-        """
-        nee, ta, ustar, month, valid, night = self._night_valid_arrays()
-        n_total = len(self.df)
-
-        for boot_idx in range(n_iter):
-            if self.verbose >= 2 and boot_idx % 10 == 0:
-                detail(f"  Iteration {boot_idx + 1}/{n_iter}", verbose=self.verbose)
-
-            idx = rng.integers(0, n_total, n_total)
-            sel = night[idx]
-            if not sel.any():
-                continue
-            b = idx[sel]
-
-            try:
-                yield self._compute_seasonal(nee[b], ta[b], ustar[b], month[b])
-            except Exception as e:  # keep a single failed resample from aborting the run
-                if self.verbose >= 2:
-                    warn(f"Bootstrap {boot_idx} failed: {e}")
-                continue
-
     def bootstrap_annual_samples(
-        self, n_iter: Optional[int] = None, rng: Optional[np.random.Generator] = None
-    ) -> List[float]:
+        self,
+        n_iter: Optional[int] = None,
+        rng: Optional[np.random.Generator] = None,
+        indices: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         """
-        Bootstrap distribution of the annual (max-across-seasons) threshold.
+        Bootstrap distribution of the annual (highest season) threshold.
 
-        Fast path consumed by ``UstarBootstrapThresholds``: build the detector once on the
-        window, then call this to get the resampled annual thresholds directly from
-        pre-extracted numpy arrays - avoiding a ``DataFrame.sample()`` copy and a fresh
-        detector per iteration.
+        Each draw takes ``len(df)`` record positions with replacement, as
+        ONEFlux ``bootstrapping`` does, and reruns the detection on them.
 
         Parameters
         ----------
         n_iter : int, optional
-            Number of bootstrap iterations (uses self.bootstrapping_times if None).
+            Number of draws. Default ``bootstrapping_times``, or the number of
+            rows of ``indices``.
         rng : numpy.random.Generator, optional
-            Random generator (a fresh default generator is created if None).
+            Generator for the draws. Default ``np.random.default_rng(random_state)``.
+        indices : np.ndarray, optional
+            Drawn record positions, shape (n_iter, n_draws). Replaces the
+            random draws, for example to feed the same draws to ONEFlux.
 
         Returns
         -------
-        list of float
-            One annual threshold per successful resample (length <= n_iter).
-        """
-        if n_iter is None:
-            n_iter = self.bootstrapping_times
-        if rng is None:
-            rng = np.random.default_rng()
+        np.ndarray
+            One value per draw (length n_iter). NaN where the draw gave no
+            threshold or failed. ``bootstrap_failed_`` marks the failed draws
+            and ``bootstrap_dropped_`` tells whether ONEFlux would have dropped
+            the whole bootstrap.
 
-        samples: List[float] = []
-        for ths in self._iter_bootstrap_seasonal(n_iter, rng):
-            ann = self._aggregate_annual(ths)
-            if np.isfinite(ann):
-                samples.append(ann)
-        return samples
+        Raises
+        ------
+        ValueError
+            Where ONEFlux skips the year (see Notes of the class).
+        """
+        if self.verbose >= 1:
+            info("Running bootstrap draws...", verbose=self.verbose)
+        _, annual = self._run_bootstrap(n_iter, rng, indices)
+        return annual
 
     def bootstrap(self, n_iter: Optional[int] = None) -> pd.DataFrame:
         """
-        Bootstrap resampling for USTAR threshold uncertainty.
+        Bootstrap the season and annual thresholds.
 
-        Resamples the full record with replacement (matching ONEFlux: draw from all rows,
-        keep night+valid ones), recomputes per-season and annual thresholds each iteration,
-        and returns the resulting distributions. Operates entirely on pre-extracted numpy
-        arrays - no per-iteration object construction or DataFrame copy.
+        Draws are seeded with ``random_state``. Draws without a threshold, and
+        failed draws (see ``bootstrap_failed_``), are left out of the statistics.
 
         Parameters
         ----------
         n_iter : int, optional
-            Number of bootstrap iterations (uses self.bootstrapping_times if None)
+            Number of draws (default ``bootstrapping_times``).
 
         Returns
         -------
         pd.DataFrame
-            Statistics (mean, std, p05, p50, p95) per season plus an 'Annual' row giving the
-            distribution of the annual (max-across-seasons) threshold - the quantity used for
-            filtering.
+            mean, std, p05, p50 and p95 per season, plus an 'Annual' row for the
+            annual (highest season) threshold used for filtering.
         """
         if n_iter is None:
             n_iter = self.bootstrapping_times
-
         if self.verbose >= 1:
-            info(f"Running {n_iter} bootstrap iterations...")
-
-        # Seeded so the returned distribution is reproducible; unseeded, every call
-        # gave different percentiles for the same input.
-        rng = np.random.default_rng(self.random_state)
-        per_season: List[List[float]] = [[] for _ in range(self.seasons_count)]
-        annual_samples: List[float] = []
-
-        for ths in self._iter_bootstrap_seasonal(n_iter, rng):
-            for si, t in enumerate(ths):
-                if np.isfinite(t):
-                    per_season[si].append(t)
-            ann = self._aggregate_annual(ths)
-            if np.isfinite(ann):
-                annual_samples.append(ann)
-
-        rows = [self._stats(s) for s in per_season]
-        index = [f'Season {i + 1}' for i in range(self.seasons_count)]
-        rows.append(self._stats(annual_samples))
-        index.append('Annual')
-
+            info(f"Running {n_iter} bootstrap iterations...", verbose=self.verbose)
+        season_med, annual = self._run_bootstrap(n_iter, np.random.default_rng(self.random_state), None)
+        rows = [self._stats(season_med[:, s]) for s in range(self.seasons_count)]
+        rows.append(self._stats(annual))
+        index = [f'Season {i + 1}' for i in range(self.seasons_count)] + ['Annual']
         return pd.DataFrame(rows, index=index)
 
     @staticmethod
-    def _stats(vals: List[float]) -> Dict[str, float]:
-        """Summary statistics for a list of bootstrap thresholds."""
-        if not vals:
-            return {'mean': np.nan, 'std': np.nan, 'p05': np.nan, 'p50': np.nan, 'p95': np.nan}
+    def _stats(vals) -> Dict[str, float]:
+        """Summary statistics of the finite bootstrap thresholds."""
         arr = np.asarray(vals, dtype=np.float64)
+        arr = arr[np.isfinite(arr)]
+        if arr.size == 0:
+            return {'mean': np.nan, 'std': np.nan, 'p05': np.nan, 'p50': np.nan, 'p95': np.nan}
         return {
             'mean': float(np.mean(arr)),
             'std': float(np.std(arr)),
@@ -714,27 +635,25 @@ class UstarMovingPointDetection:
         lines.append("=" * 60)
         lines.append(f"{'Season':<15} {'Threshold (m/s)':<20}")
         lines.append("-" * 60)
-
         for idx in self.results_.index:
             val = self.results_.loc[idx, 'threshold']
-            threshold_str = f"{val:.4f}" if (np.isfinite(val) and val != self.THRESHOLD_NOT_FOUND) else "Not found"
+            threshold_str = f"{val:.4f}" if np.isfinite(val) else "Not found"
             lines.append(f"{idx:<15} {threshold_str:<20}")
-
         return "\n".join(lines)
 
     def get_annual_thresholds(self) -> Dict[str, float]:
         """
-        Get annual USTAR threshold (maximum across all seasons).
+        Get the annual USTAR threshold (highest season threshold).
 
         Returns
         -------
         Dict[str, float]
-            Annual threshold with key 'threshold' (m/s), or NaN if detection failed.
+            ``{'threshold': value}`` in m s-1, NaN if detection found none.
 
         Notes
         -----
-        Conservative approach: maximum of seasonal thresholds (Papale et al., 2006:
-        "the whole data set is filtered according to the highest threshold found").
+        Papale et al. (2006): "the whole data set is filtered according to the
+        highest threshold found".
         """
         if not self.annual_thresholds_:
             raise RuntimeError("Detection not yet performed. Call detect() first.")

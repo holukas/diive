@@ -1,31 +1,108 @@
 """
 Tests for UstarMovingPointDetection (ONEFlux moving-point USTAR detection).
 
-The key guard is `test_vectorized_matches_literal_reference`, which compares the
-vectorized numpy core against an independent, line-by-line transcription of the
-reference C loops (oneflux_steps/ustar_mp/src/ustar.c). Any change to the core
-that diverges from the C algorithm will break it.
+The key guard is `test_kernels_match_literal_reference`, which compares the
+numba kernels against an independent, line-by-line pure-Python transcription
+of the reference C loops (oneflux_steps/ustar_mp/src/ustar.c), bitwise. The
+full comparison against the compiled C (20 site-years, bootstrap included)
+lives outside the repo in diive-data/references/ustar_parity/mp/.
 """
 
 import unittest
 
 import matplotlib
 import numpy as np
+import pandas as pd
 
 matplotlib.use("Agg")  # no plot windows during tests
 
 from diive.configs.exampledata import load_exampledata_parquet_lae
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 
-
-# --- independent literal transcription of ustar.c (no vectorization shortcuts) ---
-
+INVALID = -9999.0
 NF = UstarMovingPointDetection.THRESHOLD_NOT_FOUND
 WS = UstarMovingPointDetection.WINDOW_SIZE_FORWARD_MODE
 TC = UstarMovingPointDetection.THRESHOLD_CHECK
-MINTA = UstarMovingPointDetection.MIN_SAMPLES_TA_CLASS
-CORR = UstarMovingPointDetection.CORRELATION_CHECK
-FU = UstarMovingPointDetection.FIRST_USTAR_MEAN_CHECK
+
+# --- independent literal transcription of ustar.c (plain Python, no numba) ---
+
+
+def _inv(v):
+    return -10000.0 < v <= -9999.0  # IS_INVALID_VALUE: -9999 == (int)v
+
+
+def _qsort(rows, start, num, col):
+    """Microsoft UCRT qsort (qsort.cpp) on a list of row lists, by rows[i][col]."""
+    def cmp(a, b):
+        x, y = rows[a][col], rows[b][col]
+        return -1 if x < y else (1 if x > y else 0)
+
+    def swap(a, b):
+        rows[a], rows[b] = rows[b], rows[a]
+
+    if num < 2:
+        return
+    stack = []
+    lo, hi = start, start + num - 1
+    while True:
+        if hi - lo + 1 <= 8:
+            while hi > lo:  # shortsort
+                mx = lo
+                for p in range(lo + 1, hi + 1):
+                    if cmp(p, mx) > 0:
+                        mx = p
+                swap(mx, hi)
+                hi -= 1
+        else:
+            mid = lo + (hi - lo + 1) // 2
+            if cmp(lo, mid) > 0:
+                swap(lo, mid)
+            if cmp(lo, hi) > 0:
+                swap(lo, hi)
+            if cmp(mid, hi) > 0:
+                swap(mid, hi)
+            loguy, higuy = lo, hi
+            while True:
+                if mid > loguy:
+                    loguy += 1
+                    while loguy < mid and cmp(loguy, mid) <= 0:
+                        loguy += 1
+                if mid <= loguy:
+                    loguy += 1
+                    while loguy <= hi and cmp(loguy, mid) <= 0:
+                        loguy += 1
+                higuy -= 1
+                while higuy > mid and cmp(higuy, mid) > 0:
+                    higuy -= 1
+                if higuy < loguy:
+                    break
+                swap(loguy, higuy)
+                if mid == higuy:
+                    mid = loguy
+            higuy += 1
+            if mid < higuy:
+                higuy -= 1
+                while higuy > mid and cmp(higuy, mid) == 0:
+                    higuy -= 1
+            if mid >= higuy:
+                higuy -= 1
+                while higuy > lo and cmp(higuy, mid) == 0:
+                    higuy -= 1
+            if higuy - lo >= hi - loguy:
+                if lo < higuy:
+                    stack.append((lo, higuy))
+                if loguy < hi:
+                    lo = loguy
+                    continue
+            else:
+                if loguy < hi:
+                    stack.append((loguy, hi))
+                if lo < higuy:
+                    hi = higuy
+                    continue
+        if not stack:
+            return
+        lo, hi = stack.pop()
 
 
 def _meanws(arr, index, ec):
@@ -36,100 +113,157 @@ def _meanws(arr, index, ec):
     for i in range(index, index + ec):
         if i >= n:
             break
+        if _inv(arr[i]):
+            return INVALID
         s += arr[i]
         c += 1
-    return float("nan") if c == 0 else s / c
+    m = s / c if c else float("nan")
+    return INVALID if m != m else m
 
 
 def _fwd(um, fm, n):
     nc = len(um)
     if n < 1 or nc - n <= 0:
-        return NF
-    for i in range(0, nc - n + 1):
-        means, bad = [], False
+        return INVALID
+    for i in range(nc - n + 1):
+        means = []
         for y in range(n):
             m = _meanws(fm, i + 1 + y, WS)
-            if not np.isfinite(m):
-                bad = True
+            if _inv(m):
                 break
             means.append(m)
-        if bad:
+        if len(means) < n:
             continue
         if sum(1 for y in range(n) if fm[i + y] >= means[y] * TC) == n:
             return um[i]
     return NF
 
 
-def _bounds(v, ncl, npc):
-    N = len(v)
-    B = [(-1, -1)] * ncl
-    ce, broke = 0, False
-    for i in range(ncl - 1):
-        cs = ce
-        ce = npc * (i + 1) - 1
-        if cs >= N:
-            broke = True
+def _windows(rows, off, n, ncl, col, start_end_branch):
+    """Class windows of ustar.c:602-637 (TA) and 693-732 (USTAR), absolute indices."""
+    win = [(-1, -1)] * ncl
+    per = n // ncl
+    end = 0
+    i = 0
+    while i < ncl - 1:
+        start = end
+        end = per * (i + 1) - 1
+        if start >= n:
             break
-        if ce >= N:
-            ce = N - 1
-        val = v[ce]
-        ce += 1
-        while ce < N and v[ce] == val:
-            ce += 1
-        B[i] = (cs, ce - 1)
-    if not broke and ce < N:
-        B[ncl - 1] = (ce, N - 1)
-    return B
+        if end >= n:
+            end = n - 1
+        value = rows[off + end][col]
+        end += 1
+        while end < n:
+            if value != rows[off + end][col]:
+                if start_end_branch and start == end:
+                    value = rows[off + end][col]
+                    end += 1
+                    continue
+                break
+            end += 1
+        win[i] = (off + start, off + end - 1)
+        i += 1
+    if end < n:
+        win[i] = (off + end, off + n - 1)
+    return win
 
 
-def _means_of(arr, B):
-    out = [0.0] * len(B)
-    for k, (s, e) in enumerate(B):
-        if s >= 0:
-            out[k] = arr[s:e + 1].mean()
-    return out
+def _div(s, cnt):
+    # C double / int: 0.0 / 0 is NaN, x / negative is fine
+    return s / cnt if cnt else float("nan")
 
 
-def _pear(x, y):
-    xm, ym = x.mean(), y.mean()
-    dx, dy = x - xm, y - ym
-    dn = np.sqrt((dx * dx).sum()) * np.sqrt((dy * dy).sum())
-    return float("nan") if dn == 0 else (dx * dy).sum() / dn
-
-
-def _det_ta(nc, uc, uclasses, fn):
-    m = len(uc)
-    npu = m // uclasses
-    if npu < 1:
-        return NF
-    o = np.argsort(uc, kind="stable")
-    us, ns = uc[o], nc[o]
-    B = _bounds(us, uclasses, npu)
-    um, fm = _means_of(us, B), _means_of(ns, B)
-    if um[0] > FU:
-        return NF
-    return _fwd(um, fm, fn)
-
-
-def _det_season(nee, ta, ustar, taclasses, uclasses, fn):
-    N = len(nee)
-    npt = N // taclasses
-    if npt < MINTA:
-        return NF
-    o = np.argsort(ta, kind="stable")
-    ts, us, ns = ta[o], ustar[o], nee[o]
-    B = _bounds(ts, taclasses, npt)
-    ths = []
-    for (s, e) in B:
-        if s < 0 or (e - s + 1) < MINTA:
+def _ustar_threshold(rows, rows_count, days, samples, nseas, tacl, ucl, fn):
+    """ustar.c::ustar_threshold, forward mode fn only. Returns the container or None."""
+    samples = list(samples)
+    if rows_count < tacl * ucl:
+        return None
+    if rows_count + days >= 3000:
+        seasons_n = nseas
+    elif rows_count > 160:
+        seasons_n = 1
+        samples[0] = sum(samples[:nseas])
+        nseas = 1
+    else:
+        return None
+    if seasons_n > 1 and all(samples[s] < 100 * tacl for s in range(seasons_n)):
+        seasons_n = 1
+        samples[0] = sum(samples[:nseas])
+        nseas = 1
+    cont = [INVALID] * (len(samples) * tacl)
+    for s in range(seasons_n):
+        if samples[s] < 100 * tacl:
             continue
-        c = _pear(ts[s:e + 1], us[s:e + 1])
-        if not np.isfinite(c) or abs(c) > CORR:
-            continue
-        t = _det_ta(ns[s:e + 1], us[s:e + 1], uclasses, fn)
-        if np.isfinite(t) and t != NF:
-            ths.append(t)
-    return float(np.median(ths)) if ths else NF
+        ssi = sum(samples[:s])
+        _qsort(rows, ssi, samples[s], 1)
+        for c, (st, en) in enumerate(_windows(rows, ssi, samples[s], tacl, 1, False)):
+            if st == -1 or en - st + 1 < 100:
+                continue
+            seg = rows[st:en + 1]
+            xm = 0.0
+            ym = 0.0
+            for r in seg:
+                xm += r[1]
+                ym += r[2]
+            xm /= len(seg)
+            ym /= len(seg)
+            sxy = sxx = syy = 0.0
+            for r in seg:
+                t1, t2 = r[1] - xm, r[2] - ym
+                sxx = sxx + t1 * t1
+                syy = syy + t2 * t2
+                sxy = sxy + t1 * t2
+            den = np.sqrt(sxx) * np.sqrt(syy)
+            corr = sxy / den if den else float("nan")
+            if corr != corr:
+                corr = INVALID
+            if abs(corr) > 0.5:
+                continue
+            _qsort(rows, st, en - st + 1, 2)
+            um, fm = [], []
+            for (a, b) in _windows(rows, st, en - st + 1, ucl, 2, True):
+                su = sf = 0.0
+                if a != -1:
+                    for y in range(a, b + 1):
+                        su += rows[y][2]
+                        sf += rows[y][0]
+                    su, sf = _div(su, b - a + 1), _div(sf, b - a + 1)
+                um.append(su)
+                fm.append(sf)
+            if um[0] > 0.2:
+                continue
+            th = _fwd(um, fm, fn)
+            cont[s * tacl + c] = th
+            if seasons_n == 1:
+                for i in range(nseas):
+                    cont[i * tacl + c] = th
+    return cont, nseas
+
+
+def _year_frame(year=2023, freq='30min', seed=0, keep=None, sw_night=True):
+    """One calendar year on its TIMESTAMP_MIDDLE grid with a u*-dependent night NEE.
+
+    keep: optional bool mask of records that keep their NEE (the rest is NaN).
+    """
+    step = pd.Timedelta(freq)
+    ix = pd.date_range(pd.Timestamp(year, 1, 1) + step / 2, pd.Timestamp(year + 1, 1, 1),
+                       freq=freq, inclusive='left', name='TIMESTAMP_MIDDLE')
+    n = len(ix)
+    rng = np.random.RandomState(seed)
+    hr = ix.hour + ix.minute / 60
+    sw = np.clip(500 * np.sin(2 * np.pi * (hr - 6) / 24), 0, None) if sw_night else np.zeros(n)
+    ustar = rng.uniform(0.02, 0.9, n)
+    nee = np.where(ustar < 0.3, 1.0 + 10.0 * ustar, 4.0) + rng.normal(0, 0.3, n)
+    if keep is not None:
+        nee = np.where(keep, nee, np.nan)
+    return pd.DataFrame({'NEE': nee, 'TA': rng.normal(10, 6, n), 'USTAR': ustar, 'SW_IN': sw},
+                        index=ix)
+
+
+def _det(df, **kw):
+    return UstarMovingPointDetection(df, nee_col='NEE', ta_col='TA', ustar_col='USTAR',
+                                     swin_col='SW_IN', verbose=0, **kw)
 
 
 class TestUstarMovingPointDetection(unittest.TestCase):
@@ -155,36 +289,54 @@ class TestUstarMovingPointDetection(unittest.TestCase):
         d = UstarMovingPointDetection(self.df)
         res = d.detect()
         vals = res["threshold"].to_numpy()
-        valid = vals[np.isfinite(vals) & (vals != d.THRESHOLD_NOT_FOUND)]
-        self.assertAlmostEqual(
-            d.get_annual_thresholds()["threshold"], float(np.max(valid)), places=9
-        )
+        self.assertEqual(d.get_annual_thresholds()["threshold"], float(np.nanmax(vals)))
+        self.assertEqual(d.ta_class_thresholds_.shape, (7, 4))
 
-    def test_vectorized_matches_literal_reference(self):
-        """The numpy core must reproduce the literal C transcription exactly."""
+    def test_kernels_match_literal_reference(self):
+        """The numba kernels must reproduce the literal C transcription bitwise."""
+        year = self.df.loc['2017']
         for taclasses, uclasses, fn in [(7, 20, 2), (7, 20, 1), (5, 15, 2), (7, 20, 3)]:
-            d = UstarMovingPointDetection(
-                self.df, ta_classes_count=taclasses,
-                ustar_classes_count=uclasses, forward_mode_n=fn,
-            )
-            nee, ta, ustar, month, valid, night = d._night_valid_arrays()
-            nee_n, ta_n, ustar_n, month_n = nee[night], ta[night], ustar[night], month[night]
+            d = UstarMovingPointDetection(year, ta_classes_count=taclasses,
+                                          ustar_classes_count=uclasses, forward_mode_n=fn)
+            p = d._prepare()
+            rows = [list(r) for r in d._main_rows()]
+            ref, nseas = _ustar_threshold(rows, p['rows_count'], p['days'], p['main_samples'],
+                                          d.seasons_count, taclasses, uclasses, fn)
+            got = d._main_run()
+            self.assertEqual(got['sgc'], nseas)
+            n = nseas * taclasses
+            np.testing.assert_array_equal(
+                got['container'][:n], np.array(ref[:n]),
+                err_msg=f"mismatch for ta={taclasses}, ustar={uclasses}, fw={fn}")
 
-            ref = [
-                _det_season(
-                    nee_n[np.isin(month_n, months)],
-                    ta_n[np.isin(month_n, months)],
-                    ustar_n[np.isin(month_n, months)],
-                    taclasses, uclasses, fn,
-                )
-                for months in d.season_groups
-            ]
-            ref = [np.nan if r == NF else r for r in ref]
-            got = d.detect()["threshold"].to_numpy()
-            np.testing.assert_allclose(
-                got, ref, equal_nan=True,
-                err_msg=f"mismatch for ta={taclasses}, ustar={uclasses}, fw={fn}",
-            )
+    def test_main_run_order_is_season_month_record(self):
+        """main.c:1014-1036: rows go season by season, month by month, then in record order."""
+        d = UstarMovingPointDetection(self.df.loc['2017'],
+                                      season_groups=[[12, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]])
+        p = d._prepare()
+        order = p['main_order']
+        month = d._month[order]
+        expected_month_seq = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        rank = np.array([expected_month_seq.index(m) for m in month])
+        self.assertTrue(np.all(np.diff(rank) >= 0))
+        for m in np.unique(month):
+            self.assertTrue(np.all(np.diff(order[month == m]) > 0))
+
+    def test_qsort_tie_order_matches_ucrt(self):
+        """Tie order of the C qsort, taken from the reference build (qsort_check)."""
+        from diive.flux.lowres._ustar_mp_kernels import qsort_rows
+        cases = [
+            ([3, 1, 2, 1, 3, 1, 2, 2, 3, 1, 1, 2, 3, 3, 1, 2, 1, 3, 2, 1],
+             [10, 1, 16, 3, 14, 5, 19, 9, 18, 7, 6, 11, 2, 15, 13, 12, 4, 17, 8, 0]),
+            ([2, 2, 1, 1, 2, 1, 2, 1, 1], [7, 2, 3, 5, 8, 6, 4, 1, 0]),
+        ]
+        for keys, perm_c in cases:
+            rows = np.column_stack([np.arange(len(keys)), np.array(keys, float), np.zeros(len(keys))])
+            qsort_rows(rows, 0, len(keys), 1)
+            self.assertEqual(rows[:, 0].astype(int).tolist(), perm_c)
+            rows2 = [[i, float(k), 0.0] for i, k in enumerate(keys)]
+            _qsort(rows2, 0, len(keys), 1)
+            self.assertEqual([int(r[0]) for r in rows2], perm_c)
 
     def test_bootstrap_has_annual_row(self):
         d = UstarMovingPointDetection(self.df, verbose=0)
@@ -196,6 +348,152 @@ class TestUstarMovingPointDetection(unittest.TestCase):
     def test_forward_mode_n_validation(self):
         with self.assertRaises(ValueError):
             UstarMovingPointDetection(self.df, forward_mode_n=0)
+
+    def test_duplicate_months_are_refused(self):
+        with self.assertRaises(ValueError):
+            UstarMovingPointDetection(self.df, season_groups=[[1, 2], [2, 3]])
+
+
+class TestOneFluxRecordRules(unittest.TestCase):
+    """Record minimum and method choice of ustar.c:500-535 and main.c:1093."""
+
+    def test_too_few_night_records_raise(self):
+        # 130 night records: below ta_classes_count * ustar_classes_count = 140
+        keep = np.zeros(17520, bool)
+        keep[np.flatnonzero(_year_frame()['SW_IN'].to_numpy() < 10)[:130]] = True
+        with self.assertRaises(ValueError) as ctx:
+            _det(_year_frame(keep=keep)).detect()
+        self.assertIn('140', str(ctx.exception))
+
+    def test_short_record_with_few_nights_raises(self):
+        # 150 night records and fewer than 3000 records in total
+        df = _year_frame().iloc[:300]
+        det = _det(df)
+        p = det._prepare()
+        self.assertTrue(140 <= p['rows_count'] <= 160, p['rows_count'])
+        with self.assertRaises(ValueError) as ctx:
+            det.detect()
+        self.assertIn('Insufficient', str(ctx.exception))
+
+    def test_short_record_with_many_nights_is_one_big_season(self):
+        # all records night, 2000 of them: night + day < 3000 but > 160 night records
+        df = _year_frame(sw_night=False).iloc[:2000]
+        det = _det(df)
+        res = det.detect()
+        self.assertTrue(det.one_big_season_)
+        self.assertEqual(res['threshold'].nunique(dropna=False), 1)
+        self.assertTrue(np.isfinite(res['threshold'].iloc[0]))
+
+    def test_all_seasons_small_is_one_big_season(self):
+        # 3000+ records, but every season below 700 night records
+        rng = np.random.RandomState(1)
+        night = np.flatnonzero(_year_frame()['SW_IN'].to_numpy() < 10)
+        keep = np.zeros(17520, bool)
+        keep[rng.choice(night, 2000, replace=False)] = True
+        det = _det(_year_frame(keep=keep))
+        det.detect()
+        self.assertTrue(det.one_big_season_)
+
+    def test_seasonal_detection_skips_small_seasons(self):
+        # Q3 alone above 700: seasonal, the other seasons get no threshold
+        df = _year_frame()
+        month = df.index.month.to_numpy()
+        keep = np.isin(month, [7, 8, 9])
+        det = _det(_year_frame(keep=keep))
+        res = det.detect()['threshold']
+        self.assertFalse(det.one_big_season_)
+        self.assertTrue(np.isfinite(res.iloc[2]))
+        self.assertTrue(res.drop(res.index[2]).isna().all())
+
+
+class TestOneFluxBootstrap(unittest.TestCase):
+
+    def test_bootstrap_seasons_by_row_position_with_leap_quirk(self):
+        """main.c:1018-1019: a leap February adds 1 row, not 48."""
+        det = _det(_year_frame(year=2024))
+        p = det._prepare()
+        self.assertTrue(p['year_grid'])
+        s = p['boot_season']
+        # Q1 ends after (31 + 28 + 31) * 48 + 1 = 4321 rows, 47 rows before March ends
+        self.assertEqual(s[4320], 0)
+        self.assertEqual(s[4321], 1)
+        # the last 47 rows lie beyond the last season end and count to season 0
+        self.assertTrue(np.all(s[-47:] == 0))
+        self.assertEqual(s[-48], 3)
+        # non-leap year: boundaries on the month ends
+        s = _det(_year_frame(year=2023))._prepare()['boot_season']
+        self.assertEqual((s[4319], s[4320]), (0, 1))
+        self.assertTrue(np.all(s[-48:] == 3))
+
+    def test_end_and_middle_stamps_give_the_same_result(self):
+        df = _year_frame(year=2024)
+        end = df.copy()
+        end.index = end.index + pd.Timedelta('15min')
+        a, b = _det(df), _det(end)
+        self.assertEqual(a.detect()['threshold'].tolist(), b.detect()['threshold'].tolist())
+        np.testing.assert_array_equal(a.bootstrap_annual_samples(5), b.bootstrap_annual_samples(5))
+
+    def test_identity_draw_reproduces_the_main_run(self):
+        """Drawing every row once gives the main-run threshold (non-leap year)."""
+        df = _year_frame(year=2023)
+        det = _det(df)
+        det.detect()
+        idx = np.arange(len(df))[None, :]
+        val = det.bootstrap_annual_samples(indices=idx)
+        self.assertEqual(val.shape, (1,))
+        self.assertEqual(val[0], det.get_annual_thresholds()['threshold'])
+
+    def test_indices_hook_and_seed_are_deterministic(self):
+        det = _det(_year_frame())
+        rng_draws = det.bootstrap_annual_samples(6, rng=np.random.default_rng(3))
+        again = det.bootstrap_annual_samples(6, rng=np.random.default_rng(3))
+        np.testing.assert_array_equal(rng_draws, again)
+        idx = np.random.default_rng(3).integers(0, 17520, (6, 17520))
+        np.testing.assert_array_equal(det.bootstrap_annual_samples(indices=idx),
+                                      det.bootstrap_annual_samples(indices=idx))
+        # default generator is seeded with random_state
+        np.testing.assert_array_equal(det.bootstrap_annual_samples(4), det.bootstrap_annual_samples(4))
+        with self.assertRaises(ValueError):
+            det.bootstrap_annual_samples(indices=np.array([[0, 17520]]))
+
+    def test_failed_draw_is_nan_and_flags_the_drop(self):
+        """bootstrapping.c:194-201: a failed draw makes ONEFlux drop the whole bootstrap."""
+        night = np.flatnonzero(_year_frame()['SW_IN'].to_numpy() < 10)
+        keep = np.zeros(17520, bool)
+        keep[night[:150]] = True
+        det = _det(_year_frame(keep=keep))
+        p = det._prepare()
+        good = np.arange(17520)
+        # a draw with only 100 of the night records: fewer than 140
+        bad = np.where(np.isin(good, night[100:150]), night[200], good)
+        vals = det.bootstrap_annual_samples(indices=np.vstack([good, bad, good]))
+        self.assertEqual(len(vals), 3)
+        self.assertEqual(det.bootstrap_failed_.tolist(), [False, True, False])
+        self.assertTrue(det.bootstrap_dropped_)
+        self.assertTrue(np.isnan(vals[1]))
+        self.assertEqual(p['rows_count'], 150)
+
+    def test_collapse_to_one_season_is_sticky(self):
+        """ustar.c:509-533 change the global season count, so later draws stay collapsed."""
+        df = _year_frame()
+        month = df.index.month.to_numpy()
+        night = df['SW_IN'].to_numpy() < 10
+        q3 = np.flatnonzero(night & np.isin(month, [7, 8, 9]))
+        q1 = np.flatnonzero(night & np.isin(month, [1, 2, 3]))
+        keep = np.zeros(len(df), bool)
+        keep[q3[:700]] = True
+        keep[q1[:200]] = True
+        det = _det(_year_frame(keep=keep))
+        identity = np.arange(len(df))
+        # one Q3 night record replaced by a day record: Q3 drops to 699, all seasons < 700
+        small = identity.copy()
+        small[q3[0]] = np.flatnonzero(~night)[0]
+        season_med, _ = det._run_bootstrap(None, None, np.vstack([identity, small, identity]))
+        self.assertTrue(np.isfinite(season_med[0, 2]) and np.isnan(season_med[0, 0]))
+        # after the collapse the identity draw is pooled into one big season
+        self.assertTrue(np.all(season_med[2] == season_med[2, 0]))
+        self.assertTrue(np.isfinite(season_med[2, 0]))
+        self.assertNotEqual(season_med[2, 0], season_med[0, 2])
 
 
 class TestUstarBootstrapVutCut(unittest.TestCase):
@@ -265,7 +563,10 @@ class TestRecordMinimumIsEnforcedEverywhere(unittest.TestCase):
             ustar_col='USTAR', swin_col='SW_IN', verbose=0)
 
     def test_every_entry_point_refuses_a_short_record(self):
-        n = UstarMovingPointDetection.MIN_SAMPLES_PERIOD // 3
+        # 250 records, about 130 at night: ONEFlux skips such a year (main.c:1093).
+        # This used to be MIN_SAMPLES_PERIOD // 3 = 1000 records, but ONEFlux does not
+        # refuse 1000 records with about 500 nights: it pools them into one big season.
+        n = 250
         for name in ('detect', 'bootstrap', 'bootstrap_annual_samples'):
             with self.subTest(entry=name):
                 det = self._detector(n)
@@ -294,14 +595,16 @@ class TestBootstrapReportsWhyAWindowFailed(unittest.TestCase):
         import pandas as pd
         frames = []
         for y in (2020, 2021):
-            ix = pd.date_range(f'{y}-01-01', periods=800, freq='30min',
+            # 120 records per year (was 800): with about 800 nights in total ONEFlux
+            # pools one big season instead of refusing the record
+            ix = pd.date_range(f'{y}-01-01', periods=120, freq='30min',
                                name='TIMESTAMP_MIDDLE')
             rng = np.random.RandomState(y)
             hr = ix.hour + ix.minute / 60
             sw = np.clip(500 * np.sin(2 * np.pi * (hr - 6) / 24), 0, None)
             frames.append(pd.DataFrame(
-                {'NEE': rng.randn(800), 'TA': 10 + 5 * rng.randn(800),
-                 'USTAR': np.abs(rng.randn(800)) * 0.5, 'SW_IN': sw}, index=ix))
+                {'NEE': rng.randn(120), 'TA': 10 + 5 * rng.randn(120),
+                 'USTAR': np.abs(rng.randn(120)) * 0.5, 'SW_IN': sw}, index=ix))
         return pd.concat(frames)
 
     def test_the_worker_returns_the_reason(self):
