@@ -27,6 +27,10 @@ dependencies = [
     "shap>=0.50.0,<1.0.0",  # 0.50 parses XGBoost's bracketed base_score itself
     "rich>=15.0.0",
     "threadpoolctl>=3.1.0,<4.0.0",  # one BLAS thread in the daytime REddyProc port
+    # Kernels of the u* detection ports (ONEFlux MP, REddyProc). numba 0.63+ has
+    # no wheels for Intel Macs, so they stay below it (as shap pins it there).
+    "numba>=0.61.2,<1.0.0; platform_machine != 'x86_64' or sys_platform != 'darwin'",
+    "numba>=0.61.2,<0.63; platform_machine == 'x86_64' and sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]
