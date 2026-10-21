@@ -225,8 +225,12 @@ def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
         level31_kwargs: kwargs for ``run_level31`` (storage correction).
         level32_steps: ordered ``[{"method": str, "kwargs": dict}, ...]``.
         level33_kwargs: kwargs for ``run_level33_constant_ustar`` (``thresholds``,
-            optional ``threshold_labels``), or for
-            ``run_level33_ustar_detection`` when it holds ``"_detection": True``.
+            optional ``threshold_labels``, ``nighttime_only``, ``swin_col``), or
+            for ``run_level33_ustar_detection`` when it holds
+            ``"_detection": True`` (``detection_mode``, ``detection_kwargs``,
+            ``nighttime_only``, ...). The deprecated ``detector_class`` and
+            ``detector_kwargs`` are written in their replacement form
+            (``detection_mode='oneflux_mp'``, ``detection_kwargs={'mp_kwargs': ...}``).
         df_var, load_hint: as in :func:`chain_to_code`.
     """
     lines = _init_level2_lines(
@@ -259,11 +263,34 @@ def _level33_detection_defaults() -> dict:
             if p.default is not inspect.Parameter.empty}
 
 
+def _level33_detection_kwargs(kw: dict) -> dict:
+    """Detection kwargs with the deprecated ``detector_class`` / ``detector_kwargs``
+    replaced by ``detection_mode`` / ``detection_kwargs``, so a script never
+    uses the deprecated arguments.
+
+    Only the moving point detector was supported there, so it maps to
+    ``detection_mode='oneflux_mp'`` with the old arguments as ``mp_kwargs``.
+    """
+    if "detector_class" not in kw and "detector_kwargs" not in kw:
+        return kw
+    kw = dict(kw)
+    kw.pop("detector_class", None)
+    mp_kwargs = {k: v for k, v in (kw.pop("detector_kwargs", None) or {}).items()
+                 if k not in ("nee_col", "ta_col", "ustar_col", "swin_col", "verbose")}
+    kw["detection_mode"] = "oneflux_mp"
+    if mp_kwargs:
+        det = dict(kw.get("detection_kwargs") or {})
+        det.setdefault("mp_kwargs", mp_kwargs)
+        kw["detection_kwargs"] = det
+    return kw
+
+
 def _level33_block(level33_kwargs: dict) -> list[str]:
     """The L3.3 call block (constant thresholds or auto-detection; no ``final_df``)."""
     if _level33_is_detection(level33_kwargs):
         # Strip the internal marker; render the detection call.
-        kw = {k: v for k, v in level33_kwargs.items() if k != "_detection"}
+        kw = _level33_detection_kwargs(
+            {k: v for k, v in level33_kwargs.items() if k != "_detection"})
         return ["", "data = run_level33_ustar_detection(", "    data,",
                 *_kwargs_lines(kw, _level33_detection_defaults()), ")"]
     return ["", "data = run_level33_constant_ustar(", "    data,",

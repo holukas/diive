@@ -10,8 +10,9 @@ Entry points:
 * ``run_level33_constant_ustar`` — apply pre-determined constant threshold(s).
 * ``run_level33_variable_ustar`` — apply time-varying (e.g. per-year, VUT)
   threshold Series, one per scenario.
-* ``run_level33_ustar_detection`` — auto-detect the threshold via bootstrap, then
-  apply it as CUT (constant) or VUT (per-year), selected with ``mode=``.
+* ``run_level33_ustar_detection`` — detect the threshold from the data
+  (``detection_mode=``: ONEFlux, REddyProc, ...), then apply it as CUT
+  (constant) or VUT (per-year), selected with ``mode=``.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -37,7 +38,20 @@ from diive.flux.lowres.ustarthreshold import (
 )
 
 if TYPE_CHECKING:
-    from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+    from diive.flux.lowres.ustar_detection import UstarThresholdDetection
+
+
+
+def _swin_for_nighttime_only(data: FluxLevelData, nighttime_only: bool,
+                             swin_col: str | None):
+    """SW_IN series for nighttime-only u* filtering, or None when day and night are filtered."""
+    if not nighttime_only:
+        return None
+    if not swin_col:
+        raise ValueError("nighttime_only=True needs swin_col (incoming shortwave radiation).")
+    if swin_col not in data.full_df.columns:
+        raise ValueError(f"swin_col {swin_col!r} not found in data.full_df.")
+    return data.full_df[swin_col].reindex(data.fpc_df.index)
 
 
 def run_level33_constant_ustar(
@@ -45,6 +59,8 @@ def run_level33_constant_ustar(
         *,
         thresholds: list[float],
         threshold_labels: list[str] | None = None,
+        nighttime_only: bool = False,
+        swin_col: str | None = None,
         showplot: bool = True,
         verbose: bool = True,
 ) -> FluxLevelData:
@@ -85,6 +101,11 @@ def run_level33_constant_ustar(
             (positional index, **not** percentile). For percentile-based
             thresholds always pass explicit labels so the provenance is
             preserved in column names and result keys.
+        nighttime_only: If True, only nighttime records (``swin_col`` below
+            10 W m-2, or missing) are filtered, as REddyProc does by default.
+            Defaults to False: day and night are filtered, as in ONEFlux.
+        swin_col: Incoming shortwave radiation column (W m-2) in
+            ``data.full_df``. Needed for ``nighttime_only``.
         showplot: Show diagnostic plots. Defaults to True.
         verbose: Print progress. Defaults to True.
 
@@ -160,6 +181,7 @@ def run_level33_constant_ustar(
             f"got {len(thresholds)} thresholds and {len(threshold_labels)} labels."
         )
     _validate_ustar_labels(threshold_labels)
+    swin = _swin_for_nighttime_only(data, nighttime_only, swin_col)
 
     idstr = 'L3.3'
     meta = data.meta
@@ -180,6 +202,8 @@ def run_level33_constant_ustar(
         threshold_labels=threshold_labels,
         idstr=idstr,
         showplot=showplot,
+        swin=swin,
+        nighttime_only=nighttime_only,
     )
     level33.calc()
 
@@ -277,6 +301,8 @@ def run_level33_variable_ustar(
         data: FluxLevelData,
         *,
         threshold_series: dict,
+        nighttime_only: bool = False,
+        swin_col: str | None = None,
         showplot: bool = True,
         verbose: bool = True,
 ) -> FluxLevelData:
@@ -295,6 +321,7 @@ def run_level33_variable_ustar(
         threshold_series: mapping ``{scenario_label: per_record_threshold_Series}``. Each
             Series must align to the flux index and contain no NaN. Labels must be unique
             and not substrings of one another (e.g. ``VUT_16`` / ``VUT_50`` / ``VUT_84``).
+        nighttime_only, swin_col: as in :func:`run_level33_constant_ustar`.
         showplot: show diagnostic plots. Defaults to True.
         verbose: print progress. Defaults to True.
 
@@ -315,6 +342,7 @@ def run_level33_variable_ustar(
 
     scenario_labels = list(threshold_series)
     _validate_ustar_labels(scenario_labels)
+    swin = _swin_for_nighttime_only(data, nighttime_only, swin_col)
 
     # Energy fluxes (H/LE/...) have no physical USTAR threshold; reject positive ones.
     _energy_basevars_lower = {'h2o', 't_sonic', 'sonic_temperature'}
@@ -344,6 +372,8 @@ def run_level33_variable_ustar(
         idstr=idstr,
         showplot=showplot,
         verbose=verbose,
+        swin=swin,
+        nighttime_only=nighttime_only,
     )
     level33.calc()
 
@@ -357,30 +387,38 @@ def run_level33_ustar_detection(
         *,
         ta_col: str,
         swin_col: str,
-        detector_class=None,
-        detector_kwargs: dict | None = None,
-        n_iter: int = 100,
+        detection_mode: str = 'oneflux',
+        detection_kwargs: dict | None = None,
+        n_iter: int | None = None,
         n_jobs: int = 1,
         percentiles: tuple[int, ...] = (16, 50, 84),
         mode: str = 'cut',
+        nighttime_only: bool = False,
+        detector_class=None,
+        detector_kwargs: dict | None = None,
         showplot: bool = True,
         verbose: bool = True,
 ) -> FluxLevelData:
     """
-    Level-3.3: Auto-detect the USTAR threshold, then apply it (CUT and/or VUT).
+    Level-3.3: Detect the USTAR threshold from the data, then apply it (CUT or VUT).
 
-    Runs a multi-year bootstrap USTAR threshold detection (using the ONEFlux moving
-    point method by default) and applies the result as USTAR filtering scenarios,
-    one per requested percentile. Which thresholds are applied is set by ``mode``:
+    Runs :class:`~diive.flux.lowres.ustar_detection.UstarThresholdDetection` and
+    applies the result as USTAR filtering scenarios, one per requested percentile.
+    ``detection_mode`` selects the method:
+
+    * ``'oneflux'`` (default) — ONEFlux (FLUXNET2015, ICOS): moving point and
+      change point thresholds per year, pooled.
+    * ``'oneflux_mp'`` / ``'oneflux_cp'`` — ONEFlux with one of the two methods only.
+    * ``'reddyproc'`` — REddyProc 1.3.4.
+
+    Which thresholds are applied is set by ``mode``:
 
     * ``'cut'`` (default) — **CUT** (Constant U\\* Threshold): one constant threshold
-      per percentile, pooled across all years, applied via ``run_level33_constant_ustar``.
-      Scenarios labelled ``CUT_<p>``.
-    * ``'vut'`` — **VUT** (Variable U\\* Threshold): a per-year threshold per percentile
-      (each year filtered by its own value), applied via ``run_level33_variable_ustar``.
-      Scenarios labelled ``VUT_<p>``. diive's VUT is smoothed over a 3-year window
-      (see :class:`UstarBootstrapThresholds`); a year with no detected threshold falls
-      back to the CUT value for that percentile.
+      per percentile from the thresholds of all years, applied via
+      ``run_level33_constant_ustar``. Scenarios labelled ``CUT_<p>``.
+    * ``'vut'`` — **VUT** (Variable U\\* Threshold): a threshold per year and
+      percentile, applied via ``run_level33_variable_ustar``. Scenarios labelled
+      ``VUT_<p>``. A year with no threshold falls back to the CUT value.
 
     CUT and VUT are mutually exclusive filtering strategies — one is applied before
     gap-filling (the percentiles are the uncertainty scenarios within the chosen strategy).
@@ -391,56 +429,60 @@ def run_level33_ustar_detection(
     **When to use which function:**
 
     * ``run_level33_constant_ustar`` — you already have a threshold from an external
-      analysis (e.g. REddyProc) or a previous run.  Fastest; no computation overhead.
-    * ``run_level33_ustar_detection`` — you want the threshold computed automatically
-      from the data in the same pipeline run.  Slower (bootstrap) but fully reproducible.
+      analysis or a previous run. Fastest, no computation.
+    * ``run_level33_ustar_detection`` — you want the threshold computed from the
+      data in the same pipeline run. Slower (bootstrap) but reproducible.
 
     Args:
         data: FluxLevelData after ``run_level32()``.
         ta_col: Air temperature column name (deg C) in ``data.full_df``.
             Used to stratify nighttime records into temperature classes.
         swin_col: Incoming shortwave radiation column (W m-2) in ``data.full_df``.
-            Used to identify nighttime periods (SW_IN < 10 W m-2).
-        detector_class: USTAR detection class to use.  Must implement ``detect()``
-            and ``get_annual_thresholds()``.  Defaults to
-            ``UstarMovingPointDetection`` (ONEFlux algorithm, Papale et al. 2006).
-        detector_kwargs: Extra keyword arguments forwarded to the detector constructor
-            (e.g. ``ta_classes_count``, ``ustar_classes_count``).  The column-name
-            arguments (``nee_col``, ``ta_col``, ``ustar_col``, ``swin_col``) are set
-            automatically and must not be included here.
-        n_iter: Bootstrap iterations per year window. Defaults to 100.
-        n_jobs: Parallel workers for the bootstrap (1 = sequential, -1 = all CPUs).
-            Defaults to 1.
-        percentiles: Bootstrap percentiles to compute and use as separate USTAR
-            scenarios.  Each value ``p`` produces one scenario labelled
-            ``CUT_<p>`` (``VUT_<p>`` with ``mode='vut'``), zero-padded to a
-            uniform width so labels can never be substrings of each other
-            (e.g. ``(16, 50, 84)`` -> ``CUT_16`` / ``CUT_50`` / ``CUT_84``,
-            ``(5, 50, 95)`` -> ``CUT_05`` / ``CUT_50`` / ``CUT_95``).  Defaults
-            to ``(16, 50, 84)``.
+            Defines the night for the detection (and for ``nighttime_only``).
+        detection_mode: ``'oneflux'`` (default), ``'oneflux_mp'``, ``'oneflux_cp'``
+            or ``'reddyproc'``, see above.
+        detection_kwargs: Extra keyword arguments for ``UstarThresholdDetection``
+            (e.g. ``random_state``, ``mp_kwargs``). The column names, ``mode``,
+            ``n_iter``, ``n_jobs`` and ``percentiles`` are set from the arguments
+            of this function and must not be included here.
+        n_iter: Bootstrap draws per year (and method). Defaults to the reference
+            value of the mode (100 for ONEFlux, 200 for REddyProc).
+        n_jobs: Parallel workers (1 = sequential, -1 = all CPUs). Defaults to 1.
+        percentiles: Bootstrap percentiles used as separate USTAR scenarios. Each
+            value ``p`` produces one scenario labelled ``CUT_<p>`` (``VUT_<p>``
+            with ``mode='vut'``), zero-padded to a uniform width so labels can
+            never be substrings of each other (e.g. ``(5, 50, 95)`` ->
+            ``CUT_05`` / ``CUT_50`` / ``CUT_95``). Defaults to ``(16, 50, 84)``.
         mode: ``'cut'`` (default) or ``'vut'``, see above.
+        nighttime_only: If True, only nighttime records are filtered (as
+            REddyProc). Defaults to False (day and night, as ONEFlux).
+        detector_class: Deprecated. ``UstarMovingPointDetection`` maps to
+            ``detection_mode='oneflux_mp'``.
+        detector_kwargs: Deprecated. With ``detector_class``, the arguments of the
+            moving point detection (passed on as ``mp_kwargs``).
         showplot: Show diagnostic plots from USTAR filtering. Defaults to True.
         verbose: Print progress and detection summary. Defaults to True.
 
     Returns:
         Updated FluxLevelData with ``levels.level33``, ``levels.level33_qcf``,
         ``levels.filteredseries_level33_qcf``, ``levels.filteredseries_level33_hq``,
-        and ``levels.ustar_detection`` populated.  The ``ustar_detection`` attribute
-        holds the fitted ``UstarBootstrapThresholds`` instance so you can inspect
-        annual per-year thresholds and the full bootstrap summary afterwards::
+        and ``levels.ustar_detection`` populated. ``ustar_detection`` holds the
+        fitted ``UstarThresholdDetection``, so you can inspect the per-year
+        thresholds and the bootstrap values afterwards::
 
             print(data.levels.ustar_detection.summary())
-            annual = data.levels.ustar_detection.annual_stats_
+            vut = data.levels.ustar_detection.get_vut_thresholds()
 
     Raises:
         RuntimeError: If ``run_level31()`` or ``run_level32()`` has not been
             called, or if threshold detection produces NaN for any requested
             percentile (e.g. too little nighttime data).
         ValueError: If ``mode`` is not ``'cut'`` or ``'vut'``, or
-            ``detector_kwargs`` holds a column-name key.
+            ``detection_kwargs`` holds a key set by this function.
     """
-    from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
-    from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
+    import warnings
+
+    from diive.flux.lowres.ustar_detection import UstarThresholdDetection
 
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level33_ustar_detection().")
@@ -450,69 +492,80 @@ def run_level33_ustar_detection(
             "Outliers at low USTAR bias the bootstrap threshold estimate — "
             "screen them out at L3.2 first."
         )
-
-    if detector_class is None:
-        detector_class = UstarMovingPointDetection
-
-    meta = data.meta
-    flux_corrected_col = data.levels.flux_corrected_col
-
-    # Assemble detection DataFrame: storage-corrected flux + required met drivers
-    det_df = data.full_df[[ta_col, swin_col, meta.ustarcol]].copy()
-    det_df[flux_corrected_col] = data.fpc_df[flux_corrected_col]
-
-    # Column-name kwargs are set here from the explicit ta_col / swin_col /
-    # data.meta.ustarcol arguments; allowing detector_kwargs to also supply
-    # them would silently override one of two conflicting truths. Raise so the
-    # user removes the duplicate rather than guessing which one wins.
-    _reserved = ('nee_col', 'ta_col', 'ustar_col', 'swin_col')
-    conflicts = sorted(set(_reserved).intersection(detector_kwargs or {}))
-    if conflicts:
-        raise ValueError(
-            f"detector_kwargs contains reserved column-name key(s) {conflicts}. "
-            f"These are set automatically from the explicit arguments "
-            f"(ta_col, swin_col, data.meta.ustarcol) and the storage-corrected "
-            f"flux column. Remove them from detector_kwargs."
-        )
-    kw = dict(detector_kwargs or {})
-    kw['nee_col'] = flux_corrected_col
-    kw['ta_col'] = ta_col
-    kw['ustar_col'] = meta.ustarcol
-    kw['swin_col'] = swin_col
-
-    rule("Level 3.3: USTAR Threshold Detection", verbose=verbose)
-    info(f"{detector_class.__name__}  {n_iter} iterations  n_jobs={n_jobs}",
-         verbose=verbose)
-
-    boot: UstarBootstrapThresholds = UstarBootstrapThresholds(
-        df=det_df,
-        detector_class=detector_class,
-        detector_kwargs=kw,
-        n_iter=n_iter,
-        n_jobs=n_jobs,
-        percentiles=percentiles,
-        verbose=int(verbose),
-    )
     mode = str(mode).lower()
     if mode not in ('cut', 'vut'):
         raise ValueError(f"mode must be 'cut' or 'vut', got {mode!r}.")
 
-    boot.run()
-    cut = boot.get_cut_threshold()
+    det_kwargs = dict(detection_kwargs or {})
+    _reserved = ('df', 'nee_col', 'ta_col', 'ustar_col', 'swin_col', 'mode', 'n_iter',
+                 'n_jobs', 'percentiles')
+    conflicts = sorted(set(_reserved).intersection(det_kwargs))
+    if conflicts:
+        raise ValueError(
+            f"detection_kwargs contains key(s) {conflicts} that are set from the "
+            f"arguments of run_level33_ustar_detection. Remove them from detection_kwargs."
+        )
+    if detector_class is not None or detector_kwargs is not None:
+        from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
+        if detector_class not in (None, UstarMovingPointDetection):
+            raise ValueError(
+                f"detector_class={getattr(detector_class, '__name__', detector_class)} is no "
+                f"longer supported. Use detection_mode='oneflux', 'oneflux_mp', "
+                f"'oneflux_cp' or 'reddyproc'.")
+        warnings.warn(
+            "detector_class and detector_kwargs are deprecated and will be removed. Use "
+            "detection_mode='oneflux_mp' and detection_kwargs={'mp_kwargs': {...}}.",
+            FutureWarning, stacklevel=2)
+        mp_kw = {k: v for k, v in (detector_kwargs or {}).items()
+                 if k not in ('nee_col', 'ta_col', 'ustar_col', 'swin_col', 'verbose')}
+        if len(mp_kw) != len({k: v for k, v in (detector_kwargs or {}).items() if k != 'verbose'}):
+            raise ValueError(
+                "detector_kwargs contains reserved column-name key(s). These are set "
+                "automatically from ta_col, swin_col, data.meta.ustarcol and the "
+                "storage-corrected flux column.")
+        detection_mode = 'oneflux_mp'
+        det_kwargs.setdefault('mp_kwargs', mp_kw)
+
+    meta = data.meta
+    flux_corrected_col = data.levels.flux_corrected_col
+
+    # Detection input: storage-corrected flux after L3.2 + the met drivers
+    det_df = data.full_df[[ta_col, swin_col, meta.ustarcol]].copy()
+    det_df[flux_corrected_col] = data.fpc_df[flux_corrected_col]
+
+    rule("Level 3.3: USTAR Threshold Detection", verbose=verbose)
+    info(f"UstarThresholdDetection mode={detection_mode!r}  n_jobs={n_jobs}",
+         verbose=verbose)
+
+    det: UstarThresholdDetection = UstarThresholdDetection(
+        df=det_df,
+        nee_col=flux_corrected_col,
+        ta_col=ta_col,
+        ustar_col=meta.ustarcol,
+        swin_col=swin_col,
+        mode=detection_mode,
+        n_iter=n_iter,
+        n_jobs=n_jobs,
+        percentiles=percentiles,
+        verbose=verbose,
+        **det_kwargs,
+    )
+    det.run()
+    cut = det.get_cut_threshold()
+    boot = det
 
     if verbose:
-        _console.print(boot.summary())
+        _console.print(det.summary())
 
     # Extract the constant (CUT) threshold per percentile; raise if any are NaN.
     cut_thresholds = []
     for p in percentiles:
-        thr = cut.get(f'p{p}', np.nan)
+        thr = cut.get(f'p{p:g}', np.nan)
         if np.isnan(thr):
             raise RuntimeError(
                 f"USTAR threshold detection produced NaN for percentile {p}. "
-                "Check that the dataset has enough nighttime records: at least 3000 "
-                "in total and 700 per season. If every season has fewer, all nights "
-                "are pooled into one season, which needs at least 160."
+                "Check that the dataset has enough valid nighttime records "
+                "(see data.levels.ustar_detection.failures_ for the reasons per year)."
             )
         cut_thresholds.append(float(thr))
     # Zero-pad to a uniform width so labels can never be substrings of one
@@ -526,6 +579,7 @@ def run_level33_ustar_detection(
         labels = [f'CUT_{int(p):0{_label_width}d}' for p in percentiles]
         updated = run_level33_constant_ustar(
             data, thresholds=cut_thresholds, threshold_labels=labels,
+            nighttime_only=nighttime_only, swin_col=swin_col,
             showplot=showplot, verbose=verbose)
     else:  # vut
         # Build per-record (VUT) threshold Series per percentile from the per-year
@@ -537,7 +591,7 @@ def run_level33_ustar_detection(
         vut = boot.get_vut_thresholds()
         threshold_series: dict = {}
         for p, cut_val in zip(percentiles, cut_thresholds, strict=False):
-            col = f'p{p}'
+            col = f'p{p:g}'
             per_year = {int(y): (vut.loc[y, col] if (y in vut.index
                         and np.isfinite(vut.loc[y, col])) else cut_val)
                         for y in vut.index}
@@ -545,8 +599,9 @@ def run_level33_ustar_detection(
             threshold_series[f'VUT_{int(p):0{_label_width}d}'] = pd.Series(values, index=index)
         updated = run_level33_variable_ustar(
             data, threshold_series=threshold_series,
+            nighttime_only=nighttime_only, swin_col=swin_col,
             showplot=showplot, verbose=verbose)
 
-    # Attach the bootstrap instance to levels for post-hoc inspection
+    # Attach the detection instance to levels for post-hoc inspection
     new_levels = replace(updated.levels, ustar_detection=boot)
     return replace(updated, levels=new_levels)

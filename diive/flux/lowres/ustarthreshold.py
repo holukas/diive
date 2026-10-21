@@ -21,6 +21,11 @@ from diive.core.base.flagbase import FlagBase
 from diive.core.utils.console import detail
 from diive.variables import daytime_nighttime_flag_from_swinpot
 
+# Records with SW_IN below this value, or without SW_IN, count as night when only
+# nighttime records are filtered (REddyProc sMDSGapFillAfterUstar, swThr = 10,
+# EddyGapfilling.R:691, 744-745).
+NIGHTTIME_SWIN_THRESHOLD = 10
+
 
 class FlagMultipleConstantUstarThresholds:
     """
@@ -56,6 +61,11 @@ class FlagMultipleConstantUstarThresholds:
         showplot: If True, displays filtering results. Default True.
         verbose: If True, prints filtering statistics. Default True.
         idstr: Optional identifier string for output columns
+        swin: Incoming shortwave radiation (W m-2). Needed for ``nighttime_only``.
+        nighttime_only: If True, only nighttime records are filtered (SW_IN below
+            10 W m-2 or missing), as REddyProc does by default. Daytime records are
+            kept whatever their u*. Default False: day and night are filtered, as
+            in ONEFlux.
 
     Example:
         See `examples/flux/postprocessingchain/postprocessingchain_composable.py` for complete examples
@@ -63,7 +73,8 @@ class FlagMultipleConstantUstarThresholds:
     """
 
     def __init__(self, series, ustar, thresholds, threshold_labels,
-                 showplot: bool = True, verbose: bool = True, idstr: str = None):
+                 showplot: bool = True, verbose: bool = True, idstr: str = None,
+                 swin: Series = None, nighttime_only: bool = False):
         """Set up flagging for several constant USTAR thresholds. See the class docstring for parameters."""
         self.series = series
         self.ustar = ustar
@@ -72,6 +83,8 @@ class FlagMultipleConstantUstarThresholds:
         self.showplot = showplot
         self.verbose = verbose
         self.idstr = idstr
+        self.swin = swin
+        self.nighttime_only = nighttime_only
 
         self._results = pd.concat([self.series, self.ustar], axis=1).copy()
 
@@ -96,7 +109,9 @@ class FlagMultipleConstantUstarThresholds:
                 threshold=threshold,
                 idstr=idstr,
                 showplot=self.showplot,
-                verbose=self.verbose
+                verbose=self.verbose,
+                swin=self.swin,
+                nighttime_only=self.nighttime_only,
             )
             ust.calc()
             flag = ust.get_flag()
@@ -114,7 +129,9 @@ class FlagSingleConstantUstarThreshold(FlagBase):
                  threshold: float,
                  idstr: str = None,
                  showplot: bool = False,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 swin: Series = None,
+                 nighttime_only: bool = False):
         """Flag records below a single constant USTAR threshold.
 
         A record is kept only where ``ustar >= threshold`` can be shown, so a record
@@ -138,10 +155,19 @@ class FlagSingleConstantUstarThreshold(FlagBase):
             idstr: Optional identifier string appended to the flag column name.
             showplot: If True, show the default rejected-values plot.
             verbose: If True, print detection statistics.
+            swin: Incoming shortwave radiation (W m-2), aligned to *series*. Needed
+                for ``nighttime_only``.
+            nighttime_only: If True, only nighttime records (SW_IN below 10 W m-2,
+                or no SW_IN) are tested. Daytime records always pass. This is
+                REddyProc's default. Default False (day and night, as ONEFlux).
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
+        if nighttime_only and swin is None:
+            raise ValueError("nighttime_only=True needs swin (incoming shortwave radiation).")
         self.ustar = ustar
         self.threshold = threshold
+        self.swin = swin
+        self.nighttime_only = nighttime_only
         self.showplot = False
         self.verbose = False
         self.showplot = showplot
@@ -174,6 +200,11 @@ class FlagSingleConstantUstarThreshold(FlagBase):
         # with CUT_NONE for H and LE). Every record passes, even one without
         # USTAR. A real threshold is always positive, so this cannot change it.
         passes |= (np.asarray(self.threshold) <= 0)
+        if self.nighttime_only:
+            # Daytime records pass. A record without SW_IN counts as night, as in
+            # REddyProc (EddyGapfilling.R:744-745).
+            swin = self.swin.reindex(passes.index)
+            passes |= (swin >= NIGHTTIME_SWIN_THRESHOLD).to_numpy()
         ok = passes[passes].index
         rejected = passes[~passes].index
         n_outliers = len(rejected)
@@ -211,11 +242,13 @@ class FlagMultipleVariableUstarThresholds:
         threshold_series: mapping ``{scenario_label: per_record_threshold_Series}``. Each
             threshold Series must align to ``series.index`` and contain no NaN (the caller
             resolves any missing periods first).
-        showplot, verbose, idstr: as in :class:`FlagMultipleConstantUstarThresholds`.
+        showplot, verbose, idstr, swin, nighttime_only: as in
+            :class:`FlagMultipleConstantUstarThresholds`.
     """
 
     def __init__(self, series, ustar, threshold_series: dict,
-                 showplot: bool = True, verbose: bool = True, idstr: str = None):
+                 showplot: bool = True, verbose: bool = True, idstr: str = None,
+                 swin: Series = None, nighttime_only: bool = False):
         """Set up flagging for per-record (variable) USTAR thresholds. See the class docstring."""
         self.series = series
         self.ustar = ustar
@@ -223,6 +256,8 @@ class FlagMultipleVariableUstarThresholds:
         self.showplot = showplot
         self.verbose = verbose
         self.idstr = idstr
+        self.swin = swin
+        self.nighttime_only = nighttime_only
         self._results = pd.concat([self.series, self.ustar], axis=1).copy()
 
     @property
@@ -258,6 +293,8 @@ class FlagMultipleVariableUstarThresholds:
                 idstr=idstr,
                 showplot=self.showplot,
                 verbose=self.verbose,
+                swin=self.swin,
+                nighttime_only=self.nighttime_only,
             )
             ust.calc()
             flag = ust.get_flag()

@@ -115,13 +115,16 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
 
     - ``'constant'`` (default) — apply pre-computed thresholds from
       ``config.ustar_thresholds`` (e.g. produced by REddyProc externally).
-    - ``'bootstrap'`` — detect thresholds from the data via multi-year
-      bootstrap (FLUXNET standard, Papale et al. 2006). Requires
+    - ``'bootstrap'`` — detect thresholds from the data with the method in
+      ``config.ustar_bootstrap_detection_mode`` (ONEFlux by default). Requires
       ``config.ustar_bootstrap_ta_col`` / ``..._swin_col``; thresholds and
       ``CUT_<p>`` labels are generated from
       ``config.ustar_bootstrap_percentiles`` (default ``(16, 50, 84)``). The
-      fitted :class:`UstarBootstrapThresholds` is attached to
+      fitted :class:`UstarThresholdDetection` is attached to
       ``data.levels.ustar_detection``.
+
+    With ``config.ustar_nighttime_only=True`` only nighttime records are
+    filtered (as REddyProc), otherwise day and night (as ONEFlux).
 
     *Level-4.1 (gap-filling)* — runs only the methods whose
     ``config.gapfill_*`` flag is ``True``. MDS runs in ``config.mds_mode``
@@ -159,9 +162,8 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
       sequential ``addflag()``), and Hampel sub-options
       (``use_differencing``, ``repeat``, ``k``, ``window_length`` per call).
     - **L3.3** — diagnostic ``showplot=True`` and ``verbose=True`` (both
-      forced to ``False`` here for non-interactive use), custom
-      ``detector_class`` / ``detector_kwargs`` in bootstrap mode (defaults
-      to ONEFlux moving-point), and VUT (``mode='vut'``).
+      forced to ``False`` here for non-interactive use), extra
+      ``detection_kwargs`` in bootstrap mode, and VUT (``mode='vut'``).
     - **L4.1 MDS** — ``swin_tol`` / ``ta_tol`` / ``vpd_tol`` /
       ``avg_min_n_vals`` (fixed at :class:`FluxMDS` defaults).
     - **L4.1 RF / XGBoost** — model hyperparameters (``n_estimators``,
@@ -244,6 +246,12 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
                 "thresholds; e.g. ['CUT_16', 'CUT_50', 'CUT_84'])"
             )
     else:  # 'bootstrap'
+        from diive.flux.lowres.ustar_detection import USTAR_MODES
+        if config.ustar_bootstrap_detection_mode not in USTAR_MODES:
+            raise ValueError(
+                f"ustar_bootstrap_detection_mode must be one of {USTAR_MODES}; "
+                f"got {config.ustar_bootstrap_detection_mode!r}."
+            )
         if not config.ustar_bootstrap_ta_col:
             _missing.append(
                 "ustar_bootstrap_ta_col (ustar_detection_mode='bootstrap')"
@@ -252,6 +260,9 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             _missing.append(
                 "ustar_bootstrap_swin_col (ustar_detection_mode='bootstrap')"
             )
+    if (config.ustar_nighttime_only and config.ustar_detection_mode == 'constant'
+            and not config.ustar_swin_col):
+        _missing.append("ustar_swin_col (ustar_nighttime_only=True)")
     # L3.2 runs unconditionally in run_chain (L3.3 depends on it), but the
     # Hampel filter ships its own sensible defaults — window_length=48*13,
     # n_sigma_daytime/nighttime=5.5, use_differencing=True, day/night split.
@@ -467,17 +478,21 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             thresholds=list(config.ustar_thresholds),
             threshold_labels=(list(config.ustar_labels)
                               if config.ustar_labels is not None else None),
+            nighttime_only=config.ustar_nighttime_only,
+            swin_col=config.ustar_swin_col,
             showplot=False,
             verbose=False,
         )
-    else:  # 'bootstrap' — detect thresholds from the data via multi-year
-        # bootstrap. Slower than constant mode but follows the FLUXNET-standard
-        # workflow. The fitted UstarBootstrapThresholds is attached to
-        # data.levels.ustar_detection for post-hoc inspection.
+    else:  # 'bootstrap' — detect thresholds from the data. Slower than
+        # constant mode but follows the FLUXNET-standard workflow. The fitted
+        # UstarThresholdDetection is attached to data.levels.ustar_detection
+        # for post-hoc inspection.
         data = run_level33_ustar_detection(
             data,
             ta_col=config.ustar_bootstrap_ta_col,
             swin_col=config.ustar_bootstrap_swin_col,
+            detection_mode=config.ustar_bootstrap_detection_mode,
+            nighttime_only=config.ustar_nighttime_only,
             n_iter=config.ustar_bootstrap_n_iter,
             n_jobs=config.ustar_bootstrap_n_jobs,
             percentiles=tuple(config.ustar_bootstrap_percentiles),

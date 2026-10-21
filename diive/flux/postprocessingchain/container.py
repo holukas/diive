@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from diive.flux.lowres.storage_correction import (
         FluxStorageCorrectionSinglePointEddyPro,
     )
-    from diive.flux.lowres.ustar_bootstrap import UstarBootstrapThresholds
+    from diive.flux.lowres.ustar_detection import UstarThresholdDetection
     from diive.flux.lowres.ustarthreshold import (
         FlagMultipleConstantUstarThresholds,
         FlagMultipleVariableUstarThresholds,
@@ -135,11 +135,12 @@ class FluxConfig:
             gapfill_mds=False,  # MDS not appropriate for N2O without dedicated drivers
         )
 
-    Example — detect USTAR thresholds via bootstrap (FLUXNET standard)::
+    Example — detect USTAR thresholds from the data (ONEFlux, FLUXNET standard)::
 
         nee_boot_cfg = FluxConfig(
             fluxcol='FC',
             ustar_detection_mode='bootstrap',
+            ustar_bootstrap_detection_mode='oneflux',  # or 'reddyproc', ...
             ustar_bootstrap_ta_col='TA_1_1_1',
             ustar_bootstrap_swin_col='SW_IN_1_1_1',
             ustar_bootstrap_percentiles=(16, 50, 84),  # produces CUT_16/50/84
@@ -149,8 +150,9 @@ class FluxConfig:
             level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
             mds_swin='SW_IN_1_1_1', mds_ta='TA_1_1_1', mds_vpd='VPD_kPa_1_1_1',
         )
-        # The fitted bootstrap instance is available on data.levels.ustar_detection
-        # after run_chain() for inspection of annual/per-year statistics.
+        # The fitted UstarThresholdDetection is available on
+        # data.levels.ustar_detection after run_chain() (per-year thresholds,
+        # bootstrap values).
     """
 
     # ------------------------------------------------------------------ required
@@ -170,11 +172,11 @@ class FluxConfig:
     - ``'constant'`` (default) — use the values you provide in
       ``ustar_thresholds`` directly (e.g. previously computed by REddyProc).
       Fastest; no per-call computation. Required field: ``ustar_thresholds``.
-    - ``'bootstrap'`` — detect thresholds from the data itself via
-      multi-year bootstrap (ONEFlux moving-point method by default,
-      Papale et al. 2006). Slower but fully reproducible within the
-      pipeline. Required fields: ``ustar_bootstrap_ta_col`` and
-      ``ustar_bootstrap_swin_col``. ``ustar_thresholds`` /
+    - ``'bootstrap'`` — detect thresholds from the data itself with
+      :class:`~diive.flux.lowres.ustar_detection.UstarThresholdDetection`
+      (method set by ``ustar_bootstrap_detection_mode``, ONEFlux by
+      default). Slower but reproducible within the pipeline. Required
+      fields: ``ustar_bootstrap_ta_col`` and ``ustar_bootstrap_swin_col``. ``ustar_thresholds`` /
       ``ustar_labels`` are ignored in this mode — thresholds and
       ``CUT_<p>`` labels are produced from
       ``ustar_bootstrap_percentiles``."""
@@ -209,9 +211,15 @@ class FluxConfig:
     the bootstrap detector to identify nighttime periods. Required when
     ``ustar_detection_mode='bootstrap'``; ignored otherwise."""
 
-    ustar_bootstrap_n_iter: int = 100
-    """Bootstrap iterations per year window. Larger values give tighter
-    percentile estimates at proportional runtime cost. Used only when
+    ustar_bootstrap_detection_mode: str = 'oneflux'
+    """Detection method when ``ustar_detection_mode='bootstrap'``:
+    ``'oneflux'`` (default, moving point and change point pooled, as
+    FLUXNET2015 and ICOS), ``'oneflux_mp'``, ``'oneflux_cp'`` or
+    ``'reddyproc'``. See :class:`UstarThresholdDetection`."""
+
+    ustar_bootstrap_n_iter: int | None = None
+    """Bootstrap draws per year (and method). None uses the reference value of
+    the detection mode (100 for ONEFlux, 200 for REddyProc). Used only when
     ``ustar_detection_mode='bootstrap'``."""
 
     ustar_bootstrap_n_jobs: int = 1
@@ -222,6 +230,17 @@ class FluxConfig:
     """Bootstrap percentiles to compute and use as separate USTAR scenarios.
     Each value ``p`` produces one scenario labelled ``CUT_<p>``. Used only
     when ``ustar_detection_mode='bootstrap'``."""
+
+    ustar_nighttime_only: bool = False
+    """If True, u* filtering removes only nighttime records (SW_IN below
+    10 W m-2, or missing), as REddyProc does by default. False (default)
+    filters day and night, as ONEFlux. Needs ``ustar_swin_col`` in constant
+    mode."""
+
+    ustar_swin_col: str | None = None
+    """Incoming shortwave radiation column (W m-2) that defines the night for
+    ``ustar_nighttime_only`` in constant mode. Bootstrap mode uses
+    ``ustar_bootstrap_swin_col`` for both the detection and the filtering."""
 
     level2_test_settings: dict | None = None
     """Which Level-2 quality tests to run, and the settings for each.
@@ -572,8 +591,8 @@ class LevelResults:
     level33_qcf: dict[str, FlagQCF] = field(default_factory=dict)
     filteredseries_level33_qcf: dict[str, pd.Series] = field(default_factory=dict)
     filteredseries_level33_hq: dict[str, pd.Series] = field(default_factory=dict)
-    ustar_detection: 'UstarBootstrapThresholds | None' = None
-    """``UstarBootstrapThresholds`` instance when ``run_level33_ustar_detection``
+    ustar_detection: 'UstarThresholdDetection | None' = None
+    """``UstarThresholdDetection`` instance when ``run_level33_ustar_detection``
     was used; ``None`` otherwise."""
 
     # Level-4.1 — one dict per gap-filling method, keyed by USTAR scenario
