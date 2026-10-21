@@ -581,6 +581,76 @@ A: A friction velocity column. ``init_flux_data`` reads it under the name given
    ``run_level33_ustar_detection``, which also needs an air temperature and an
    incoming shortwave radiation column.
 
+   By default, u* filtering removes day and night records below the threshold,
+   as ONEFlux does. ``nighttime_only=True`` removes only nighttime records
+   (SW_IN below 10 W m-2, or missing), as REddyProc does. It needs ``swin_col``.
+
+**Q: How do I detect the USTAR threshold from the data?**
+
+A: ``dv.flux.UstarThresholdDetection`` bootstraps each calendar year and
+   reports percentiles of the bootstrap thresholds. ``mode`` selects the method:
+
+   ================  ============================================================
+   ``mode``          Method
+   ================  ============================================================
+   ``'oneflux'``     Default. ONEFlux, as used for FLUXNET2015 and ICOS: moving
+                     point (Papale et al. 2006) and change point (Barr et al.
+                     2013) thresholds, 100 draws per method and year, pooled.
+   ``'oneflux_mp'``  ONEFlux, moving point thresholds only.
+   ``'oneflux_cp'``  ONEFlux, change point thresholds only.
+   ``'reddyproc'``   REddyProc 1.3.4: moving point with its own seasons, 200
+                     values per year (the estimate plus 199 resamples).
+   ================  ============================================================
+
+   .. code-block:: python
+
+      import diive as dv
+
+      df = dv.load_exampledata_parquet_lae()
+      det = dv.flux.UstarThresholdDetection(
+          df, nee_col='NEE_L3.1_L3.2_QCF_IRGA72', ta_col='TA_T1_47_1_gfXG_IRGA72',
+          ustar_col='USTAR_IRGA72', swin_col='SW_IN_T1_47_1_gfXG_IRGA72',
+          mode='oneflux')
+      vut = det.run()  # one row per year, columns p16, p50, p84
+      cut = det.get_cut_threshold()  # {'p16': ..., 'p50': ..., 'p84': ...}
+      print(det.summary())
+
+   The VUT (variable u* threshold) gives one threshold per year. In the ONEFlux
+   modes the VUT of year Y pools the thresholds of the years Y-1, Y and Y+1,
+   and the CUT (constant u* threshold) pools those of all years. ONEFlux
+   reports a CUT only for 3 or more years. Each mode computes the percentiles
+   as its reference software does: nearest rank for ONEFlux (p16, p50, p84),
+   R quantile type 7 for REddyProc (p5, p50, p95).
+
+   The change point method needs at least 4000 valid nighttime records in a
+   year. With fewer, the year gets no change point thresholds, as in ONEFlux,
+   and ``det.failures_`` gives the reason.
+
+   ``UstarMovingPointDetection``, ``UstarChangePointDetection`` and
+   ``UstarReddyProcDetection`` are the methods behind the modes. Use them
+   directly to look at one year in detail. ``UstarBootstrapThresholds`` and
+   ``UstarVekuriThresholdDetection`` are deprecated and will be removed. Use
+   ``UstarThresholdDetection`` instead.
+
+**Q: Why does diive give a different USTAR threshold than ONEFlux or REddyProc?**
+
+A: With the same input data it should not. The ONEFlux modes reproduce
+   ONEFlux 1.3.7, and ``mode='reddyproc'`` reproduces REddyProc 1.3.4. Check
+   these points first:
+
+   - Input. ONEFlux reads its yearly input files, written with 6 significant
+     digits. diive rounds the input the same way. NEE must be after outlier
+     removal and before u* filtering.
+   - Random draws. diive seeds the bootstrap (``random_state=42``), so a run
+     can be repeated, but its draws are not those of ONEFlux.
+     ``random_state='oneflux'`` draws the change point resamples from the same
+     random stream as ONEFlux, so the change point thresholds are identical.
+     ONEFlux seeds the moving point draws with the clock, so those can never
+     be repeated exactly.
+   - REF. ONEFlux reports a REF threshold besides the percentiles. ONEFlux
+     selects it afterwards from 40 gap-filled versions of NEE, and diive does
+     not compute it.
+
 **Q: How do I get results out of the chain?**
 
 A: ``data.fpc_df`` is the working dataframe, everything the chain produced is a
@@ -741,7 +811,7 @@ Examples and documentation
 
 **Q: Where are the examples?**
 
-A: In the ``examples/`` folder of the repository, 113 scripts sorted by domain:
+A: In the ``examples/`` folder of the repository, 112 scripts sorted by domain:
    ``analysis``, ``events``, ``features``, ``fits``, ``flux``, ``gapfilling``,
    ``io``, ``preprocessing``, ``times``, ``visualization``. They are plain
    standalone Python files, so clone the repository, edit them, and run them:
@@ -762,7 +832,7 @@ A: There is a runner:
 
       uv run python examples/run_all_examples.py
 
-   It runs all 113 of them and several take minutes, so expect a long wall time.
+   It runs all 112 of them and several take minutes, so expect a long wall time.
 
 **Q: The example does not cover my use case**
 

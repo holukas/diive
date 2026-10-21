@@ -42,9 +42,8 @@ Low-Resolution Flux Processing
 - **lowres/flux_selfheating.py** — SCOP self-heating correction (quick demo)
 - **lowres/flux_selfheating_production.py** — Complete production workflow: scaling factors from parallel measurements, applied to long-term data
 - **lowres/flux_uncertainty.py** — Random uncertainty estimation (PAS20 method)
-- **lowres/flux_ustar_mp_detection.py** — Moving Point (MP) USTAR detection (Papale et al. 2006) with multi-year bootstrap
-- **lowres/flux_ustar_vekuri_detection.py** — Quantile-based USTAR detection (Vekuri method) with multi-year bootstrap
-- **lowres/flux_ustar_method_comparison.py** — Side-by-side comparison of ONEFlux and Vekuri USTAR approaches
+- **lowres/flux_ustar_detection.py** — u* threshold detection as in ONEFlux (moving point and change point pooled), VUT and CUT
+- **lowres/flux_ustar_method_comparison.py** — Comparison of the u* detection modes ``oneflux``, ``oneflux_mp``, ``oneflux_cp`` and ``reddyproc``
 
 Related Documentation
 ---------------------
@@ -55,9 +54,11 @@ Available classes and functions in ``dv.flux``:
 - **RandomUncertaintyPAS20** — Measurement uncertainty quantification
 - **FlagMultipleConstantUstarThresholds** — USTAR filtering with multiple constant thresholds
 - **FlagMultipleVariableUstarThresholds** — USTAR filtering with time-varying (per-record, e.g. per-year VUT) thresholds. It backs ``run_level33_variable_ustar``, which is the usual way to reach it; the instance ends up in ``data.levels.level33``.
-- **UstarMovingPointDetection** — Moving-point USTAR detection (Papale et al. 2006)
-- **UstarVekuriThresholdDetection** — Quantile-based USTAR detection (Vekuri method)
-- **UstarBootstrapThresholds** — Multi-year bootstrap wrapper for any USTAR detector; 3-year sliding window. Returns **VUT** (variable, per-year p16/p50/p84 via ``get_vut_thresholds()`` / ``run()``) and **CUT** (constant, pooled across years via ``get_cut_threshold()``). diive's VUT is smoothed over the 3-year window (differs from strict single-year ONEFlux VUT)
+- **UstarThresholdDetection** — u* threshold detection with bootstrap. ``mode`` selects ``'oneflux'`` (default, moving point and change point pooled, as FLUXNET2015 and ICOS), ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Returns **VUT** (one threshold per year, ``run()`` / ``get_vut_thresholds()``) and **CUT** (one threshold for all years, ``get_cut_threshold()``)
+- **UstarMovingPointDetection** — ONEFlux moving point method (Papale et al. 2006) for one calendar year
+- **UstarChangePointDetection** — ONEFlux change point method (Barr et al. 2013) for one calendar year
+- **UstarReddyProcDetection** — u* threshold detection as in REddyProc 1.3.4
+- **UstarBootstrapThresholds**, **UstarVekuriThresholdDetection** — deprecated, use ``UstarThresholdDetection``
 - **ScopApplicator** — SCOP self-heating correction for open-path IRGA. Not re-exported on ``dv.flux``; import it from ``diive.flux.lowres`` (``from diive.flux.lowres import ScopApplicator``).
 - **run_chain / FluxConfig** — Single-call driver for the full L2→L4.2 flux post-processing pipeline; one ``FluxConfig`` per flux variable. L4.2 partitioning is opt-in via the ``partition_*`` flags (``partition_nighttime_oneflux``, ``partition_daytime_oneflux``, …) or via ``partition_method`` + ``partition_mode`` for one variant
 - **Composable level callables** — ``init_flux_data``, ``run_level2``, ``run_level31``, ``make_level32_detector`` + ``run_level32``, ``run_level33_constant_ustar`` / ``run_level33_variable_ustar`` / ``run_level33_ustar_detection`` (mode ``'cut'``/``'vut'``), ``run_level41_mds`` / ``_rf`` / ``_xgb``, ``run_level42_nighttime_oneflux`` / ``_nighttime_reddyproc`` / ``_daytime_reddyproc`` / ``_daytime_oneflux``, or ``run_level42_partitioning`` (``method`` + ``mode``); pure functions on a typed ``FluxLevelData`` container. Import them from ``diive.flux.postprocessingchain`` — only ``init_flux_data``, ``add_driver``, ``run_chain`` and ``FluxConfig`` are also re-exported on ``dv.flux``
@@ -142,8 +143,7 @@ Running Examples
    uv run python examples/flux/lowres/flux_timelag_analysis.py
    uv run python examples/flux/lowres/flux_selfheating.py
    uv run python examples/flux/lowres/flux_uncertainty.py
-   uv run python examples/flux/lowres/flux_ustar_mp_detection.py
-   uv run python examples/flux/lowres/flux_ustar_vekuri_detection.py
+   uv run python examples/flux/lowres/flux_ustar_detection.py
    uv run python examples/flux/lowres/flux_ustar_method_comparison.py
 
    # Run all flux examples

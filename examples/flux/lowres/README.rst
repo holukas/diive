@@ -29,11 +29,10 @@ Measurement Uncertainty & Turbulence
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **flux_uncertainty.py** — Random uncertainty estimation using the PAS20 method (Pastorello et al. 2020)
-- **flux_ustar_mp_detection.py** — Moving Point (MP) friction velocity detection for nighttime turbulence thresholds (Papale et al. 2006)
-- **flux_ustar_vekuri_detection.py** — Simplified quantile-based friction velocity detection (Vekuri method)
-- **flux_ustar_method_comparison.py** — Compare ONEFlux and Vekuri USTAR detection approaches
+- **flux_ustar_detection.py** — u* threshold detection as in ONEFlux: moving point (Papale et al. 2006) and change point (Barr et al. 2013) thresholds per year, pooled
+- **flux_ustar_method_comparison.py** — Compare the four u* detection modes and the share of nighttime NEE records each threshold removes
 
-All three USTAR examples use ``UstarBootstrapThresholds`` as the multi-year bootstrap wrapper. It runs N iterations per calendar year using a 3-year sliding window, then returns **VUT** (variable, per-year p16/p50/p84 — ``get_vut_thresholds()`` / ``run()``) and **CUT** (constant, pooled across all years — ``get_cut_threshold()``) thresholds, following the FLUXNET/ONEFlux convention. diive's VUT is smoothed over the 3-year window (the year plus its two neighbours) for stability, which differs from the strict single-year ONEFlux VUT. The detection algorithm (moving point vs. quantile-based) is swapped via ``detector_class``.
+Both u* examples use ``UstarThresholdDetection``. ``mode`` selects the method: ``'oneflux'`` (default), ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Each calendar year is bootstrapped on its own data. ``run()`` returns the **VUT** (one threshold per year, p16/p50/p84 for ONEFlux) and ``get_cut_threshold()`` the **CUT** (one threshold for all years). As in ONEFlux, the VUT of a year pools the thresholds of the year and its two neighbours.
 
 Running Examples
 ----------------

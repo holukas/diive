@@ -59,8 +59,6 @@ SKIP = {
         "bokeh show() opens a browser tab",
     'diive.flux.lowres.ustar_bootstrap.UstarBootstrapThresholds':
         "100 bootstrap iterations over the full record",
-    'diive.flux.lowres.ustar_mp_detection.UstarMovingPointDetection':
-        "seasonal threshold detection over the full record",
     'diive.flux.lowres.ustar_vekuri_detection.UstarVekuriThresholdDetection':
         "seasonal threshold detection over the full record",
     'diive.flux.partitioning.daytime_oneflux.DaytimePartitioningOneFlux':

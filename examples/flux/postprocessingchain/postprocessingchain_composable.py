@@ -20,7 +20,7 @@ Pipeline at a glance::
   L3.2 -> ``make_level32_detector`` +
           ``run_level32``               — outlier detection
   L3.3 -> ``run_level33_constant_ustar``— USTAR filtering (constant threshold)
-       or ``run_level33_ustar_detection``  (in-pipeline bootstrap detection)
+       or ``run_level33_ustar_detection``  (threshold detected from the data)
   L4.1 -> ``run_level41_mds`` /
           ``run_level41_rf`` /
           ``run_level41_xgb``           — gap-filling
@@ -205,16 +205,23 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
 # Alternative: detect USTAR thresholds in-pipeline
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# ``run_level33_ustar_detection`` runs the bootstrap detector and applies the
-# requested percentiles as USTAR scenarios in one call. ``mode`` picks the
-# filtering strategy — mutually exclusive, one applied before gap-filling:
+# ``run_level33_ustar_detection`` detects the threshold with
+# ``UstarThresholdDetection`` and applies the requested percentiles as USTAR
+# scenarios in one call. ``detection_mode`` selects the method: ``'oneflux'``
+# (default, moving point and change point pooled, as FLUXNET2015 and ICOS),
+# ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. ``mode`` picks the
+# filtering strategy. The two strategies exclude each other, and one is applied
+# before gap-filling:
 #
-# * ``mode='cut'`` (default) — one *constant* threshold per percentile, pooled
-#   across all years -> scenarios ``CUT_16 / CUT_50 / CUT_84``.
-# * ``mode='vut'`` — a *per-year* threshold per percentile (each year filtered
-#   by its own value) -> scenarios ``VUT_16 / VUT_50 / VUT_84``. diive's VUT is
-#   smoothed over a 3-year window; a year with no detected threshold falls back
-#   to the CUT value for that percentile.
+# * ``mode='cut'`` (default): one *constant* threshold per percentile from the
+#   thresholds of all years -> scenarios ``CUT_16 / CUT_50 / CUT_84``.
+# * ``mode='vut'``: one threshold per year and percentile (each year filtered
+#   by its own value) -> scenarios ``VUT_16 / VUT_50 / VUT_84``. As in ONEFlux,
+#   the VUT of a year pools the thresholds of the year and its two neighbours.
+#   A year without a threshold gets the CUT value for that percentile.
+#
+# ``nighttime_only=True`` removes only nighttime records below the threshold,
+# as REddyProc does. The default removes day and night records, as ONEFlux.
 #
 # Not run here to keep the example fast::
 #
@@ -223,9 +230,10 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
 #         data,
 #         ta_col='TA_1_1_1',
 #         swin_col='SW_IN_1_1_1',
-#         n_iter=100,
+#         detection_mode='oneflux',
 #         percentiles=(16, 50, 84),
 #         mode='cut',   # 'cut' -> CUT_16/50/84, or 'vut' -> VUT_16/50/84
+#         nighttime_only=False,
 #         showplot=False, verbose=True,
 #     )
 #     print(data.levels.ustar_detection.summary())
@@ -235,7 +243,7 @@ print(f"After L3.3 (CUT_50): {flux_l33.dropna().count()} accepted  |  "
 #
 # Same CUT dispatch in ``run_chain`` via
 # ``FluxConfig(ustar_detection_mode='bootstrap', ustar_bootstrap_ta_col=...,
-# ustar_bootstrap_swin_col=...)``.
+# ustar_bootstrap_swin_col=..., ustar_bootstrap_detection_mode='oneflux')``.
 
 # %%
 # Step 5b: gap analysis — structure of missing data before gap-filling

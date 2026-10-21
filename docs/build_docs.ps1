@@ -15,7 +15,7 @@
 
     The example gallery IS executed by default, matching RTD. That is what puts
     figures and captured console output on the example pages, and it generates
-    every thumbnail. Budget about 7.5 minutes for a cold full build; the 113
+    every thumbnail. Budget about 7.5 minutes for a cold full build; the 112
     examples are 2.8 minutes of that. Pass -NoGallery to skip execution for a
     fast pass over the prose and API pages - the gallery pages are still
     generated, just without figures.

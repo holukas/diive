@@ -404,7 +404,7 @@ from a bare `sphinx-build`:
 The example gallery **is** executed, on Read the Docs and locally. That is what
 puts the figures and the captured console output on each example page, and it
 generates every thumbnail. A cold full build takes about 7.5 minutes, of which
-the 113 examples are 2.8 minutes. To skip execution for a fast pass over the
+the 112 examples are 2.8 minutes. To skip execution for a fast pass over the
 prose and API pages:
 
 ```powershell

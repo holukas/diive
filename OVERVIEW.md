@@ -78,7 +78,7 @@ Recipe and details: [`packaging/README.md`](packaging/README.md).
 
 ### 4. Examples, notebooks, and tests
 
-- **`examples/`** — 113 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
+- **`examples/`** — 112 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
   cells, no file I/O). Run one with `uv run python examples/gapfilling/gapfill_randomforest.py`.
   Catalogued in `examples/CATALOG.md`. **Never run the whole suite** during development.
 - **`notebooks/`** — workflow notebooks, for example for the flux post-processing chain and file
@@ -96,7 +96,7 @@ that feed it.
 The tree is written against the ten-namespace API and builds without warnings in HTML,
 PDF and EPUB. `api_reference.rst` documents the ten namespaces; the generated API and
 gallery trees are build output and are gitignored. A build executes every example:
-`conf.py` passes `execute_gallery` to sphinx-gallery's `plot_gallery` and runs all 113
+`conf.py` passes `execute_gallery` to sphinx-gallery's `plot_gallery` and runs all 112
 scripts, which is what puts figures and captured console output on each example page.
 `execute_gallery` is on by default; set `DIIVE_DOCS_GALLERY=0` to skip the examples for a
 fast local build.
@@ -106,7 +106,7 @@ fast local build.
 ```
 diive/        core library + gui/                     ← the engine and its surfaces
 packaging/    PyInstaller build for the Windows exe
-examples/     113 runnable API examples
+examples/     112 runnable API examples
 notebooks/    workflow Jupyter notebooks
 tests/        unit + integration tests
 docs/         Sphinx documentation source (published on Read the Docs)

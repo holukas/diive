@@ -1,281 +1,189 @@
 """
-==========================================================
-Comparing USTAR Threshold Detection Methods
-==========================================================
+==========================================
+Comparing USTAR Threshold Detection Modes
+==========================================
 
-Side-by-side comparison of the ONEFlux moving point method (Papale et al., 2006)
-and the Vekuri quantile-based approach.
+Run ``UstarThresholdDetection`` in all four modes on the same data and compare
+the thresholds and how many nighttime NEE records each threshold removes.
 
-Both use the same 3-year window bootstrap via UstarBootstrapThresholds.
-Results differ due to stratification strategy (equal-sized vs. quantile bins),
-correlation threshold (0.5 vs. 0.4), and first-USTAR class validation.
+- ``'oneflux'``: ONEFlux, moving point (MP) and change point (CP) thresholds
+  pooled, as used for FLUXNET2015 and ICOS.
+- ``'oneflux_mp'``: ONEFlux with the moving point thresholds only
+  (Papale et al. 2006).
+- ``'oneflux_cp'``: ONEFlux with the change point thresholds only
+  (Barr et al. 2013).
+- ``'reddyproc'``: REddyProc 1.3.4 (Wutzler et al. 2018), a moving point
+  variant with its own seasons and bootstrap.
+
+Each mode reproduces its reference software, including how it computes the
+percentiles. The ONEFlux modes report p16, p50 and p84 of 100 draws per year
+and method. REddyProc reports p5, p50 and p95 of 200 values per year.
+
+The example uses two years of CH-LAE data (2016 and 2017).
 """
 
 # %%
-# Import and Load Data
-# ^^^^^^^^^^^^^^^^^^^^
-# Set up data for both methods.
-
-import warnings
+# Load the data
+# ^^^^^^^^^^^^^
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import to_rgb
 
 import diive as dv
 
-warnings.filterwarnings('ignore')
+df = dv.load_exampledata_parquet_lae()
 
-data = dv.load_exampledata_parquet_lae()
+NEE = 'NEE_L3.1_L3.2_QCF_IRGA72'  # umol m-2 s-1
+TA = 'TA_T1_47_1_gfXG_IRGA72'  # deg C
+USTAR = 'USTAR_IRGA72'  # m s-1
+SW_IN = 'SW_IN_T1_47_1_gfXG_IRGA72'  # W m-2
 
-print(f"Data: {len(data)} records, {data.index.min().date()} to {data.index.max().date()}")
-
-# %%
-# Run Both Detection Methods (seasonal)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Execute both methods to get seasonal thresholds.
-
-print("=" * 70)
-print("Running ONEFlux Moving Point Detection (Papale et al. 2006)")
-print("=" * 70)
-
-detector_mp = dv.flux.UstarMovingPointDetection(data, verbose=1)
-results_mp = detector_mp.detect()
-
-print("\n" + "=" * 70)
-print("Running Vekuri Quantile-Based Detection")
-print("=" * 70)
-
-detector_vekuri = dv.flux.UstarVekuriThresholdDetection(data, verbose=1)
-results_vekuri = detector_vekuri.detect()
+print(f"Data: {len(df)} records, {df.index.min().date()} to {df.index.max().date()}")
 
 # %%
-# Compare Seasonal Thresholds
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Display threshold estimates for each season from both methods.
+# Run all modes
+# ^^^^^^^^^^^^^
+#
+# Each mode uses its reference settings: number of bootstrap draws and
+# percentiles.
 
-comparison_seasonal = pd.DataFrame({
-    'ONEFlux': results_mp['threshold'],
-    'Vekuri': results_vekuri['threshold'],
+MODES = ['oneflux', 'oneflux_mp', 'oneflux_cp', 'reddyproc']
+
+detectors = {}
+for mode in MODES:
+    det = dv.flux.UstarThresholdDetection(
+        df, nee_col=NEE, ta_col=TA, ustar_col=USTAR, swin_col=SW_IN,
+        mode=mode, random_state=42)
+    det.run()
+    detectors[mode] = det
+    print(det.summary())
+    print()
+
+# %%
+# Thresholds per year (VUT) and for all years (CUT)
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# In the ONEFlux modes the VUT of a year pools the thresholds of the year and
+# its neighbours, so with two years VUT and CUT are equal. REddyProc estimates
+# each year on its own. Its CUT pools the values of all years, which is a diive
+# extension: REddyProc itself reports per-year values only.
+
+vut_p50 = pd.DataFrame({mode: det.get_vut_thresholds()['p50']
+                        for mode, det in detectors.items()})
+
+# Lowest percentile, p50 and highest percentile of each mode's CUT
+cut = {}
+for mode, det in detectors.items():
+    values = det.get_cut_threshold()
+    labels = list(values)
+    cut[mode] = {'range': f"{labels[0]}-{labels[-1]}", 'low': values[labels[0]],
+                 'p50': values['p50'], 'high': values[labels[-1]]}
+cut = pd.DataFrame(cut).T
+cut[['low', 'p50', 'high']] = cut[['low', 'p50', 'high']].astype(float)
+
+print("VUT p50 (m s-1):")
+print(vut_p50.round(4))
+print("\nCUT (m s-1):")
+print(cut.round(4))
+
+# %%
+# Share of nighttime NEE records removed
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#
+# u* filtering keeps a record only where u* is at or above the threshold, so a
+# record without u* is removed too. The share below counts nighttime records
+# (SW_IN < 10 W m-2) with a valid NEE that the CUT p50 removes.
+
+night = (df[SW_IN] < 10) & df[NEE].notna()
+n_night = int(night.sum())
+
+removed = {}
+for mode in MODES:
+    threshold = cut.loc[mode, 'p50']
+    below = ~(df[USTAR] >= threshold)
+    removed[mode] = 100 * int((night & below).sum()) / n_night
+
+table = pd.DataFrame({
+    'CUT p50 (m s-1)': cut['p50'],
+    'night NEE removed (%)': pd.Series(removed),
 })
-
-print("\nSeasonal Threshold Comparison (m/s):")
-print(comparison_seasonal.round(4))
-
-# %%
-# Multi-Year Bootstrap: Both Methods
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Run multi-year bootstrap for both methods using UstarBootstrapThresholds.
-# This yields per-year p16/p50/p84 thresholds and a pooled CUT threshold.
-
-print("\n" + "=" * 70)
-print("Multi-Year Bootstrap: ONEFlux")
-print("=" * 70)
-
-boot_mp = dv.flux.UstarBootstrapThresholds(
-    df=data,
-    detector_class=dv.flux.UstarMovingPointDetection,
-    detector_kwargs=dict(ta_classes_count=7, ustar_classes_count=20),
-    n_iter=20,  # kept small for the example; use n_iter=100 in production
-    percentiles=(16, 50, 84),
-    n_jobs=-1,
-    verbose=1,
-)
-annual_boot_mp = boot_mp.run()
-cut_mp = boot_mp.get_cut_threshold()
-
-print("\n" + "=" * 70)
-print("Multi-Year Bootstrap: Vekuri")
-print("=" * 70)
-
-boot_vekuri = dv.flux.UstarBootstrapThresholds(
-    df=data,
-    detector_class=dv.flux.UstarVekuriThresholdDetection,
-    n_iter=20,  # kept small for the example; use n_iter=100 in production
-    percentiles=(16, 50, 84),
-    n_jobs=-1,
-    verbose=1,
-)
-annual_boot_vekuri = boot_vekuri.run()
-cut_vekuri = boot_vekuri.get_cut_threshold()
+print(f"Nighttime records with NEE: {n_night}")
+print(table.round(3))
 
 # %%
-# Compare Annual Bootstrap Results
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Side-by-side per-year p50 thresholds from both methods.
+# Plot the comparison
+# ^^^^^^^^^^^^^^^^^^^
+#
+# Left: CUT p50 with the lowest and highest reported percentile as error bars
+# (p16 and p84 for ONEFlux, p5 and p95 for REddyProc). Right: share of
+# nighttime NEE records removed at the CUT p50.
 
-print("\n" + "=" * 70)
-print("Per-Year Bootstrap Thresholds (p50, m/s)")
-print("=" * 70)
+colors = ['#2196F3', '#03A9F4', '#F44336', '#FFC107']
 
-comparison_annual = pd.DataFrame({
-    'ONEFlux_p50': annual_boot_mp['p50'],
-    'Vekuri_p50': annual_boot_vekuri['p50'],
-})
-comparison_annual['diff_pct'] = (
-        (comparison_annual['Vekuri_p50'] - comparison_annual['ONEFlux_p50'])
-        / comparison_annual['ONEFlux_p50'] * 100
-)
 
-print(comparison_annual.round(4))
+def label_color(color):
+    """White text on dark bars, black on light ones."""
+    r, g, b = to_rgb(color)
+    return 'white' if 0.299 * r + 0.587 * g + 0.114 * b < 0.5 else 'black'
 
-# %%
-# Compare CUT Thresholds
-# ^^^^^^^^^^^^^^^^^^^^^^^
-# The CUT (constant) threshold pools all years' bootstrap samples.
 
-print("\n" + "=" * 70)
-print("CUT Threshold Comparison (pooled across all years)")
-print("=" * 70)
+x = np.arange(len(MODES))
+p50 = cut.loc[MODES, 'p50'].to_numpy()
+low = cut.loc[MODES, 'low'].to_numpy()
+high = cut.loc[MODES, 'high'].to_numpy()
 
-print(f"\n{'Percentile':<12} {'ONEFlux':>12} {'Vekuri':>12}")
-print("-" * 36)
-for pct in ('p16', 'p50', 'p84'):
-    mp_val = cut_mp[pct]
-    vek_val = cut_vekuri[pct]
-    marker = "  <-- recommended" if pct == 'p50' else ""
-    print(f"{pct:<12} {mp_val:>12.4f} {vek_val:>12.4f}{marker}")
+fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 
-# %%
-# Visualize: Per-Year Bootstrap Comparison
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Bar chart comparing per-year p50 thresholds, with p16/p84 as error bars.
-
-years = annual_boot_mp.index.tolist()
-x = np.arange(len(years))
-width = 0.35
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-# Plot 1: Per-year p50 with p16/p84 error bars
 ax = axes[0]
-mp_p50 = annual_boot_mp['p50'].values
-mp_err_lo = mp_p50 - annual_boot_mp['p16'].values
-mp_err_hi = annual_boot_mp['p84'].values - mp_p50
-
-vek_p50 = annual_boot_vekuri['p50'].values
-vek_err_lo = vek_p50 - annual_boot_vekuri['p16'].values
-vek_err_hi = annual_boot_vekuri['p84'].values - vek_p50
-
-ax.bar(x - width / 2, mp_p50, width, label='ONEFlux p50', alpha=0.8,
-       yerr=[mp_err_lo, mp_err_hi], capsize=4, edgecolor='black')
-ax.bar(x + width / 2, vek_p50, width, label='Vekuri p50', alpha=0.8,
-       yerr=[vek_err_lo, vek_err_hi], capsize=4, edgecolor='black')
-
-ax.set_xlabel('Year')
-ax.set_ylabel('USTAR Threshold (m/s)')
-ax.set_title('Per-Year Bootstrap p50 (error bars: p16/p84)')
-ax.set_xticks(x)
-ax.set_xticklabels(years)
-ax.legend()
+ax.bar(x, p50, color=colors, yerr=[p50 - low, high - p50], capsize=5)
+for i, v in enumerate(p50):
+    ax.text(i, v / 2, f"{v:.3f}", ha='center', va='center_baseline',
+            color=label_color(colors[i]))
+ax.set_xticks(x, MODES)
+ax.set_ylabel('u* threshold (m s-1)')
+ax.set_title('CUT p50 and percentile range')
 ax.grid(axis='y', alpha=0.3)
 
-# Plot 2: CUT threshold comparison
 ax = axes[1]
-methods = ['ONEFlux', 'Vekuri']
-p50_vals = [cut_mp['p50'], cut_vekuri['p50']]
-p16_vals = [cut_mp['p16'], cut_vekuri['p16']]
-p84_vals = [cut_mp['p84'], cut_vekuri['p84']]
-colors = ['#1f77b4', '#ff7f0e']
-
-for i, (method, p50, p16, p84, color) in enumerate(zip(methods, p50_vals, p16_vals, p84_vals, colors)):
-    ax.bar(i, p50, color=color, alpha=0.8, edgecolor='black',
-           yerr=[[p50 - p16], [p84 - p50]], capsize=6)
-    if not np.isnan(p50):
-        ax.text(i, p50 + 0.005, f'{p50:.3f}', ha='center', va='bottom', fontsize=9)
-
-ax.set_xticks([0, 1])
-ax.set_xticklabels(methods)
-ax.set_ylabel('USTAR Threshold (m/s)')
-ax.set_title('CUT Threshold Comparison\n(error bars: p16/p84, center: p50)')
+shares = [removed[m] for m in MODES]
+ax.bar(x, shares, color=colors)
+for i, v in enumerate(shares):
+    ax.text(i, v / 2, f"{v:.0f} %", ha='center', va='center_baseline',
+            color=label_color(colors[i]))
+ax.set_xticks(x, MODES)
+ax.set_ylabel('nighttime NEE records removed (%)')
+ax.set_title('Removed at CUT p50')
 ax.grid(axis='y', alpha=0.3)
 
-plt.tight_layout()
+fig.suptitle('CH-LAE 2016-2017: u* threshold detection modes')
+fig.tight_layout()
 plt.show()
 
 # %%
-# Method Comparison Summary
-# ^^^^^^^^^^^^^^^^^^^^^^^^^
-# Detailed comparison of algorithm characteristics.
-
-print("\n" + "=" * 70)
-print("Algorithm Characteristics Comparison")
-print("=" * 70)
-
-comparison_table = pd.DataFrame({
-    'Characteristic': [
-        'Temperature Classes',
-        'USTAR Classes',
-        'Detection Mode',
-        'Stratification',
-        'TA-USTAR Correlation',
-        'First USTAR Validation',
-        'Window Size',
-        'Aggregation',
-        'Computational Speed',
-        'Parameterization',
-    ],
-    'ONEFlux (Papale 2006)': [
-        '7 (equal-sized)',
-        '20 (equal-sized)',
-        'Forward (ascending)',
-        'Equal-sized bins',
-        '<= 0.5',
-        'Yes (mean < 0.2)',
-        '10',
-        'Median across TA',
-        'Standard',
-        'More parameters',
-    ],
-    'Vekuri (Quantile)': [
-        '6 (quantiles)',
-        '20 (quantiles)',
-        'Forward (ascending)',
-        'Quantile-based',
-        '< 0.4',
-        'No',
-        '10',
-        'Median across TA',
-        'Faster',
-        'Simpler',
-    ],
-})
-
-print(comparison_table.to_string(index=False))
-
-# %%
-# Key Algorithmic Differences
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-print("\n" + "=" * 70)
-print("Key Algorithmic Differences")
-print("=" * 70)
-
-differences = """
-1. Stratification Strategy
-   - ONEFlux: Equal-sized bins (fixed n per bin)
-   - Vekuri: Quantile-based bins (equal sample size via pd.qcut)
-   -> Vekuri handles skewed distributions better
-
-2. Temperature Class Validation
-   - ONEFlux: Includes first USTAR class validity check (mean < 0.2 m/s)
-   - Vekuri: No explicit first USTAR validation
-   -> ONEFlux more conservative, may skip temperature classes with low USTAR range
-
-3. Correlation Threshold
-   - ONEFlux: |TA-USTAR| <= 0.5
-   - Vekuri: |TA-USTAR| < 0.4
-   -> Vekuri rejects more temperature classes at high correlation
-
-4. Data Requirements
-   - ONEFlux: More stringent (3000 total, 160/season, 100/TA)
-   - Vekuri: More flexible (works with fewer records)
-   -> Vekuri better for sparse or smaller datasets
-
-5. Bootstrap Design
-   - Both use UstarBootstrapThresholds for multi-year per-year bootstrap
-   - CUT threshold pools all years' samples for a single constant value
-   -> Architecture is identical; only the detection algorithm differs
-"""
-
-print(differences)
+# How the modes differ
+# ^^^^^^^^^^^^^^^^^^^^
+#
+# All modes use nighttime records only. The moving point methods (ONEFlux MP
+# and REddyProc) split each season into 7 temperature classes and 20 u*
+# classes and look for the u* class where the nighttime flux stops increasing
+# with u*. The year gets the highest season threshold.
+#
+# - ONEFlux MP: calendar-quarter seasons, night is SW_IN < 10 W m-2, the flux
+#   must reach 100 % of the mean of the next 10 classes. A bootstrap draw
+#   resamples all records of the year.
+# - REddyProc: seasons start in March, June, September and December (December
+#   counts with January and February of the next year), night is
+#   SW_IN < 10 W m-2, the flux must reach 95 % of the mean of the next 10
+#   classes. A year with fewer than 3000 nighttime records is estimated from
+#   all its records pooled. A bootstrap draw resamples the records within each
+#   season.
+# - ONEFlux CP: night is SW_IN < 5 W m-2, 4 seasons with equal numbers of
+#   records, 4 to 8 temperature strata per season. In each stratum a two-part
+#   line (sloped, then flat) is fitted, and its break point is the threshold if
+#   it is significant. A year needs at least 4000 valid nighttime records, so
+#   CH-LAE 2016 gives no CP thresholds.
+#
+# Both ONEFlux methods give higher thresholds than REddyProc here, and the
+# change point method gives the highest.

@@ -205,9 +205,8 @@ See: [features/README.rst](features/README.rst)
 | [**flux_selfheating.py**](flux/lowres/flux_selfheating.py) | SCOP self-heating correction workflow (quick demo with 5/5 settings) |
 | [**flux_selfheating_production.py**](flux/lowres/flux_selfheating_production.py) | Complete production workflow: create scaling factors table + apply to long-term data |
 | [**flux_uncertainty.py**](flux/lowres/flux_uncertainty.py) | Random uncertainty estimation (PAS20 method) |
-| [**flux_ustar_mp_detection.py**](flux/lowres/flux_ustar_mp_detection.py) | Moving Point (MP) USTAR detection (Papale et al. 2006) |
-| [**flux_ustar_vekuri_detection.py**](flux/lowres/flux_ustar_vekuri_detection.py) | Simplified quantile-based USTAR detection (Vekuri method) |
-| [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare ONEFlux and Vekuri USTAR detection methods |
+| [**flux_ustar_detection.py**](flux/lowres/flux_ustar_detection.py) | u* threshold detection as in ONEFlux (`UstarThresholdDetection`, moving point and change point pooled), VUT and CUT, bootstrap thresholds per method |
+| [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare the u* detection modes `oneflux`, `oneflux_mp`, `oneflux_cp` and `reddyproc`, with the share of nighttime NEE records each CUT p50 removes |
 
 See: [flux/README.rst](flux/README.rst)
 

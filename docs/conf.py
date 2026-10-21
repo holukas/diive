@@ -110,13 +110,13 @@ sphinx_gallery_conf = {
     # captured console output on their pages - without it a plotting library
     # documents itself with code listings and nothing else. It also generates
     # every thumbnail. Measured on a cold full build: 7.5 minutes end to end,
-    # of which the 113 examples are 2.8 minutes (slowest single example 15.5 s),
+    # of which the 112 examples are 2.8 minutes (slowest single example 15.5 s),
     # which fits a Read the Docs build. Set DIIVE_DOCS_GALLERY=0 to skip
     # execution locally (docs/build_docs.ps1 -NoGallery).
     "plot_gallery": execute_gallery,
     "abort_on_example_error": False,
     "matplotlib_animations": True,
-    # Still needed with execution on: 32 of the 113 examples produce no figure
+    # Still needed with execution on: 32 of the 112 examples produce no figure
     # (the data, times, io and qaqc ones compute and print, the two Bokeh ones
     # emit HTML) and would otherwise get sphinx-gallery's stock placeholder.
     "default_thumb_file": str(Path(__file__).parent.parent / "images" / "logo_diive1_256px.png"),

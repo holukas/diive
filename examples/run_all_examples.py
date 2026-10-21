@@ -137,8 +137,7 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_selfheating.py',
     'flux/lowres/flux_selfheating_production.py',
     'flux/lowres/flux_uncertainty.py',
-    'flux/lowres/flux_ustar_mp_detection.py',
-    'flux/lowres/flux_ustar_vekuri_detection.py',
+    'flux/lowres/flux_ustar_detection.py',
     'flux/lowres/flux_ustar_method_comparison.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',

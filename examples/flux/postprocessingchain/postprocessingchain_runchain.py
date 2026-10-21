@@ -229,13 +229,16 @@ data.plot_cumulative_comparison(
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Replace ``ustar_thresholds``/``ustar_labels`` with the bootstrap-mode
-# fields to have the chain detect USTAR thresholds from the data using
-# the FLUXNET-standard multi-year bootstrap (ONEFlux moving-point
-# method). Three scenarios (``CUT_16`` / ``CUT_50`` / ``CUT_84``) are
-# produced by default; the fitted detector lands on
-# ``data.levels.ustar_detection`` for post-hoc inspection. ``run_chain``
-# applies the constant (CUT) threshold; for per-year VUT filtering use the
-# composable ``run_level33_ustar_detection(..., mode='vut')``.
+# fields to have the chain detect USTAR thresholds from the data.
+# ``ustar_bootstrap_detection_mode`` selects the method: ``'oneflux'``
+# (default, moving point and change point pooled, as FLUXNET2015 and ICOS),
+# ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Three scenarios
+# (``CUT_16`` / ``CUT_50`` / ``CUT_84``) are produced by default. The fitted
+# ``UstarThresholdDetection`` lands on ``data.levels.ustar_detection`` for
+# inspection. ``run_chain`` applies the constant (CUT) threshold. For per-year
+# VUT filtering use the composable ``run_level33_ustar_detection(..., mode='vut')``.
+# ``ustar_nighttime_only=True`` removes only nighttime records below the
+# threshold, as REddyProc does.
 #
 # Not run here to keep the example fast::
 #
@@ -244,7 +247,7 @@ data.plot_cumulative_comparison(
 #         ustar_detection_mode='bootstrap',
 #         ustar_bootstrap_ta_col='TA_T1_47_1_gfXG',
 #         ustar_bootstrap_swin_col='SW_IN_T1_47_1_gfXG',
-#         ustar_bootstrap_n_iter=100,
+#         ustar_bootstrap_detection_mode='oneflux',
 #         ustar_bootstrap_percentiles=(16, 50, 84),
 #         outlier_sigma_daytime=5.5,
 #         outlier_sigma_nighttime=5.5,
