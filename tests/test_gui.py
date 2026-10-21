@@ -3363,7 +3363,7 @@ def test_derived_variable_potrad_tab(app):
 
 
 def test_flux_chain_tab_level33_detection(app, configured_site):
-    # L3.3 supports auto-detecting the USTAR threshold (moving point bootstrap)
+    # L3.3 supports detecting the USTAR threshold (ONEFlux / REddyProc bootstrap)
     # as an alternative to constant thresholds. The detected CUT percentiles
     # become USTAR scenarios; Copy Python renders run_level33_ustar_detection.
     from diive.gui.tabs.fluxchain import FluxChainTab
@@ -3383,29 +3383,145 @@ def test_flux_chain_tab_level33_detection(app, configured_site):
     tab.l33_mode.setCurrentIndex(1)  # detect
     tab.l33_ta.setCurrentText(ta)
     tab.l33_swin.setCurrentText(sw)
-    tab.l33_niter.setValue(15)
     tab._steps = [HampelParams().step()]
 
+    # Default method: ONEFlux moving point + change point, iterations = default.
+    assert tab.l33_method.currentData() == "oneflux"
+    assert tab.l33_niter.value() == 0 and tab.l33_niter.specialValueText()
+    kw = tab._level33_kwargs()
+    assert kw["n_iter"] is None
+    tab.l33_niter.setValue(15)
     kw = tab._level33_kwargs()
     assert kw and kw.get("_detection") is True
     assert kw["ta_col"] == ta and kw["swin_col"] == sw
+    assert kw["detection_mode"] == "oneflux" and kw["n_iter"] == 15
+    assert "detector_kwargs" not in kw and "detection_kwargs" not in kw
 
     code = tab._code()
     compile(code, "<gen>", "exec")
     assert "run_level33_ustar_detection(" in code
     assert "run_level33_constant_ustar(" not in code
+    assert "detector_" not in code
+    assert "detection_mode=" not in code  # the default is left out
+
+    # The moving point stratification goes to mp_kwargs, only where MP runs.
+    tab.l33_ta_classes.setValue(6)
+    kw = tab._level33_kwargs()
+    assert kw["detection_kwargs"] == {"mp_kwargs": {"ta_classes_count": 6}}
+    assert "detection_kwargs={'mp_kwargs': {'ta_classes_count': 6}}" in tab._code()
+    tab.l33_method.setCurrentIndex(tab.l33_method.findData("oneflux_cp"))
+    assert not tab.l33_ta_classes.isEnabled()
+    kw = tab._level33_kwargs()
+    assert kw["detection_mode"] == "oneflux_cp" and "detection_kwargs" not in kw
+    assert "detection_mode='oneflux_cp'" in tab._code()
+    tab.l33_method.setCurrentIndex(tab.l33_method.findData("oneflux_mp"))
+    assert tab.l33_ta_classes.isEnabled()
+    tab.l33_ta_classes.setValue(7)
+    kw = tab._level33_kwargs()
 
     data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
                         tab._level31_kwargs(), tab._steps, kw)
     assert "CUT_50" in data.levels.filteredseries_level33_qcf
-    assert getattr(data.levels, "ustar_detection", None) is not None
+    det = getattr(data.levels, "ustar_detection", None)
+    assert det is not None and det.mode == "oneflux_mp" and det.n_iter == 15
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert "Detected CUT (ONEFlux MP)" in tab.summary.toPlainText()
 
-    # Mode round-trips through save/restore.
+    # Mode and method round-trip through save/restore.
     state = tab.save_state()
+    assert state["controls"]["l33_method"] == "oneflux_mp"
     tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
     tab2.restore_state(state)
     assert tab2.l33_mode.currentIndex() == 1
     assert tab2.l33_ta.currentText() == ta
+    assert tab2.l33_method.currentData() == "oneflux_mp"
+
+
+def test_flux_chain_tab_level33_old_state(app):
+    # Projects saved before the u* method choice ran the moving point bootstrap
+    # and stored the old mode label. They restore to detection with ONEFlux MP.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    tab = FluxChainTab(); tab.widget()
+    tab.restore_state({"controls": {"l33_mode": "Detect (moving point, Papale 2006)",
+                                    "l33_niter": 100, "l33_ta_classes": 6},
+                       "l33_enabled": True})
+    assert tab.l33_mode.currentIndex() == 1
+    assert tab.l33_method.currentData() == "oneflux_mp"
+    assert tab.l33_niter.value() == 100 and tab.l33_ta_classes.value() == 6
+    assert not tab.l33_night.isChecked()
+    # A fresh tab restored from an empty state keeps the defaults.
+    tab2 = FluxChainTab(); tab2.widget(); tab2.restore_state({})
+    assert tab2.l33_method.currentData() == "oneflux"
+
+
+def test_flux_chain_tab_level33_nighttime_only(app, configured_site):
+    # "Filter nighttime only" works for constant thresholds (needs an SW_IN pick)
+    # and detection, reaches the library as nighttime_only/swin_col, and keeps
+    # daytime records that the day-and-night filter removes.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+    sw = [c for c in df.columns if c.upper().startswith("SW_IN") and "POT" not in c.upper()][0]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.3, "CUT_50")]
+    tab._steps = [HampelParams().step()]
+    assert not tab.l33_night.isChecked()
+    assert "nighttime_only" not in tab._level33_kwargs()
+    # SW_IN shows only when needed (constant mode, day and night: hidden).
+    assert not tab._l33_modeform.isRowVisible(tab.l33_swin)
+    base = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, tab._level33_kwargs())
+
+    tab.l33_night.setChecked(True)
+    assert tab._l33_modeform.isRowVisible(tab.l33_swin)
+    tab.l33_swin.setCurrentText(sw)
+    kw = tab._level33_kwargs()
+    assert kw["nighttime_only"] is True and kw["swin_col"] == sw
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "nighttime_only=True" in code and f"swin_col={sw!r}" in code
+    night = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                         tab._level31_kwargs(), tab._steps, kw)
+    n_base = int(base.levels.filteredseries_level33_qcf["CUT_50"].count())
+    n_night = int(night.levels.filteredseries_level33_qcf["CUT_50"].count())
+    assert n_night > n_base  # daytime low-USTAR records are kept
+
+    # No SW_IN column: constant night-only filtering is incomplete.
+    tab.l33_swin.setCurrentIndex(-1)
+    assert tab._level33_kwargs() is None
+
+    # Detection passes the flag on as well.
+    tab.l33_swin.setCurrentText(sw)
+    tab.l33_mode.setCurrentIndex(1)
+    kw = tab._level33_kwargs()
+    assert kw["_detection"] and kw["nighttime_only"] is True and kw["swin_col"] == sw
+    assert "nighttime_only=True" in tab._code()
+
+    # The checkbox round-trips through save/restore.
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(tab.save_state())
+    assert tab2.l33_night.isChecked()
+
+
+def test_level33_codegen_replaces_deprecated_detector_args(app):
+    # Old specs with detector_kwargs render in the replacement form, never with
+    # the deprecated arguments.
+    from diive.flux.postprocessingchain import level33_to_code
+    spec = {"_detection": True, "ta_col": "TA", "swin_col": "SW_IN",
+            "detector_kwargs": {"ta_classes_count": 6}}
+    code = level33_to_code({"fluxcol": "FC"}, {}, {}, [], spec)
+    compile(code, "<gen>", "exec")
+    assert "detector_" not in code
+    assert "detection_mode='oneflux_mp'" in code
+    assert "detection_kwargs={'mp_kwargs': {'ta_classes_count': 6}}" in code
+    spec = {"_detection": True, "ta_col": "TA", "swin_col": "SW_IN",
+            "detection_mode": "reddyproc", "nighttime_only": True}
+    code = level33_to_code({"fluxcol": "FC"}, {}, {}, [], spec)
+    assert "detection_mode='reddyproc'" in code and "nighttime_only=True" in code
 
 
 def test_flux_chain_tab_level33_vut(app, configured_site):
@@ -3422,6 +3538,7 @@ def test_flux_chain_tab_level33_vut(app, configured_site):
     tab.l33_enable.setChecked(True)
     tab.l33_mode.setCurrentIndex(1)   # detect
     tab.l33_apply.setCurrentIndex(1)  # VUT (per-year)
+    tab.l33_method.setCurrentIndex(tab.l33_method.findData("oneflux_mp"))
     tab.l33_ta.setCurrentText(ta)
     tab.l33_swin.setCurrentText(sw)
     tab.l33_niter.setValue(10)
@@ -3440,8 +3557,8 @@ def test_flux_chain_tab_level33_vut(app, configured_site):
 
 
 def test_ustar_detection_tab(app):
-    # Standalone USTAR detection tab: single seasonal detection + multi-year
-    # bootstrap, both via the library detectors, results into table + plot.
+    # Standalone USTAR detection tab: single seasonal detection (moving point)
+    # + bootstrap over the years (UstarThresholdDetection), results into table + plot.
     from diive.gui.tabs.ustar_detection import UstarDetectionTab
     from diive.configs.exampledata import load_exampledata_parquet_lae
     df = load_exampledata_parquet_lae()
@@ -3453,24 +3570,100 @@ def test_ustar_detection_tab(app):
     assert tab.ta_col.currentText().upper().startswith("TA")
     assert "USTAR" in tab.ustar_col.currentText().upper()
     assert tab.swin_col.currentText().upper().startswith("SW_IN")
+    assert tab.method.currentData() == "oneflux"
 
     # Single detection (run the worker synchronously, then drain the signal).
-    kwargs = dict(nee_col=tab.nee_col.currentText(), ta_col=tab.ta_col.currentText(),
-                  ustar_col=tab.ustar_col.currentText(), swin_col=tab.swin_col.currentText(),
-                  ta_classes_count=7, ustar_classes_count=20, forward_mode_n=2)
-    tab._worker(df, kwargs, None)
+    picks = dict(nee_col=tab.nee_col.currentText(), ta_col=tab.ta_col.currentText(),
+                 ustar_col=tab.ustar_col.currentText(), swin_col=tab.swin_col.currentText())
+    tab._worker(df, picks, tab._mp_kwargs(), None)
     QApplication.processEvents()
     assert tab.table.rowCount() == 5  # 4 seasons + annual
     labels = [tab.table.item(r, 0).text() for r in range(tab.table.rowCount())]
     assert "Annual (max)" in labels
 
-    # Bootstrap path (few iterations) produces a per-year + CUT table.
-    tab._worker(df, kwargs, dict(n_iter=10, n_jobs=1, percentiles=(16, 50, 84)))
+    # Bootstrap path (few iterations) produces a per-year + CUT table, with the
+    # per-year methods that gave no thresholds (library failures_) listed.
+    cfg = dict(mode="oneflux", n_iter=5, n_jobs=1, percentiles=(16, 50, 84))
+    tab._worker(df, picks, tab._mp_kwargs(), cfg)
     QApplication.processEvents()
     labels = [tab.table.item(r, 0).text() for r in range(tab.table.rowCount())]
-    assert "CUT (constant)" in labels
+    assert labels == ["2016", "2017", "CUT (constant)"]
+    kind, (_, _, info) = tab._compute_payload(df, picks, tab._mp_kwargs(), cfg)
+    assert kind == "bootstrap" and info["failures"]  # the example has one
+    for year, fails in info["failures"].items():
+        row = labels.index(str(year))
+        notes = tab.table.item(row, tab.table.columnCount() - 1).text()
+        for m, why in fails.items():
+            assert f"{m.upper()} none" in notes
+            assert f"{year} {m.upper()}: {why}" in tab.status.text()
     assert not [t for a in tab.canvas.fig.axes for t in a.texts
                 if "failed" in t.get_text().lower()]
+
+
+@pytest.mark.parametrize("mode", ["oneflux", "oneflux_mp", "oneflux_cp", "reddyproc"])
+def test_ustar_detection_tab_method(app, monkeypatch, mode):
+    # Each Method choice reaches UstarThresholdDetection with its mode, the
+    # stratification only where the moving point method runs, and the
+    # iterations setting as n_iter.
+    import diive.gui.tabs.ustar_detection as mod
+    from diive.configs.exampledata import load_exampledata_parquet_lae
+    df = load_exampledata_parquet_lae().loc["2017"]
+    calls = []
+
+    class Spy(mod.UstarThresholdDetection):
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(mod, "UstarThresholdDetection", Spy)
+    tab = mod.UstarDetectionTab(); tab.widget(); tab.on_data_loaded(df)
+    tab.method.setCurrentIndex(tab.method.findData(mode))
+    has_mp = mode in mod.USTAR_MP_MODES
+    assert tab.par_box.isEnabled() == has_mp
+    # The single seasonal detection is for the moving point method only.
+    assert tab.boot_chk.isEnabled() == has_mp and tab.boot_chk.isChecked()
+    tab.n_iter.setValue(5)
+    tab._run()
+    deadline = time.monotonic() + 120
+    while tab._runner.is_running and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.005)
+    QApplication.processEvents()
+    assert len(calls) == 1
+    kw = calls[0]
+    assert kw["mode"] == mode
+    assert kw["n_iter"] == 5
+    assert (kw["mp_kwargs"] is not None) == has_mp
+    assert tab.status.text().startswith(f"Bootstrap complete ({mod.USTAR_METHOD_SHORT[mode]}")
+    assert tab.table.item(tab.table.rowCount() - 1, 0).text() == "CUT (constant)"
+    if mode == "reddyproc":
+        assert tab.table.horizontalHeaderItem(1).text() == "p5"  # REddyProc default
+        assert "REddyProc 5/5" in tab.table.item(0, tab.table.columnCount() - 1).text()
+
+
+def test_ustar_detection_tab_state(app):
+    # The method round-trips. Projects saved before the method choice ran the
+    # moving point method and restore to it. A method without the single
+    # detection forces the bootstrap on and gives the choice back afterwards.
+    from diive.gui.tabs.ustar_detection import UstarDetectionTab
+    tab = UstarDetectionTab(); tab.widget()
+    tab.restore_state({"controls": {"boot_chk": False, "n_iter": 100,
+                                    "percentiles": "16, 50, 84"}})
+    assert tab.method.currentData() == "oneflux_mp"
+    assert not tab.boot_chk.isChecked() and tab.boot_chk.isEnabled()
+    assert tab.run_btn.text() == "Run detection"
+    tab.method.setCurrentIndex(tab.method.findData("oneflux_cp"))
+    assert tab.boot_chk.isChecked() and not tab.boot_chk.isEnabled()
+    assert tab.run_btn.text() == "Run bootstrap"
+    state = tab.save_state()
+    assert state["controls"]["method"] == "oneflux_cp"
+    tab.method.setCurrentIndex(tab.method.findData("oneflux"))
+    assert not tab.boot_chk.isChecked()  # the user's choice is back
+    tab2 = UstarDetectionTab(); tab2.widget(); tab2.restore_state(state)
+    assert tab2.method.currentData() == "oneflux_cp"
+    assert tab2.n_iter.value() == 100
+    tab2.method.setCurrentIndex(tab2.method.findData("oneflux_mp"))
+    assert not tab2.boot_chk.isChecked()
 
 
 def test_flux_chain_tab_level33(app, configured_site):

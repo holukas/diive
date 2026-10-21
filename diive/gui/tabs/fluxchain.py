@@ -5,8 +5,8 @@ GUI.TABS.FLUXCHAIN: FLUX POST-PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3 
 A guided tab for the Swiss-FluxNet flux post-processing chain. It wires the **Input**
 (site + flux column), **Level 2** (quality-flag tests), **Level 3.1** (single-point
 storage correction), **Level 3.2** (an optional outlier-detection chain), and
-**Level 3.3** (optional USTAR filtering — constant thresholds or moving-point
-detection) using the composable library callables (`init_flux_data` + `run_level2`
+**Level 3.3** (optional USTAR filtering — constant thresholds or detection with
+ONEFlux / REddyProc, optionally nighttime only) using the composable library callables (`init_flux_data` + `run_level2`
 + `run_level31` + `make_level32_detector` / `run_level32` +
 `run_level33_constant_ustar` / `run_level33_ustar_detection`), shows the
 deepest level's QCF-filtered flux as a heatmap plus the L3.2 QCF distribution /
@@ -90,6 +90,10 @@ from diive.flux.postprocessingchain import (
 from diive.flux.lowres.common import detect_fluxbasevar
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
+from diive.gui.tabs.ustar_detection import (
+    USTAR_METHOD_SHORT, USTAR_MP_MODES, VUT_CUT_TIP, make_ustar_method_combo,
+    set_ustar_method,
+)
 from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.driver_qc import QC_TIP, fill_qc_combo, qc_value, set_qc_value
 from diive.gui.widgets.feature_picker import FeaturePicker
@@ -754,19 +758,32 @@ class FluxChainTab(DiiveTab):
         self.l33_info = self._info_marker()
         v.addWidget(self.l33_info)
 
-        # Mode: constant pre-known thresholds, or auto-detect via moving point.
+        # Mode: constant pre-known thresholds, or detection from the data.
         modeform = QFormLayout()
         self.l33_mode = QComboBox()
-        self.l33_mode.addItems(["Constant thresholds",
-                                "Detect (moving point, Papale 2006)"])
+        self.l33_mode.addItems(["Constant thresholds", "Detect from the data"])
         self.l33_mode.setToolTip(
-            "Constant: apply pre-known threshold(s).\n"
-            "Detect: estimate the threshold from the data via a multi-year bootstrap "
-            "of the ONEFlux moving-point method, then apply the CUT percentiles as "
-            "scenarios.")
+            "Constant: apply known threshold(s).\n"
+            "Detect: estimate the threshold from the data with a bootstrap over the "
+            "years (ONEFlux or REddyProc), then apply the percentiles as scenarios.")
         self.l33_mode.currentIndexChanged.connect(self._sync_l33_mode)
         self.l33_mode.currentIndexChanged.connect(self._update_run_label)
         modeform.addRow("Mode", self.l33_mode)
+        # Night-only filtering applies to both modes. Its SW_IN column is also
+        # the night definition of the detection, so one picker serves both.
+        self.l33_night = QCheckBox("Filter nighttime only")
+        self.l33_night.setToolTip(
+            "Flag low-USTAR records at night only (SW_IN below 10 W m-2, or SW_IN "
+            "missing), as REddyProc does.\n"
+            "Off (default): day and night records are flagged, as in ONEFlux.")
+        self.l33_night.toggled.connect(self._sync_l33_mode)
+        self.l33_night.toggled.connect(self._update_run_label)
+        modeform.addRow(self.l33_night)
+        self.l33_swin = QComboBox()
+        self.l33_swin.setToolTip("Incoming shortwave radiation (W m-2). Defines the "
+                                 "night for the detection and for night-only filtering.")
+        modeform.addRow("Shortwave in (SW_IN)", self.l33_swin)
+        self._l33_modeform = modeform
         v.addLayout(modeform)
 
         v.addWidget(self._level33_constant_box())
@@ -804,35 +821,39 @@ class FluxChainTab(DiiveTab):
         return gb
 
     def _level33_detect_box(self) -> QGroupBox:
-        gb = QGroupBox("Detect — moving-point bootstrap")
+        gb = QGroupBox("Detect: bootstrap over the years")
         form = QFormLayout(gb)
-        note = QLabel("Estimate the threshold from nighttime respiration "
-                      "(Papale et al. 2006). One scenario per percentile.")
+        note = QLabel("Estimate the threshold from the nighttime NEE. "
+                      "One scenario per percentile.")
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
         form.addRow(note)
+        self.l33_method = make_ustar_method_combo()
+        self.l33_method.currentIndexChanged.connect(self._sync_l33_mode)
+        self.l33_method.currentIndexChanged.connect(self._update_run_label)
+        form.addRow("Method", self.l33_method)
         # Which detected threshold(s) to apply.
         self.l33_apply = QComboBox()
         self.l33_apply.addItems(["CUT (constant)", "VUT (per-year)"])
         self.l33_apply.setToolTip(
-            "CUT — one constant threshold per percentile, applied to the whole record "
+            "CUT: one constant threshold per percentile, applied to the whole record "
             "(CUT_16/50/84).\n"
-            "VUT — a per-year threshold per percentile (each year filtered by its own "
-            "value; VUT_16/50/84). diive's VUT is smoothed over a 3-year window.\n"
-            "CUT and VUT are mutually exclusive — pick one filtering strategy.")
+            "VUT: a threshold per year and percentile, each year filtered by its own "
+            "value (VUT_16/50/84).\n\n" + VUT_CUT_TIP + "\n\n"
+            "CUT and VUT are alternatives. Pick one filtering strategy.")
         self.l33_apply.currentIndexChanged.connect(self._update_run_label)
         form.addRow("Apply", self.l33_apply)
-        # Met drivers the detector stratifies / night-filters on.
+        # Met driver the detector stratifies on (SW_IN is picked above).
         self.l33_ta = QComboBox()
         form.addRow("Air temperature (TA)", self.l33_ta)
-        self.l33_swin = QComboBox()
-        form.addRow("Shortwave in (SW_IN)", self.l33_swin)
         self.l33_detect_mark = self._info_marker()
         form.addRow("", self.l33_detect_mark)
         self.l33_niter = QSpinBox()
-        self.l33_niter.setRange(1, 10000)
-        self.l33_niter.setValue(100)
-        self.l33_niter.setToolTip("Bootstrap iterations per year window.")
+        self.l33_niter.setRange(0, 10000)
+        self.l33_niter.setValue(0)
+        self.l33_niter.setSpecialValueText("Default")
+        self.l33_niter.setToolTip("Bootstrap draws per year and method. Default: 100 "
+                                  "for ONEFlux, 200 for REddyProc.")
         form.addRow("Bootstrap iterations", self.l33_niter)
         self.l33_njobs = QSpinBox()
         self.l33_njobs.setRange(-1, 256)
@@ -856,6 +877,9 @@ class FluxChainTab(DiiveTab):
         self.l33_fw.setToolTip("Forward-mode order: consecutive plateau bins required "
                                "(2 = Fw2, the ONEFlux/REddyProc default).")
         form.addRow("Forward-mode n", self.l33_fw)
+        for w in (self.l33_ta_classes, self.l33_ustar_classes, self.l33_fw):
+            w.setToolTip((w.toolTip() + "\n" if w.toolTip() else "")
+                         + "Moving point method only.")
         for w in (self.l33_ta, self.l33_swin):
             w.currentTextChanged.connect(self._refresh_levels_info)
         self._l33_detect_box = gb
@@ -868,6 +892,14 @@ class FluxChainTab(DiiveTab):
         self.l33_mode.setEnabled(on)
         self._l33_constant_box.setVisible(on and not detect)
         self._l33_detect_box.setVisible(on and detect)
+        self.l33_night.setVisible(on)
+        # SW_IN is needed by the detection and by night-only filtering.
+        self._l33_modeform.setRowVisible(
+            self.l33_swin, on and (detect or self.l33_night.isChecked()))
+        # The stratification feeds the moving point method only.
+        mp = self.l33_method.currentData() in USTAR_MP_MODES
+        for w in (self.l33_ta_classes, self.l33_ustar_classes, self.l33_fw):
+            w.setEnabled(mp)
 
     def _add_ustar(self) -> None:
         value = self.l33_value.value()
@@ -894,36 +926,42 @@ class FluxChainTab(DiiveTab):
         """
         if not self.l33_enable.isChecked():
             return None
+        night = self.l33_night.isChecked()
+        swin = self.l33_swin.currentText().strip()
         if self.l33_mode.currentIndex() == 1:  # detect
             ta = self.l33_ta.currentText().strip()
-            swin = self.l33_swin.currentText().strip()
             pcts = self._l33_percentiles()
             if not ta or not swin or not pcts:
                 return None
             mode = ("cut", "vut")[self.l33_apply.currentIndex()]
+            method = self.l33_method.currentData()
             kwargs: dict = {
                 "_detection": True,
                 "ta_col": ta,
                 "swin_col": swin,
-                "n_iter": self.l33_niter.value(),
+                "detection_mode": method,
+                "n_iter": self.l33_niter.value() or None,  # 0 = method default
                 "n_jobs": self.l33_njobs.value(),
                 "percentiles": pcts,
                 "mode": mode,
             }
-            # Detector knobs only when they differ from the library defaults
-            # (keeps the run + generated script minimal).
-            det: dict = {}
-            if self.l33_ta_classes.value() != 7:
-                det["ta_classes_count"] = self.l33_ta_classes.value()
-            if self.l33_ustar_classes.value() != 20:
-                det["ustar_classes_count"] = self.l33_ustar_classes.value()
-            if self.l33_fw.value() != 2:
-                det["forward_mode_n"] = self.l33_fw.value()
-            if det:
-                kwargs["detector_kwargs"] = det
+            if night:
+                kwargs["nighttime_only"] = True
+            # Moving point knobs only when that method runs and they differ from
+            # the library defaults (keeps the run + generated script minimal).
+            mp: dict = {}
+            if method in USTAR_MP_MODES:
+                if self.l33_ta_classes.value() != 7:
+                    mp["ta_classes_count"] = self.l33_ta_classes.value()
+                if self.l33_ustar_classes.value() != 20:
+                    mp["ustar_classes_count"] = self.l33_ustar_classes.value()
+                if self.l33_fw.value() != 2:
+                    mp["forward_mode_n"] = self.l33_fw.value()
+            if mp:
+                kwargs["detection_kwargs"] = {"mp_kwargs": mp}
             return kwargs
         # constant
-        if not self._ustar:
+        if not self._ustar or (night and not swin):
             return None
         thresholds = [v for v, _ in self._ustar]
         labels = [lab for _, lab in self._ustar]
@@ -932,6 +970,9 @@ class FluxChainTab(DiiveTab):
         # else let the library auto-generate CUT_0, CUT_1, …
         if all(labels):
             kwargs["threshold_labels"] = labels
+        if night:
+            kwargs["nighttime_only"] = True
+            kwargs["swin_col"] = swin
         return kwargs
 
     def _l33_percentiles(self) -> tuple[int, ...]:
@@ -1216,7 +1257,7 @@ class FluxChainTab(DiiveTab):
                 "l31_gapfill": self.l31_gapfill, "l31_zero": self.l31_zero,
                 "strgcol": self.strgcol,
                 "l33_mode": self.l33_mode, "l33_apply": self.l33_apply,
-                "l33_ta": self.l33_ta,
+                "l33_night": self.l33_night, "l33_ta": self.l33_ta,
                 "l33_swin": self.l33_swin, "l33_niter": self.l33_niter,
                 "l33_njobs": self.l33_njobs, "l33_percentiles": self.l33_percentiles,
                 "l33_ta_classes": self.l33_ta_classes,
@@ -1236,6 +1277,7 @@ class FluxChainTab(DiiveTab):
         from diive.gui.widgets.state_utils import save_controls
         controls = save_controls(self._fx_controls())
         controls["mds_mode"] = mode_value(self.mds_mode)  # the value, not the label
+        controls["l33_method"] = self.l33_method.currentData()  # likewise
         return {"controls": controls,
                 "l2": {k: cb.isChecked() for k, cb in self.l2_checks.items()},
                 "l2_vm97": {k: cb.isChecked() for k, cb in self.l2_vm97_checks.items()},
@@ -1257,6 +1299,11 @@ class FluxChainTab(DiiveTab):
         # projects were filled with the plain mean: restore them to 'oneflux'.
         set_mode_value(self.mds_mode,
                        saved.get("mds_mode", "oneflux" if saved else None))
+        # Before the u* method choice the detection was the moving point bootstrap.
+        set_ustar_method(self.l33_method,
+                         saved.get("l33_method", "oneflux_mp" if saved else None))
+        if str(saved.get("l33_mode", "")).startswith("Detect"):
+            self.l33_mode.setCurrentIndex(1)  # older label "Detect (moving point, ...)"
         for k, val in (state.get("l2") or {}).items():
             if k in self.l2_checks:
                 self.l2_checks[k].setChecked(bool(val))
@@ -1621,7 +1668,9 @@ class FluxChainTab(DiiveTab):
             if not l33:
                 if self.l33_enable.isChecked() and self.l33_mode.currentIndex() == 1:
                     msg = ("Pick TA and SW_IN columns and at least one percentile "
-                           "for moving-point detection.")
+                           "for the threshold detection.")
+                elif self.l33_enable.isChecked() and self._ustar:
+                    msg = "Pick an SW_IN column for nighttime-only filtering."
                 else:
                     msg = "Enable Level 3.3 and add at least one USTAR threshold."
                 self.summary.setPlainText(msg)
@@ -1742,13 +1791,20 @@ class FluxChainTab(DiiveTab):
             series = scen[first]
             label = "L3.3"
             note = f"\nUSTAR scenarios: {', '.join(scen)} (preview: {first})."
-            # In detection mode, report the bootstrap-detected CUT thresholds.
+            # In detection mode, report the bootstrap-detected CUT thresholds
+            # and the years and methods that gave no thresholds.
             boot = getattr(data.levels, "ustar_detection", None)
             if boot is not None:
                 try:
                     cut = boot.get_cut_threshold()
-                    note += "\nDetected (moving point): " + "  ".join(
+                    method = USTAR_METHOD_SHORT.get(getattr(boot, "mode", ""), "")
+                    note += f"\nDetected CUT ({method}): " + "  ".join(
                         f"{k}={v:.3f}" for k, v in cut.items())
+                    fails = [f"{y} {m.upper()}: {why}"
+                             for y, d in sorted((boot.failures_ or {}).items())
+                             for m, why in d.items()]
+                    if fails:
+                        note += "\nNo thresholds for: " + ". ".join(fails) + "."
                 except Exception:
                     pass
         else:

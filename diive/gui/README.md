@@ -66,8 +66,8 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — plot-parameter controls (between list and canvas); `changed` enables the tab's **Update plot** button; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
-| `tabs/fluxchain.py` | Flux post-processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** moving-point detection (Apply: CUT / VUT); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
-| `tabs/ustar_detection.py` | **USTAR detection** tab — standalone moving-point u\* threshold detection (`UstarMovingPointDetection`): single seasonal detection (per-season + annual) or multi-year bootstrap (`UstarBootstrapThresholds`) for VUT (per-year) + CUT (constant); table + diagnostic plot, worker thread |
+| `tabs/fluxchain.py` | Flux post-processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** detection (`detection_mode`: ONEFlux MP + CP / MP / CP / REddyProc; Apply: CUT / VUT), both optionally night-only (`nighttime_only` + `swin_col`); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
+| `tabs/ustar_detection.py` | **USTAR detection** tab — standalone u\* threshold detection: **Method** combo (`UstarThresholdDetection` modes `oneflux`/`oneflux_mp`/`oneflux_cp`/`reddyproc`) bootstrapped over the years for VUT (per-year) + CUT (all years), with per-year `failures_` in the table; or a single seasonal detection (`UstarMovingPointDetection`, MP methods only); table + diagnostic plot, worker thread. Also holds the method combo helpers (`make_ustar_method_combo`, `USTAR_MP_MODES`) shared with the chain's L3.3 |
 | `tabs/timelag.py` | Time-lag analysis tab — pick a gas, analyse its `*_TLAG_ACTUAL` lag distribution (`dv.flux.TimeLagAnalysis`), embed the 4-panel peak/range/EddyPro figure; **Load example TLAG data** loads the bundled level-0 lag dataset locally |
 | `tabs/_partitioning_base.py` | `BasePartitioningTab` — shared machinery for the NEE partitioning tab (declarative input-column combos + ✓/✗ markers, site coords from `site.manager`, optional VPD-in-kPa toggle, worker thread, GPP/RECO daily-mean + cumulative preview, Add results). Every control is built once. `_apply_variant` shows only the inputs (`_active_inputs`), coordinate rows (`needs_*`) and options (`has_vpd_unit`) the current variant needs. The subclass implements `_build_partitioner` and `_python_code_for`, and `_variant()` hands the worker the method/mode as plain data so `_compute_payload` stays pure |
 | `tabs/partitioning.py` | **NEE partitioning** tab (`PartitioningNEETab`), the one tab for the four partitioning ports. **Method** combo (Nighttime / Daytime) and **Mode** combo (ONEFlux (ICOS, default) / REddyProc) feed `dv.flux.PartitioningNEE(method=, mode=)` → `*_NT_OF` / `*_NT_RP` / `*_DT_OF` / `*_DT_RP`. The pickers shown come from `partitioning_inputs(method, mode)`, plus the optional inputs from `partitioning_optional_inputs` (gap-filled NEE for daytime/ONEFlux, NEE SD for daytime/REddyProc), which get a *(none)* entry via `ColumnPicker.set_optional_keys`. Input keys are the library's input names. Projects store `method`/`mode` values. **Copy Python** → `partition_nee_to_code`. Replaces the four per-variant tabs: projects saved with those reopen here via `app._MERGED_MENU_TABS` (old label → new label + method/mode preset + control-key renames; the old daytime REddyProc tab's `ta`/`sw_in` become `ta_f`/`sw_in_f`) |
@@ -261,9 +261,12 @@ callables (`init_flux_data` → `run_level2` → `run_level31` → `make_level32
 flux as a date/time heatmap (plus the L3.2 QCF distribution / L3.3 scenarios), and — the point of the feature — **Copy
 Python** emits the exact runnable script via the library's per-level codegen
 (`level2_to_code`/`level31_to_code`/`level32_to_code`/`level33_to_code`/`level41_to_code`). **L3.3 has two modes**
-(a Mode selector swaps the inspector page): *constant thresholds* (enter value/label scenarios) or *moving-point
-detection* (`run_level33_ustar_detection`, with TA/SW_IN pickers, bootstrap params, and an **Apply** selector choosing
-**CUT** (constant → `CUT_16/50/84`) vs **VUT** (per-year → `VUT_16/50/84`) — mutually exclusive strategies). The
+(a Mode selector swaps the inspector page): *constant thresholds* (enter value/label scenarios) or *detection*
+(`run_level33_ustar_detection`, with a Method combo → `detection_mode`, TA/SW_IN pickers, bootstrap params, MP
+stratification → `detection_kwargs={'mp_kwargs': ...}` for the MP methods only, and an **Apply** selector choosing
+**CUT** (constant → `CUT_16/50/84`) vs **VUT** (per-year → `VUT_16/50/84`) — mutually exclusive strategies). A
+**Filter nighttime only** checkbox (both modes) passes `nighttime_only=True` + `swin_col`. Older projects restore the
+old "Detect (moving point, ...)" label as detection with `oneflux_mp`. The
 script-gen lives in the library (`flux/postprocessingchain/codegen.py`: `chain_to_code` for the full
 `run_chain`/`FluxConfig` path, the `level*_to_code` functions for the composable path) because it encodes the API call
 shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —
@@ -274,10 +277,14 @@ state, so values from older projects are ignored. Without a configured site, `_r
 keeps the Add buttons disabled while they differ.
 
 **USTAR detection (`tabs/ustar_detection.py`):** opened from **Flux ▸ USTAR detection**. Standalone
-friction-velocity threshold detection independent of the chain. Pick NEE/TA/USTAR/SW_IN + stratification params (TA/USTAR
-classes, forward-mode-n) and run either a **single seasonal detection** (`UstarMovingPointDetection` → per-season +
-annual threshold table) or, with **Multi-year bootstrap** ticked, `UstarBootstrapThresholds` → **VUT** (variable,
-per-year p16/p50/p84) + **CUT** (constant, pooled) thresholds, as a table + a diagnostic plot. Runs on a worker thread;
+friction-velocity threshold detection independent of the chain. Pick NEE/TA/USTAR/SW_IN, a **Method**
+(`UstarThresholdDetection` mode, stored as the mode value; projects without it restore as `oneflux_mp`) and the MP
+stratification (TA/USTAR classes, forward-mode-n → `mp_kwargs`, enabled for the MP methods only). With **Bootstrap
+over years** ticked (default), `UstarThresholdDetection.run()` → **VUT** (per-year, ONEFlux pools the neighbouring
+years) + **CUT** (all years), with per-year bootstrap counts and `failures_` in the table and status. Unticked, a
+**single seasonal detection** (`UstarMovingPointDetection` → per-season + annual threshold table). The single detection
+is MP-only, so CP-only and REddyProc force the bootstrap on (the user's choice comes back on an MP method). Iterations
+0 = method default (`n_iter=None`), empty percentiles = method default. Runs on a worker thread;
 all detection is library work — the small result plot is the only presentation in the tab (a candidate to move to a
 library plot helper if reused elsewhere).
 

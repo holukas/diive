@@ -1148,18 +1148,27 @@ intermediate results out of the chain without waiting for the whole pipeline.
 **Level 3.3: USTAR filtering** has two modes (a *Mode* dropdown):
 
 - **Constant thresholds.** Type one or more known u\* thresholds (m s⁻¹) with
-  optional labels; each becomes a filtering scenario.
-- **Detect (moving point, Papale 2006).** Estimate the threshold from the data with
-  a multi-year bootstrap. Pick the TA and SW_IN columns, set the bootstrap
-  iterations and percentiles, and choose what to **Apply**:
+  optional labels. Each becomes a filtering scenario.
+- **Detect from the data.** Estimate the threshold with a bootstrap over the years.
+  Pick the **Method**, the TA and SW_IN columns, the bootstrap iterations and the
+  percentiles, and choose what to **Apply**:
   - **CUT** (constant): one threshold per percentile applied to the whole record
     (`CUT_16/50/84`).
   - **VUT** (per-year): each year filtered by its own threshold (`VUT_16/50/84`).
-    diive's VUT is smoothed over a 3-year window for stability.
 
-  CUT and VUT are alternative strategies, so pick one; the percentiles (16/50/84)
+  CUT and VUT are alternative strategies, so pick one. The percentiles (16/50/84)
   are the uncertainty scenarios within it. Each scenario is gap-filled separately at
-  Level 4.1.
+  Level 4.1. The methods are the same as in the **USTAR detection** tab (see there).
+  **Iterations** at *Default* uses the reference value of the method (100 for
+  ONEFlux, 200 for REddyProc). The TA classes, USTAR classes and forward-mode order
+  apply to the moving point method only, so they are off for *ONEFlux: change point
+  only* and *REddyProc*.
+
+**Filter nighttime only** (both modes, off by default) flags low-USTAR records only
+at night: SW_IN below 10 W m⁻², or SW_IN missing. This is the REddyProc default.
+Off, day and night records are flagged, as in ONEFlux. Pick the SW_IN column for it
+under the checkbox. Projects saved before the method choice load with *ONEFlux: moving
+point only*, the method they ran.
 
 **Level 4.1: gap-filling** runs any of Random Forest, XGBoost and MDS on each USTAR
 scenario. For MDS, pick the SW_IN, TA and VPD driver columns and the tolerances.
@@ -1178,18 +1187,42 @@ gap-filling** tab (default **diive**). Projects saved before this option load as
 
 Detect the friction-velocity (u\*) threshold on its own, without running the whole
 chain, useful for exploring thresholds or getting a number for elsewhere. Pick the
-**NEE, air-temperature, USTAR and SW_IN** columns (auto-filled from the data),
-optionally adjust the stratification (temperature and USTAR classes, forward-mode
-order), and:
+**NEE, air-temperature, USTAR and SW_IN** columns (auto-filled from the data) and
+a **Method**:
 
-- leave **Multi-year bootstrap** unticked for a quick **single detection**, giving a
-  threshold per season plus the annual value (the maximum across seasons); or
-- tick it to run the **multi-year bootstrap**, which reports **VUT** (a threshold
-  per year) and **CUT** (one constant threshold pooled across all years), each at the
-  chosen percentiles, as a table and a chart.
+- **ONEFlux: moving point + change point** (default), as used for FLUXNET2015 and
+  ICOS. For each calendar year, the moving point method (Papale et al. 2006) and
+  the change point method (Barr et al. 2013) each give 100 bootstrap thresholds.
+  Both sets are pooled.
+- **ONEFlux: moving point only** or **ONEFlux: change point only**: the same with
+  one of the two methods.
+- **REddyProc**: the moving point variant of REddyProc 1.3.4 (Wutzler et al. 2018).
+  Its seasons can cross the year boundary. It draws 200 bootstrap thresholds per
+  year.
 
-The threshold detection follows the ONEFlux moving-point method (Papale et al.
-2006). Results appear as a table on the left and a plot on the right.
+**Bootstrap over years** (ticked by default) reports, at the chosen percentiles:
+
+- **VUT**: one threshold per year. The ONEFlux methods pool the thresholds of the
+  year and of the years before and after it, as ONEFlux does. REddyProc uses the
+  thresholds of the year only.
+- **CUT**: one constant threshold from the thresholds of all years. ONEFlux itself
+  reports a CUT only for 3 or more years, and the tab says so for shorter records.
+
+Leave **Iterations** at *Default* for the reference value of the method (100 for
+ONEFlux, 200 for REddyProc). Leave **Percentiles** empty for the default of the
+method (16, 50, 84 for ONEFlux, 5, 50, 95 for REddyProc). The last table column lists, per year, how
+many bootstrap thresholds each method gave. A method that gave none for a year is
+marked *none*, and the status line and the row tooltip say why (for example, the
+change point method needs enough valid nighttime records).
+
+Untick **Bootstrap over years** for a quick **single detection** with the ONEFlux
+moving point method, giving a threshold per season plus the annual value (the
+maximum across seasons). It exists for the moving point methods only. With *change
+point only* or *REddyProc* the bootstrap stays on. The **Stratification** box (TA and
+USTAR classes, forward-mode order) applies to the moving point method only.
+
+Results appear as a table on the left and a plot on the right. Projects saved before
+the method choice load with *ONEFlux: moving point only*, the method they ran.
 
 ### Time lag analysis
 
