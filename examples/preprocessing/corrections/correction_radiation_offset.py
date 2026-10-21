@@ -35,6 +35,7 @@ print(f"  Range: {series.min():.2f} to {series.max():.2f} W/m²")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # The correction:
+#
 # 1. Calculates potential radiation for each record from the site location
 # 2. Flags records with potential radiation below 0.001 W/m² as nighttime
 # 3. Takes the mean of each day's nighttime values as that day's offset

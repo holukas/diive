@@ -37,6 +37,7 @@ References:
 # - Widely used in FLUXNET, ICOS, REddyProc
 #
 # How it works (a port of the ONEFlux ``gf_mds`` cascade):
+#
 # 1. For each gap, look for similar meteorological conditions
 # 2. Similarity defined by: radiation (Rg), temperature (Ta), VPD
 # 3. Relax step by step: all three drivers in a 14-day, then a 28-day window;
@@ -62,6 +63,7 @@ References:
 #   unfilled.
 #
 # Flag and quality:
+#
 # - The gap-fill flag is method * 1000 + window in days (0 = measured), with
 #   method 1 = Rg+Ta+VPD, 2 = Rg only, 3 = diurnal cycle. For example, 1014
 #   means all three drivers in a 14-day window.

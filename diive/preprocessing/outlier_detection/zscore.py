@@ -98,7 +98,7 @@ class zScore(FlagBase):
                 Example: 1 for UTC+01:00. Used to detect daytime/nighttime.
             idstr: Identifier, added as suffix to output variable names.
             thres_zscore: Z-score threshold for outlier detection (default 4).
-                Values with |z-score| > threshold are flagged as outliers. Used for:
+                Values with an absolute z-score above the threshold are flagged as outliers. Used for:
                 * **Global mode (separate_day_night=False):** Applied to all records.
                 * **Day/Night mode:** Default for both daytime and nighttime (can be overridden).
             thres_zscore_daytime: Override ``thres_zscore`` for daytime records only.
@@ -293,7 +293,7 @@ class zScoreRolling(FlagBase):
             series: Time series in which outliers are identified.
             idstr: Identifier suffix for output variable names.
             thres_zscore: Z-score threshold for outlier detection (default 4).
-                Values with |z-score| > threshold are flagged as outliers.
+                Values with an absolute z-score above the threshold are flagged as outliers.
             winsize: Window size for rolling statistics, as a record count or
                 as a time span such as ``'1D'``. A time span is converted to
                 records at the series' frequency (``'1D'`` is 48 records of

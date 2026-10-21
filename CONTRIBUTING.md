@@ -495,7 +495,9 @@ git push origin feature/my-new-feature
    `diive/__init__.py`.
 2. Update `CHANGELOG.md`. It follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
    with the sections Added, Changed, Deprecated, Removed and Fixed.
-3. Push a `vX.Y.Z` tag.
+3. Build the docs once with `.\docs\build_docs.ps1 -NoGallery`. It fails on any warning, as Read
+   the Docs does, so the release docs cannot fail after the tag.
+4. Push a `vX.Y.Z` tag.
 
 `.github/workflows/publish.yml` checks that the tag and both version strings match,
 builds the package and publishes it to PyPI via trusted publishing.

@@ -146,7 +146,7 @@ class FlagQCF:
         Args:
             df: DataFrame containing individual test flag columns (e.g.
                 FLAG_TEST1_L41_NEE_TEST). Values must be 0/1/2. Every column that
-                starts with FLAG_, ends with _TEST or _QCF and contains the target
+                starts with ``FLAG_``, ends with ``_TEST`` or ``_QCF`` and contains the target
                 name (for fluxes also related names, e.g. FC for NEE; see
                 ``identify_flagcols``) is used, whatever its idstr.
             target_col: Column name of the target variable to calculate QCF for (e.g., 'NEE' or 'FC').

@@ -98,6 +98,7 @@ class ManualRemoval(FlagBase):
         Args:
             series: Time series in which outliers are identified.
             remove_dates: List of records to flag for removal. Each entry is either:
+
                 * a single date(time) string, which flags that one record, e.g.
                   '2022-06-30 23:58:30'. A bare date such as '2006-05-01' flags the
                   whole day (partial-string match, both bounds inclusive).
@@ -106,11 +107,14 @@ class ManualRemoval(FlagBase):
                   ['2022-06-05 00:00:30', '2022-06-07 14:30:00']. Bare dates again
                   span whole days, so ['2006-05-01', '2006-07-18'] removes everything
                   from the start of 2006-05-01 to the end of 2006-07-18.
+
                 A range MUST be given as a nested two-element list. A flat list of two
                 strings is interpreted as two separate single-record removals, not a range.
-                Example mixing both forms:
+                Example mixing both forms::
+
                     remove_dates=['2022-06-30 23:58:30',
                                   ['2022-06-05 00:00:30', '2022-06-07 14:30:00']]
+
             showplot: Show plot with removed data points.
             verbose: More text output to console if *True*.
             idstr: Identifier, added as suffix to output variable names.
