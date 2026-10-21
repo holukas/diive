@@ -3,6 +3,48 @@
 ![diive](images/logo_diive1_256px.png)
 
 
+## [Unreleased]
+
+USTAR threshold detection now reproduces ONEFlux and REddyProc. The new `UstarThresholdDetection`
+selects the method with `mode`, and the flux post-processing chain detects thresholds as ONEFlux by
+default. Thresholds detected in the chain change: look for entries marked "changes results".
+
+### Added
+
+- **USTAR threshold detection:** `UstarThresholdDetection` bootstraps each year and reports VUT and
+  CUT thresholds, with `mode='oneflux'` (default, moving point and change point pooled, as
+  FLUXNET2015 and ICOS), `'oneflux_mp'`, `'oneflux_cp'` or `'reddyproc'`.
+- **Change point method:** `UstarChangePointDetection` ports the ONEFlux change point detection
+  (Barr et al. 2013) and gives the same thresholds as ONEFlux.
+- **REddyProc method:** `UstarReddyProcDetection` ports the REddyProc 1.3.4 USTAR threshold
+  estimation and its bootstrap, with the same results as REddyProc.
+- **ONEFlux random draws:** `random_state='oneflux'` draws the change point resamples as ONEFlux
+  does, so the change point thresholds equal those of ONEFlux.
+- **Nighttime-only USTAR filtering:** `nighttime_only=True` in the Level 3.3 functions, the USTAR
+  flag classes and `FluxConfig(ustar_nighttime_only=True)` removes only nighttime records below the
+  threshold, as REddyProc does.
+- **Chain settings:** `run_level33_ustar_detection(detection_mode=)` and
+  `FluxConfig(ustar_bootstrap_detection_mode=)` select the detection method.
+
+### Changed
+
+- **Moving point method (changes results):** `UstarMovingPointDetection` now gives the same
+  thresholds as the compiled ONEFlux code, also in its rules for short records and in its bootstrap.
+- **USTAR detection in the chain (changes results):** `run_level33_ustar_detection` and `run_chain`
+  detect thresholds as ONEFlux, with moving point and change point thresholds per year, instead of
+  the moving point method on a 3-year block of data, which gave higher thresholds.
+- **Faster moving point method:** `UstarMovingPointDetection` runs about 6 times faster.
+- **Examples:** the USTAR examples show `UstarThresholdDetection` and compare its four modes.
+- **Dependencies:** numba is now a direct dependency (it came with shap before). Intel Macs get
+  numba below 0.63, the last versions with wheels for them.
+
+### Deprecated
+
+- **`UstarBootstrapThresholds`:** use `UstarThresholdDetection`.
+- **`UstarVekuriThresholdDetection`:** not a published method, use `UstarThresholdDetection`.
+- **`detector_class` and `detector_kwargs`:** in `run_level33_ustar_detection`, use
+  `detection_mode` and `detection_kwargs`.
+
 ## [0.92.0] - 2026-10-21
 
 This release focuses on updates and improvements to MDS gap-filling and NEE partitioning. Both

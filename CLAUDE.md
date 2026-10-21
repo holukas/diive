@@ -59,6 +59,16 @@ Four NEE partitioning ports coexist, with column suffixes `*_NT_OF`, `*_NT_RP`, 
 
 **Units for these ports are stated in docstrings, not validated** (VPD in kPa by default via `vpd_in_kpa=True`). Don't add unit-guessing warnings or EddyPro-specific hints; the caller owns units. This covers the library. The GUI's MDS tab may keep its warning when the VPD column name (`hPa`/`kPa`) contradicts the "VPD in kPa" box.
 
+## USTAR threshold detection (faithful ports: do not "fix")
+
+`UstarThresholdDetection(mode=...)` (`flux/lowres/ustar_detection.py`) is the entry point, as `FluxMDS(mode=...)` is for MDS. `mode='oneflux'` (default, ICOS and FLUXNET2015) runs ONEFlux moving point (`UstarMovingPointDetection`) and change point (`UstarChangePointDetection`) per calendar year, 100 draws each, and pools them: the VUT of year Y from years Y-1 to Y+1, the CUT from all years, nearest-rank percentiles (`oneflux_percentile`). `'oneflux_mp'` and `'oneflux_cp'` use one method. `'reddyproc'` runs `UstarReddyProcDetection` (REddyProc 1.3.4, 200 values per year, R type 7 quantiles 5/50/95). Its CUT (all years pooled) is a diive extension. Level 3.3 selects the mode with `run_level33_ustar_detection(detection_mode=)` and `FluxConfig.ustar_bootstrap_detection_mode`. `UstarBootstrapThresholds` (3-year data window, higher thresholds, L378) and `UstarVekuriThresholdDetection` (not a published method) are deprecated.
+
+- **Parity:** MP is bitwise to the compiled ONEFlux `ustar_mp` C in 21 cases. CP equals the 8 digits ONEFlux writes in all 1000 values of 10 site-years. REddyProc is bitwise at every stage, including the 199 resamples, in 4 cases. Harnesses (outside the repo): `diive-data/references/ustar_parity/mp/`, `cp/`, `reddyproc/`. Re-run the matching one after any change to a port. The CP reference is the compiled MATLAB `ustar_cp` of ONEFlux, run in WSL on MATLAB Runtime R2018a (`~/mcr`).
+- **Reference quirks reproduced on purpose** (L357-L377). ONEFlux MP: bootstrap seasons cut by row position with a 47-row leap-year offset, one big season stays for all later draws, one failed draw drops all MP values of the year, UCRT `qsort` tie order. ONEFlux CP: the port follows the code, not Barr et al. (2013), and a year needs 4000 valid night records (CH-Dav fails every year, as at ICOS). REddyProc: a year with fewer than 3000 night records is pooled into one season, seasons crossing the year boundary change year in the bootstrap, and year values depend on the neighbouring years in the input.
+- **ONEFlux-mode input is rounded to `%g`** (6 significant digits, as `qc_auto` writes the yearly files, `_qc_auto_text`) and each year is padded to its full grid. Without the rounding a few records fall into another class.
+- **Random draws:** `random_state=42` by default. `random_state='oneflux'` draws the CP resamples from MATLAB's default stream, continued over the years in order (runs sequentially), so CP equals ONEFlux. MP is then unseeded, because ONEFlux seeds it with the clock. The Windows ONEFlux build draws only rows 0-16383 (`RAND_MAX`), diive draws all rows as on Linux (L357).
+- **`nighttime_only`** (L3.3 functions, u\* flag classes, `FluxConfig.ustar_nighttime_only`): filter only records with SW_IN below 10 W m-2 or missing, as REddyProc. The default (False) filters day and night, as ONEFlux.
+
 ## Gap-filling
 
 **[VALIDATION — expect this question]** ML held-out scores (`scores_traintest_`) come from a **random** split of complete rows, not a temporal/block split. This is correct for gap-filling: gaps are interspersed with observed data and filled from same-timestamp drivers, so a random hold-out reproduces the task. A block split measures transferability to an unseen period instead. Do **not** frame this as "long gaps belong to MDS": MDS degrades on long gaps, driver-based ML often handles them better.
@@ -162,7 +172,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 
 **[CRITICAL] NEVER COMMIT CHANGES.** The user stages and commits exclusively.
 
-**[CRITICAL] NEVER RUN THE EXAMPLE SUITE** (113 examples, several minutes each). Run single examples with `MPLBACKEND=Agg` — 16 end in a bare `plt.show()` that blocks headless:
+**[CRITICAL] NEVER RUN THE EXAMPLE SUITE** (112 examples, several minutes each). Run single examples with `MPLBACKEND=Agg` — 16 end in a bare `plt.show()` that blocks headless:
 
 ```bash
 MPLBACKEND=Agg uv run python examples/gapfilling/gapfill_randomforest.py
