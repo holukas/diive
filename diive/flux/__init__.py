@@ -40,7 +40,10 @@ from diive.flux.lowres.ustar_detection import USTAR_MODES
 from diive.flux.lowres.ustar_detection import UstarThresholdDetection
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
 from diive.flux.lowres.ustar_reference import ONEFLUX_REF_PERCENTILES
+from diive.flux.lowres.ustar_reference import PartitioningReferenceResult
 from diive.flux.lowres.ustar_reference import UstarReferenceResult
+from diive.flux.lowres.ustar_reference import oneflux_ure_cleanup
+from diive.flux.lowres.ustar_reference import select_partitioning_reference
 from diive.flux.lowres.ustar_reference import select_ustar_reference
 from diive.flux.lowres.ustar_reddyproc_detection import UstarReddyProcDetection
 from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
@@ -82,6 +85,9 @@ __all__ = [
     'ONEFLUX_REF_PERCENTILES',
     'UstarReferenceResult',
     'select_ustar_reference',
+    'PartitioningReferenceResult',
+    'select_partitioning_reference',
+    'oneflux_ure_cleanup',
     'UstarVekuriThresholdDetection',
     'FlagMultipleConstantUstarThresholds',
     'FlagMultipleVariableUstarThresholds',
