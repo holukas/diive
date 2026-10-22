@@ -39,6 +39,9 @@ from diive.flux.lowres.ustar_cp_detection import UstarChangePointDetection
 from diive.flux.lowres.ustar_detection import USTAR_MODES
 from diive.flux.lowres.ustar_detection import UstarThresholdDetection
 from diive.flux.lowres.ustar_mp_detection import UstarMovingPointDetection
+from diive.flux.lowres.ustar_reference import ONEFLUX_REF_PERCENTILES
+from diive.flux.lowres.ustar_reference import UstarReferenceResult
+from diive.flux.lowres.ustar_reference import select_ustar_reference
 from diive.flux.lowres.ustar_reddyproc_detection import UstarReddyProcDetection
 from diive.flux.lowres.ustar_vekuri_detection import UstarVekuriThresholdDetection
 from diive.flux.lowres.ustarthreshold import FlagMultipleConstantUstarThresholds
@@ -76,6 +79,9 @@ __all__ = [
     'UstarChangePointDetection',
     'UstarReddyProcDetection',
     'UstarMovingPointDetection',
+    'ONEFLUX_REF_PERCENTILES',
+    'UstarReferenceResult',
+    'select_ustar_reference',
     'UstarVekuriThresholdDetection',
     'FlagMultipleConstantUstarThresholds',
     'FlagMultipleVariableUstarThresholds',

@@ -144,9 +144,11 @@ class UstarThresholdDetection:
       crossing the year boundary and a bootstrap within each season.
 
     Each mode reproduces its reference software, including the way it picks the
-    percentiles (ONEFlux: nearest rank, REddyProc: R quantile type 7). The ONEFlux
-    modes do not include the REF threshold, which ONEFlux selects afterwards by
-    model efficiency over 40 gap-filled versions of NEE.
+    percentiles (ONEFlux: nearest rank, REddyProc: R quantile type 7). The REF
+    threshold, which ONEFlux selects afterwards by model efficiency over 40
+    gap-filled versions of NEE, is selected by
+    :func:`~diive.flux.lowres.ustar_reference.select_ustar_reference` (in the
+    chain: ``run_level41_ustar_reference``).
 
     The input is split into calendar years. In the ONEFlux modes each year is
     prepared as ONEFlux's yearly input files are: padded to the full grid of the

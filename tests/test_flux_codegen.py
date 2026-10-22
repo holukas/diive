@@ -104,9 +104,41 @@ class TestFluxCodegen(unittest.TestCase):
         compile(code, "<gen>", "exec")
         # L3.3 always renders the L3.2 chain before it (USTAR needs screened data).
         self.assertIn("make_level32_detector", code)
-        self.assertIn("run_level33_constant_ustar(", code)
-        self.assertIn("thresholds=[0.18]", code)
-        self.assertIn("threshold_labels=['CUT_50']", code)
+        # Percentile labels -> the one L3.3 entry point with given thresholds
+        self.assertIn("run_level33_ustar_detection(", code)
+        self.assertIn("thresholds={50: 0.18}", code)
+        self.assertNotIn("threshold_labels", code)
+
+    def test_level33_to_code_free_labels_stay_constant(self):
+        from diive.flux.postprocessingchain import level33_to_code
+        kw = dict(init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+                  level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+                  level31_kwargs={},
+                  level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}])
+        for labels in (["CUT_NONE"], ["CUT_5"], ["low"]):
+            with self.subTest(labels=labels):
+                code = level33_to_code(**kw, level33_kwargs={"thresholds": [0.1],
+                                                             "threshold_labels": labels})
+                compile(code, "<gen>", "exec")
+                self.assertIn("run_level33_constant_ustar(", code)
+                self.assertIn(f"threshold_labels={labels!r}", code)
+
+    def test_level33_to_code_detection_with_reference(self):
+        from diive.flux.postprocessingchain import level41_to_code
+        code = level41_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={},
+            level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+            level33_kwargs={"_detection": True, "ta_col": "TA", "swin_col": "SW_IN",
+                            "mode": "vut", "reference": True},
+            level41_cfg={"methods": ["mds"], "ustar_reference": True,
+                         "mds": {"swin": "SW_IN", "ta": "TA", "vpd": "VPD", "mode": "oneflux"}})
+        compile(code, "<gen>", "exec")
+        self.assertIn("reference=True,", code)
+        self.assertIn("mode='vut',", code)
+        self.assertIn("run_level41_ustar_reference", code.split("init_flux_data(")[0])
+        self.assertLess(code.index("run_level41_mds("), code.index("data = run_level41_ustar_reference(data)"))
 
     def test_level41_to_code(self):
         from diive.flux.postprocessingchain import level41_to_code
@@ -124,7 +156,7 @@ class TestFluxCodegen(unittest.TestCase):
         compile(code, "<gen>", "exec")
         # L4.1 always renders the full L2 -> L3.3 chain before it.
         self.assertIn("make_level32_detector", code)
-        self.assertIn("run_level33_constant_ustar(", code)
+        self.assertIn("run_level33_ustar_detection(", code)
         # One engineer shared by rf + xgb; mds takes driver columns.
         self.assertEqual(code.count("make_level41_engineer("), 1)
         self.assertIn("run_level41_rf(", code)

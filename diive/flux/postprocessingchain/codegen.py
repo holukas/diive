@@ -228,7 +228,11 @@ def level33_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
             optional ``threshold_labels``, ``nighttime_only``, ``swin_col``), or
             for ``run_level33_ustar_detection`` when it holds
             ``"_detection": True`` (``detection_mode``, ``detection_kwargs``,
-            ``nighttime_only``, ...). The deprecated ``detector_class`` and
+            ``thresholds``, ``reference``, ``nighttime_only``, ...). Constant
+            thresholds labelled by percentile as ``run_level33_ustar_detection``
+            labels them (``CUT_16``, ``CUT_50``, ...) are written as
+            ``run_level33_ustar_detection(thresholds={16: ..., 50: ...})``,
+            which gives the same flags. The deprecated ``detector_class`` and
             ``detector_kwargs`` are written in their replacement form
             (``detection_mode='oneflux_mp'``, ``detection_kwargs={'mp_kwargs': ...}``).
         df_var, load_hint: as in :func:`chain_to_code`.
@@ -250,10 +254,33 @@ def _level33_is_detection(level33_kwargs: dict) -> bool:
     return bool(level33_kwargs) and bool(level33_kwargs.get("_detection"))
 
 
+def _constant_by_percentile(level33_kwargs: dict) -> dict | None:
+    """``{percentile: threshold}`` when a constant spec is labelled exactly as
+    ``run_level33_ustar_detection`` labels percentiles (``CUT_16``, ``CUT_50``,
+    ...), else None (free labels such as ``CUT_NONE`` stay constant)."""
+    import re
+
+    from diive.flux.postprocessingchain.levels.level33 import ustar_scenario_labels
+    thresholds = level33_kwargs.get("thresholds")
+    labels = level33_kwargs.get("threshold_labels")
+    if not thresholds or not labels or len(thresholds) != len(labels):
+        return None
+    pcts = []
+    for label in labels:
+        m = re.fullmatch(r"CUT_(\d+(?:\.\d+)?)", str(label))
+        if m is None:
+            return None
+        pcts.append(float(m.group(1)))
+    if ustar_scenario_labels("CUT", pcts) != list(labels):
+        return None
+    return {(int(p) if p.is_integer() else p): v for p, v in zip(pcts, thresholds, strict=True)}
+
+
 def _level33_import_name(level33_kwargs: dict) -> str:
     """The L3.3 function symbol to import for this spec."""
-    return ("run_level33_ustar_detection" if _level33_is_detection(level33_kwargs)
-            else "run_level33_constant_ustar")
+    if _level33_is_detection(level33_kwargs) or _constant_by_percentile(level33_kwargs or {}):
+        return "run_level33_ustar_detection"
+    return "run_level33_constant_ustar"
 
 
 def _level33_detection_defaults() -> dict:
@@ -293,6 +320,13 @@ def _level33_block(level33_kwargs: dict) -> list[str]:
             {k: v for k, v in level33_kwargs.items() if k != "_detection"})
         return ["", "data = run_level33_ustar_detection(", "    data,",
                 *_kwargs_lines(kw, _level33_detection_defaults()), ")"]
+    by_pct = _constant_by_percentile(level33_kwargs)
+    if by_pct:
+        kw = {"thresholds": by_pct,
+              **{k: v for k, v in level33_kwargs.items()
+                 if k not in ("thresholds", "threshold_labels")}}
+        return ["", "data = run_level33_ustar_detection(", "    data,",
+                *_kwargs_lines(kw, _level33_detection_defaults()), ")"]
     return ["", "data = run_level33_constant_ustar(", "    data,",
             *_kwargs_lines(level33_kwargs, _level33_defaults()), ")"]
 
@@ -309,7 +343,8 @@ def _level41_block(level41_cfg: dict) -> list[str]:
          "mds": {"swin": "SW_IN_...", "ta": "TA_...", "vpd": "VPD_...",
                  # optional: "ta_tol", "vpd_tol", "mode", and the driver QC flag
                  # columns "swin_qc", "ta_qc", "vpd_qc" (omitted when None)
-                 }}
+                 },
+         "ustar_reference": True}           # optional: REF after MDS, then rf / xgb
 
     RF and XGBoost share one ``make_level41_engineer`` instance (feature
     engineering runs once and is reused across methods and USTAR scenarios).
@@ -318,9 +353,10 @@ def _level41_block(level41_cfg: dict) -> list[str]:
     features = level41_cfg.get("features") or []
     reduce = level41_cfg.get("reduce_features")
     lines: list[str] = []
+    ml: list[str] = []
     if any(m in methods for m in ("rf", "xgb")):
-        lines += ["", "engineer = make_level41_engineer(", "    data,",
-                  f"    features={features!r},", ")"]
+        ml += ["", "engineer = make_level41_engineer(", "    data,",
+               f"    features={features!r},", ")"]
 
     def _ml_call(fn: str, model_kwargs: dict) -> list[str]:
         body = ["", f"data = {fn}(", "    data,",
@@ -333,9 +369,12 @@ def _level41_block(level41_cfg: dict) -> list[str]:
         return body
 
     if "rf" in methods:
-        lines += _ml_call("run_level41_rf", level41_cfg.get("rf_kwargs", {}))
+        ml += _ml_call("run_level41_rf", level41_cfg.get("rf_kwargs", {}))
     if "xgb" in methods:
-        lines += _ml_call("run_level41_xgb", level41_cfg.get("xgb_kwargs", {}))
+        ml += _ml_call("run_level41_xgb", level41_cfg.get("xgb_kwargs", {}))
+    with_ref = "mds" in methods and level41_cfg.get("ustar_reference")
+    if not with_ref:
+        lines += ml
     if "mds" in methods:
         mds = level41_cfg.get("mds") or {}
         body = ["", "data = run_level41_mds(", "    data,",
@@ -349,6 +388,11 @@ def _level41_block(level41_cfg: dict) -> list[str]:
                 body.append(f"    {k}={mds[k]!r},")
         body.append(")")
         lines += body
+        if with_ref:
+            # REF before RF / XGBoost: they leave out the 40 REF versions but
+            # include the scenario the REF maps to, once it is selected.
+            lines += ["", "data = run_level41_ustar_reference(data)"]
+            lines += ml
     return lines
 
 
@@ -491,6 +535,8 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     for method in ("mds", "rf", "xgb"):
         if method in methods:
             names.append(f"run_level41_{method}")
+    if "mds" in methods and level41_cfg.get("ustar_reference"):
+        names.append("run_level41_ustar_reference")
     names += _level42_fn_names(level42_cfg)
     imports = ("from diive.flux.postprocessingchain import (\n    "
                + ", ".join(names) + ")")
@@ -532,6 +578,8 @@ def level41_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     for method in ("mds", "rf", "xgb"):
         if method in methods:
             names.append(f"run_level41_{method}")
+    if "mds" in methods and level41_cfg.get("ustar_reference"):
+        names.append("run_level41_ustar_reference")
     imports = ("from diive.flux.postprocessingchain import (\n    "
                + ", ".join(names) + ")")
     lines = _init_level2_lines(imports, init_kwargs, level2_settings, df_var, load_hint)

@@ -62,6 +62,39 @@ def require_level33(data: FluxLevelData) -> dict[str, pd.Series]:
     return data.levels.filteredseries_level33_qcf
 
 
+def select_scenarios(data: FluxLevelData, scenarios=None) -> dict[str, pd.Series]:
+    """The L3.3 scenarios a Level 4.1 machine learning or Level 4.2 step runs on.
+
+    ``scenarios=None`` takes all of them, except the 40 versions that
+    ``reference=True`` adds only to select the ONEFlux REF. Those are gap-filled
+    by MDS for the selection and are left out here, so the slow steps run on
+    the requested percentiles (e.g. CUT_16, CUT_50, CUT_84) plus the scenario
+    the REF maps to, if ``run_level41_ustar_reference`` ran before. A list of
+    labels picks the scenarios explicitly, in that order.
+
+    Raises:
+        RuntimeError: If Level 3.3 has not run.
+        KeyError: If a requested label is not an L3.3 scenario.
+    """
+    filtered = require_level33(data)
+    if scenarios is not None:
+        if isinstance(scenarios, str):
+            scenarios = [scenarios]
+        unknown = [s for s in scenarios if s not in filtered]
+        if unknown:
+            raise KeyError(f"Unknown USTAR scenario(s) {unknown}. "
+                           f"Level 3.3 has: {list(filtered)}.")
+        return {s: filtered[s] for s in dict.fromkeys(scenarios)}
+    rec = getattr(data.levels, 'ustar_scenarios', None)
+    if rec is None or not rec.reference_labels:
+        return dict(filtered)
+    helpers = set(rec.reference_labels) - set(rec.main_labels)
+    ref = getattr(data.levels, 'ustar_reference', None)
+    if ref is not None:
+        helpers.discard(ref.scenario)
+    return {s: v for s, v in filtered.items() if s not in helpers}
+
+
 def append_level_id(level_ids: list[str], idstr: str) -> list[str]:
     """Append ``idstr`` to ``level_ids`` once (idempotent)."""
     new = list(level_ids)

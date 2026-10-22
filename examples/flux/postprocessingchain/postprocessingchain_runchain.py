@@ -235,8 +235,10 @@ data.plot_cumulative_comparison(
 # ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Three scenarios
 # (``CUT_16`` / ``CUT_50`` / ``CUT_84``) are produced by default. The fitted
 # ``UstarThresholdDetection`` lands on ``data.levels.ustar_detection`` for
-# inspection. ``run_chain`` applies the constant (CUT) threshold. For per-year
-# VUT filtering use the composable ``run_level33_ustar_detection(..., mode='vut')``.
+# inspection. ``run_chain`` applies the constant (CUT) threshold by default,
+# ``ustar_threshold_type='vut'`` one threshold per year (VUT).
+# ``ustar_reference=True`` adds the REF series as ONEFlux selects it (needs
+# MDS, best with ``mds_mode='oneflux'``).
 # ``ustar_nighttime_only=True`` removes only nighttime records below the
 # threshold, as REddyProc does.
 #

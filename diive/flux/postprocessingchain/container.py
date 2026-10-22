@@ -24,6 +24,7 @@ if TYPE_CHECKING:
         FluxStorageCorrectionSinglePointEddyPro,
     )
     from diive.flux.lowres.ustar_detection import UstarThresholdDetection
+    from diive.flux.lowres.ustar_reference import UstarReferenceResult
     from diive.flux.lowres.ustarthreshold import (
         FlagMultipleConstantUstarThresholds,
         FlagMultipleVariableUstarThresholds,
@@ -181,10 +182,18 @@ class FluxConfig:
       ``CUT_<p>`` labels are produced from
       ``ustar_bootstrap_percentiles``."""
 
-    ustar_thresholds: list | None = None
-    """USTAR threshold(s) in m s-1 — one per scenario. Required when
-    ``ustar_detection_mode='constant'``. Use ``[0.0]`` for energy fluxes
-    (H, LE) to keep all records."""
+    ustar_thresholds: list | dict | None = None
+    """USTAR threshold(s) in m s-1. Required when
+    ``ustar_detection_mode='constant'``. Two forms:
+
+    - A list, one value per scenario, labelled with ``ustar_labels``. Use
+      ``[0.0]`` for energy fluxes (H, LE) to keep all records.
+    - A dict keyed by percentile, e.g. ``{16: 0.18, 50: 0.22, 84: 0.27}``.
+      The scenarios get the labels of detected thresholds (``CUT_16``,
+      ``CUT_50``, ``CUT_84``) and ``ustar_labels`` is ignored. With
+      ``ustar_threshold_type='vut'`` give one dict per year:
+      ``{2021: {16: 0.17, 50: 0.21, 84: 0.26}, 2022: {...}}``. Passed to
+      ``run_level33_ustar_detection(thresholds=...)``."""
 
     ustar_labels: list | None = None
     """Short label per threshold (e.g. ``['CUT_50']``; ``['CUT_NONE']`` for H/LE).
@@ -241,6 +250,23 @@ class FluxConfig:
     """Incoming shortwave radiation column (W m-2) that defines the night for
     ``ustar_nighttime_only`` in constant mode. Bootstrap mode uses
     ``ustar_bootstrap_swin_col`` for both the detection and the filtering."""
+
+    ustar_threshold_type: str = 'cut'
+    """``'cut'`` (default): one constant threshold per percentile (CUT_<p>).
+    ``'vut'``: one threshold per year and percentile (VUT_<p>). Applies to
+    ``ustar_detection_mode='bootstrap'`` and to percentile-keyed per-year
+    ``ustar_thresholds``."""
+
+    ustar_reference: bool = False
+    """Select the REF threshold as ONEFlux does (model efficiency over 40
+    gap-filled versions, ``run_level41_ustar_reference``). Adds the 40 ONEFlux
+    percentiles (1.25 to 98.75) as extra u* scenarios, gap-fills them with
+    MDS and adds ``CUT_REF`` (or ``VUT_REF``) next to the other scenarios.
+    Needs ``gapfill_mds=True`` and either ``ustar_detection_mode='bootstrap'``
+    or percentile-keyed ``ustar_thresholds`` that include the 40 percentiles.
+    MDS runs in ``mds_mode``: set ``mds_mode='oneflux'`` for the REF ONEFlux
+    would select. Random Forest, XGBoost and Level 4.2 run only on the
+    requested percentiles and the REF scenario, not on the 40 extra ones."""
 
     level2_test_settings: dict | None = None
     """Which Level-2 quality tests to run, and the settings for each.
@@ -593,12 +619,20 @@ class LevelResults:
     filteredseries_level33_hq: dict[str, pd.Series] = field(default_factory=dict)
     ustar_detection: 'UstarThresholdDetection | None' = None
     """``UstarThresholdDetection`` instance when ``run_level33_ustar_detection``
-    was used; ``None`` otherwise."""
+    detected the thresholds; ``None`` otherwise (also when the thresholds were
+    given, see ``ustar_scenarios``)."""
+    ustar_scenarios: 'UstarScenarios | None' = None
+    """Record of the u* scenarios ``run_level33_ustar_detection`` applied:
+    detected or given, CUT or VUT, the percentile and threshold of each label.
+    ``None`` after ``run_level33_constant_ustar`` / ``run_level33_variable_ustar``."""
 
     # Level-4.1 — one dict per gap-filling method, keyed by USTAR scenario
     level41_mds: dict[str, Any] = field(default_factory=dict)
     level41_rf: dict[str, Any] = field(default_factory=dict)
     level41_xgb: dict[str, Any] = field(default_factory=dict)
+    ustar_reference: 'UstarReference | None' = None
+    """REF u* scenario selected by ``run_level41_ustar_reference`` (ONEFlux
+    model efficiency over the MDS gap-filled versions); ``None`` otherwise."""
 
     def has_level41(self) -> bool:
         """True if any L4.1 method has produced results."""
@@ -652,6 +686,59 @@ class LevelResults:
         if self.level42_dt_of:
             out['dt_of'] = self.level42_dt_of
         return out
+
+
+@dataclass(frozen=True)
+class UstarScenarios:
+    """The u* scenarios applied at Level 3.3 by ``run_level33_ustar_detection``.
+
+    Attributes:
+        source: ``'detected'`` (by ``UstarThresholdDetection``, see
+            ``LevelResults.ustar_detection``) or ``'given'`` (``thresholds=``).
+        threshold_type: ``'cut'`` (one threshold per percentile) or ``'vut'``
+            (one per year and percentile).
+        percentiles: ``{label: percentile}`` of every scenario, in scenario order.
+        thresholds: ``{label: threshold}`` in m s-1, for VUT
+            ``{label: {year: threshold}}``.
+        reference_labels: Labels of the 40 ONEFlux REF versions
+            (``reference=True``), in percentile order. Empty otherwise.
+        main_labels: Labels of the requested percentiles (e.g. ``CUT_16``,
+            ``CUT_50``, ``CUT_84``). With ``reference=True`` Level 4.1 machine
+            learning and Level 4.2 run only on these and the REF scenario by
+            default, not on the 40 REF versions.
+    """
+    source: str
+    threshold_type: str
+    percentiles: dict
+    thresholds: dict
+    reference_labels: tuple = ()
+    main_labels: tuple = ()
+
+
+@dataclass(frozen=True)
+class UstarReference:
+    """REF u* scenario of the chain, selected by ``run_level41_ustar_reference``.
+
+    Attributes:
+        label: Label of the REF output, ``'CUT_REF'`` or ``'VUT_REF'``.
+        scenario: L3.3 scenario label the half-hourly REF maps to.
+        percentile: Its percentile.
+        threshold: Its u* threshold (m s-1), for VUT ``{year: threshold}``.
+        gapfilled_col: ``fpc_df`` column with the gap-filled REF NEE.
+        flag_col: ``fpc_df`` column with its gap-filling flag.
+        scenarios: REF scenario label per time resolution (``'HH'``,
+            ``'DD'``, ``'WW'``, ``'MM'``, ``'YY'``), None where ONEFlux finds none.
+        result: Full :class:`~diive.flux.lowres.ustar_reference.UstarReferenceResult`
+            (scores, model efficiency matrices, removed records).
+    """
+    label: str
+    scenario: str
+    percentile: float
+    threshold: Any
+    gapfilled_col: str
+    flag_col: str
+    scenarios: dict
+    result: 'UstarReferenceResult'
 
 
 @dataclass

@@ -10,9 +10,11 @@ Entry points:
 * ``run_level33_constant_ustar`` — apply pre-determined constant threshold(s).
 * ``run_level33_variable_ustar`` — apply time-varying (e.g. per-year, VUT)
   threshold Series, one per scenario.
-* ``run_level33_ustar_detection`` — detect the threshold from the data
-  (``detection_mode=``: ONEFlux, REddyProc, ...), then apply it as CUT
-  (constant) or VUT (per-year), selected with ``mode=``.
+* ``run_level33_ustar_detection`` — thresholds at percentiles, detected from
+  the data (``detection_mode=``: ONEFlux, REddyProc, ...) or given
+  (``thresholds=``), applied as CUT (constant) or VUT (per-year), selected
+  with ``mode=``. ``reference=True`` adds the scenarios for the ONEFlux REF
+  threshold.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -213,22 +215,20 @@ def run_level33_constant_ustar(
 
 
 def _validate_ustar_labels(labels: list[str]) -> None:
-    """Reject duplicate or substring-overlapping scenario labels (flag-lookup safety)."""
+    """Reject duplicate or token-overlapping scenario labels (flag-lookup safety)."""
     if len(set(labels)) != len(labels):
         raise ValueError(f"USTAR scenario labels must be unique; got {labels}.")
-    # Substring-overlap check: a label that contains another label as a substring
-    # would silently match the wrong flag column at lookup time (e.g. 'CUT_5' is
-    # contained in 'FLAG_..._CUT_50_..._TEST'). Reject up front so the user can
-    # pick distinct labels (e.g. 'CUT_05' / 'CUT_50') before any work happens.
+    # Column names carry the label between underscores ('..._L3.3_CUT_50_QCF'),
+    # and the flag lookup matches it only there ('_CUT_50_'). A label is a
+    # problem only when it reappears inside another one at those boundaries,
+    # e.g. 'CUT_50' in 'CUT_50_X'. 'CUT_16' next to 'CUT_1625' is fine.
     for a in labels:
         for b in labels:
-            if a != b and a in b:
+            if a != b and f"_{a}_" in f"_{b}_":
                 raise ValueError(
-                    f"USTAR scenario labels overlap by substring: {a!r} is contained "
-                    f"in {b!r}. This would cause flag-column lookup to match the "
-                    f"wrong scenario. Use distinct labels (e.g. {a!r} -> "
-                    f"{a + '_X'!r} or zero-pad like 'CUT_05' / 'CUT_50')."
-                )
+                    f"USTAR scenario labels overlap: {a!r} appears inside {b!r} "
+                    f"between underscores, so the flag-column lookup could match "
+                    f"the wrong scenario. Use distinct labels.")
 
 
 def _finalize_ustar_level(data, level33, scenario_labels, *, flux_corrected_col, meta,
@@ -382,17 +382,109 @@ def run_level33_variable_ustar(
                                  idstr=idstr, pre_columns=pre_columns, verbose=verbose)
 
 
+def ustar_scenario_labels(prefix: str, percentiles) -> list[str]:
+    """Scenario labels for u* percentiles, e.g. ``CUT_16``, ``CUT_50``, ``CUT_84``.
+
+    Integer percentiles keep two digits (``CUT_05``, ``CUT_16``, ``CUT_50``,
+    ``CUT_100``), also next to percentiles with decimals, so the main scenarios
+    always end in the same suffix. A percentile with decimals is written in
+    hundredths with four digits and no decimal point: 1.25 -> ``CUT_0125``,
+    2.5 -> ``CUT_0250``, 16.25 -> ``CUT_1625``. Two or three digits therefore
+    mean whole percentiles, four digits hundredths. Percentiles finer than
+    hundredths raise ValueError.
+
+    Args:
+        prefix: ``'CUT'`` or ``'VUT'``.
+        percentiles: Percentiles, in scenario order.
+
+    Returns:
+        One label per percentile.
+    """
+    labels = []
+    for p in (float(p) for p in percentiles):
+        if p.is_integer():
+            labels.append(f'{prefix}_{int(p):02d}')
+            continue
+        hundredths = round(p * 100)
+        if abs(hundredths - p * 100) > 1e-6:
+            raise ValueError(f"Percentile {p:g} is finer than hundredths, "
+                             f"which the scenario labels cannot show.")
+        labels.append(f'{prefix}_{hundredths:04d}')
+    return labels
+
+
+def _scenario_percentiles(requested, reference: bool) -> tuple[list[float], list[float]]:
+    """Requested percentiles (order kept, duplicates removed), plus the 40
+    ONEFlux REF percentiles when ``reference`` is on. Returns ``(all, ref)``."""
+    from diive.flux.lowres.ustar_reference import ONEFLUX_REF_PERCENTILES
+    out = list(dict.fromkeys(float(p) for p in requested))
+    ref = [float(p) for p in ONEFLUX_REF_PERCENTILES] if reference else []
+    out += [p for p in ref if p not in out]
+    return out, ref
+
+
+def _given_thresholds(thresholds, percentiles, mode: str):
+    """Parse ``thresholds=``: returns ``(percentiles, values)`` with ``values``
+    ``{percentile: threshold}`` (CUT) or ``{year: {percentile: threshold}}`` (VUT)."""
+    from collections.abc import Mapping
+
+    def _num(v, what):
+        v = float(v)
+        if not np.isfinite(v):
+            raise ValueError(f"thresholds: {what} is {v}; every threshold must be a number.")
+        return v
+
+    if isinstance(thresholds, Mapping):
+        if not thresholds:
+            raise ValueError("thresholds is empty.")
+        nested = [isinstance(v, Mapping) for v in thresholds.values()]
+        if any(nested) and not all(nested):
+            raise ValueError("thresholds mixes the per-percentile form {16: 0.18, ...} "
+                             "with the per-year form {2021: {16: 0.18, ...}, ...}.")
+        if all(nested):
+            if mode != 'vut':
+                raise ValueError("Per-year thresholds {year: {percentile: value}} are VUT "
+                                 "thresholds: pass mode='vut'.")
+            per_year = {int(y): {float(p): _num(v, f'year {y}, percentile {p}')
+                                 for p, v in d.items()}
+                        for y, d in thresholds.items()}
+            first = list(next(iter(per_year.values())))
+            for y, d in per_year.items():
+                if set(d) != set(first):
+                    raise ValueError(f"thresholds: year {y} has percentiles {sorted(d)}, "
+                                     f"the first year {sorted(first)}. Give the same "
+                                     f"percentiles for every year.")
+            return first, per_year
+        if mode == 'vut':
+            raise ValueError("mode='vut' needs one threshold per year and percentile: "
+                             "thresholds={2021: {16: 0.17, 50: 0.21, 84: 0.26}, ...}. "
+                             "A single threshold per percentile is a CUT: use mode='cut'.")
+        values = {float(p): _num(v, f'percentile {p}') for p, v in thresholds.items()}
+        return list(values), values
+    if mode == 'vut':
+        raise ValueError("mode='vut' needs thresholds as {year: {percentile: value}}.")
+    values = list(thresholds)
+    if len(values) != len(percentiles):
+        raise ValueError(f"thresholds has {len(values)} values but percentiles has "
+                         f"{len(percentiles)}. A list of thresholds is aligned with "
+                         f"percentiles, or pass a dict {{percentile: threshold}}.")
+    out = {float(p): _num(v, f'percentile {p}') for p, v in zip(percentiles, values, strict=True)}
+    return list(out), out
+
+
 def run_level33_ustar_detection(
         data: FluxLevelData,
         *,
-        ta_col: str,
-        swin_col: str,
+        ta_col: str | None = None,
+        swin_col: str | None = None,
         detection_mode: str = 'oneflux',
         detection_kwargs: dict | None = None,
         n_iter: int | None = None,
         n_jobs: int = 1,
-        percentiles: tuple[int, ...] = (16, 50, 84),
+        percentiles: tuple[float, ...] = (16, 50, 84),
         mode: str = 'cut',
+        thresholds=None,
+        reference: bool = False,
         nighttime_only: bool = False,
         detector_class=None,
         detector_kwargs: dict | None = None,
@@ -400,45 +492,49 @@ def run_level33_ustar_detection(
         verbose: bool = True,
 ) -> FluxLevelData:
     """
-    Level-3.3: Detect the USTAR threshold from the data, then apply it (CUT or VUT).
+    Level-3.3: u* filtering with thresholds at percentiles, detected or given.
 
-    Runs :class:`~diive.flux.lowres.ustar_detection.UstarThresholdDetection` and
-    applies the result as USTAR filtering scenarios, one per requested percentile.
-    ``detection_mode`` selects the method:
+    The one entry point for percentile-based u* scenarios. By default it runs
+    :class:`~diive.flux.lowres.ustar_detection.UstarThresholdDetection` and
+    applies the thresholds at the 16th, 50th and 84th percentile as constant
+    thresholds: scenarios ``CUT_16``, ``CUT_50`` and ``CUT_84``. Options:
+
+    * ``thresholds=`` — give the thresholds instead of detecting them, e.g.
+      ``{16: 0.18, 50: 0.22, 84: 0.27}`` (percentile -> m s-1). No detection
+      runs, and the scenarios get the same labels as detected ones.
+    * ``mode='vut'`` — **VUT** (Variable U\\* Threshold): one threshold per year
+      and percentile, scenarios ``VUT_<p>``. Detected, or given per year as
+      ``{2021: {16: 0.17, 50: 0.21, 84: 0.26}, 2022: {...}}``. A detected year
+      without a threshold uses the CUT value.
+    * ``reference=True`` — prepare the ONEFlux **REF** threshold: adds the 40
+      percentiles of :data:`~diive.flux.lowres.ustar_reference.ONEFLUX_REF_PERCENTILES`
+      (1.25 to 98.75) as extra scenarios. After gap-filling them with
+      ``run_level41_mds``, ``run_level41_ustar_reference`` selects the REF.
+      Whole percentiles keep their labels, percentiles with decimals get four
+      digits in hundredths (``CUT_16``, ``CUT_50``, ``CUT_0125``, ...), see
+      :func:`ustar_scenario_labels`.
+
+    ``detection_mode`` selects the detection method:
 
     * ``'oneflux'`` (default) — ONEFlux (FLUXNET2015, ICOS): moving point and
       change point thresholds per year, pooled.
     * ``'oneflux_mp'`` / ``'oneflux_cp'`` — ONEFlux with one of the two methods only.
     * ``'reddyproc'`` — REddyProc 1.3.4.
 
-    Which thresholds are applied is set by ``mode``:
-
-    * ``'cut'`` (default) — **CUT** (Constant U\\* Threshold): one constant threshold
-      per percentile from the thresholds of all years, applied via
-      ``run_level33_constant_ustar``. Scenarios labelled ``CUT_<p>``.
-    * ``'vut'`` — **VUT** (Variable U\\* Threshold): a threshold per year and
-      percentile, applied via ``run_level33_variable_ustar``. Scenarios labelled
-      ``VUT_<p>``. A year with no threshold falls back to the CUT value.
-
-    CUT and VUT are mutually exclusive filtering strategies — one is applied before
-    gap-filling (the percentiles are the uncertainty scenarios within the chosen strategy).
+    CUT and VUT are alternative filtering strategies. The percentiles are the
+    uncertainty scenarios within the chosen strategy. The lower-level
+    functions :func:`run_level33_constant_ustar` and
+    :func:`run_level33_variable_ustar` apply thresholds with free labels.
 
     Requires Level-3.1 (``data.levels.flux_corrected_col``) and Level-3.2 to have
     been run: outliers at low turbulence would bias the bootstrap threshold.
 
-    **When to use which function:**
-
-    * ``run_level33_constant_ustar`` — you already have a threshold from an external
-      analysis or a previous run. Fastest, no computation.
-    * ``run_level33_ustar_detection`` — you want the threshold computed from the
-      data in the same pipeline run. Slower (bootstrap) but reproducible.
-
     Args:
         data: FluxLevelData after ``run_level32()``.
         ta_col: Air temperature column name (deg C) in ``data.full_df``.
-            Used to stratify nighttime records into temperature classes.
+            Needed for the detection.
         swin_col: Incoming shortwave radiation column (W m-2) in ``data.full_df``.
-            Defines the night for the detection (and for ``nighttime_only``).
+            Defines the night for the detection and for ``nighttime_only``.
         detection_mode: ``'oneflux'`` (default), ``'oneflux_mp'``, ``'oneflux_cp'``
             or ``'reddyproc'``, see above.
         detection_kwargs: Extra keyword arguments for ``UstarThresholdDetection``
@@ -453,7 +549,15 @@ def run_level33_ustar_detection(
             with ``mode='vut'``), zero-padded to a uniform width so labels can
             never be substrings of each other (e.g. ``(5, 50, 95)`` ->
             ``CUT_05`` / ``CUT_50`` / ``CUT_95``). Defaults to ``(16, 50, 84)``.
+            With a dict in ``thresholds`` its keys are the percentiles and this
+            argument is ignored.
         mode: ``'cut'`` (default) or ``'vut'``, see above.
+        thresholds: Thresholds (m s-1) to apply instead of detecting them:
+            ``{percentile: value}``, a list aligned with ``percentiles``, or for
+            ``mode='vut'`` ``{year: {percentile: value}}`` covering every year
+            of the data. Defaults to None (detect).
+        reference: Add the 40 ONEFlux REF percentiles as scenarios, see above.
+            With given thresholds, they must include these 40 percentiles.
         nighttime_only: If True, only nighttime records are filtered (as
             REddyProc). Defaults to False (day and night, as ONEFlux).
         detector_class: Deprecated. ``UstarMovingPointDetection`` maps to
@@ -466,9 +570,11 @@ def run_level33_ustar_detection(
     Returns:
         Updated FluxLevelData with ``levels.level33``, ``levels.level33_qcf``,
         ``levels.filteredseries_level33_qcf``, ``levels.filteredseries_level33_hq``,
-        and ``levels.ustar_detection`` populated. ``ustar_detection`` holds the
-        fitted ``UstarThresholdDetection``, so you can inspect the per-year
-        thresholds and the bootstrap values afterwards::
+        ``levels.ustar_scenarios`` (percentile and threshold of each label,
+        and whether they were detected or given) and ``levels.ustar_detection``
+        populated. ``ustar_detection`` holds the fitted
+        ``UstarThresholdDetection`` (None for given thresholds), so you can
+        inspect the per-year thresholds and the bootstrap values afterwards::
 
             print(data.levels.ustar_detection.summary())
             vut = data.levels.ustar_detection.get_vut_thresholds()
@@ -477,12 +583,13 @@ def run_level33_ustar_detection(
         RuntimeError: If ``run_level31()`` or ``run_level32()`` has not been
             called, or if threshold detection produces NaN for any requested
             percentile (e.g. too little nighttime data).
-        ValueError: If ``mode`` is not ``'cut'`` or ``'vut'``, or
-            ``detection_kwargs`` holds a key set by this function.
+        ValueError: If ``mode`` is not ``'cut'`` or ``'vut'``, the thresholds
+            do not fit ``mode``, ``ta_col`` / ``swin_col`` are missing for the
+            detection, or ``detection_kwargs`` holds a key set by this function.
     """
     import warnings
 
-    from diive.flux.lowres.ustar_detection import UstarThresholdDetection
+    from diive.flux.postprocessingchain.container import UstarScenarios
 
     if data.levels.flux_corrected_col is None:
         raise RuntimeError("run_level31() must be called before run_level33_ustar_detection().")
@@ -495,6 +602,86 @@ def run_level33_ustar_detection(
     mode = str(mode).lower()
     if mode not in ('cut', 'vut'):
         raise ValueError(f"mode must be 'cut' or 'vut', got {mode!r}.")
+    prefix = mode.upper()
+    flux_corrected_col = data.levels.flux_corrected_col
+    index = data.fpc_df[flux_corrected_col].index
+
+    if thresholds is not None:
+        given_ps, given = _given_thresholds(thresholds, percentiles, mode)
+        main_ps = [p for p in given_ps if not reference or p not in _ref_set()]
+        all_ps, ref_ps = _scenario_percentiles(main_ps, reference)
+        missing = [p for p in all_ps if p not in given_ps]
+        if missing:
+            raise ValueError(
+                f"reference=True needs thresholds at the 40 ONEFlux percentiles "
+                f"(ONEFLUX_REF_PERCENTILES); missing: {[f'{p:g}' for p in missing]}.")
+        labels = ustar_scenario_labels(prefix, all_ps)
+        det = None
+        if mode == 'cut':
+            values = {lab: given[p] for lab, p in zip(labels, all_ps, strict=True)}
+        else:
+            years = sorted(set(int(y) for y in index.year))
+            no_year = [y for y in years if y not in given]
+            if no_year:
+                raise ValueError(f"thresholds has no values for year(s) {no_year} of the data.")
+            values = {lab: {y: given[y][p] for y in years}
+                      for lab, p in zip(labels, all_ps, strict=True)}
+        source = 'given'
+        rule("Level 3.3: USTAR filtering with given thresholds", verbose=verbose)
+    else:
+        if not ta_col or not swin_col:
+            raise ValueError("The u* detection needs ta_col and swin_col. To apply known "
+                             "thresholds without detection, pass thresholds=.")
+        main_ps = list(dict.fromkeys(float(p) for p in percentiles))
+        all_ps, ref_ps = _scenario_percentiles(percentiles, reference)
+        labels = ustar_scenario_labels(prefix, all_ps)
+        det = _detect(data, ta_col=ta_col, swin_col=swin_col,
+                      detection_mode=detection_mode, detection_kwargs=detection_kwargs,
+                      n_iter=n_iter, n_jobs=n_jobs, percentiles=tuple(all_ps),
+                      detector_class=detector_class, detector_kwargs=detector_kwargs,
+                      verbose=verbose, warnings=warnings)
+        values = _detected_values(det, all_ps, labels, mode, index)
+        source = 'detected'
+
+    if mode == 'cut':
+        updated = run_level33_constant_ustar(
+            data, thresholds=[values[lab] for lab in labels], threshold_labels=labels,
+            nighttime_only=nighttime_only, swin_col=swin_col,
+            showplot=showplot, verbose=verbose)
+    else:
+        year_of = index.year
+        threshold_series = {
+            lab: pd.Series(np.array([values[lab][int(y)] for y in year_of], dtype=float),
+                           index=index)
+            for lab in labels}
+        updated = run_level33_variable_ustar(
+            data, threshold_series=threshold_series,
+            nighttime_only=nighttime_only, swin_col=swin_col,
+            showplot=showplot, verbose=verbose)
+
+    record = UstarScenarios(
+        source=source,
+        threshold_type=mode,
+        percentiles=dict(zip(labels, all_ps, strict=True)),
+        thresholds=values,
+        reference_labels=tuple(lab for lab, p in zip(labels, all_ps, strict=True)
+                               if p in set(ref_ps)),
+        main_labels=tuple(lab for lab, p in zip(labels, all_ps, strict=True)
+                          if p in set(main_ps)),
+    )
+    new_levels = replace(updated.levels, ustar_detection=det, ustar_scenarios=record)
+    return replace(updated, levels=new_levels)
+
+
+def _ref_set() -> set[float]:
+    from diive.flux.lowres.ustar_reference import ONEFLUX_REF_PERCENTILES
+    return {float(p) for p in ONEFLUX_REF_PERCENTILES}
+
+
+def _detect(data, *, ta_col, swin_col, detection_mode, detection_kwargs, n_iter, n_jobs,
+            percentiles, detector_class, detector_kwargs, verbose, warnings):
+    """Run ``UstarThresholdDetection`` on the L3.2 flux and return it."""
+    from diive.flux.lowres.ustar_detection import UstarThresholdDetection
 
     det_kwargs = dict(detection_kwargs or {})
     _reserved = ('df', 'nee_col', 'ta_col', 'ustar_col', 'swin_col', 'mode', 'n_iter',
@@ -515,7 +702,7 @@ def run_level33_ustar_detection(
         warnings.warn(
             "detector_class and detector_kwargs are deprecated and will be removed. Use "
             "detection_mode='oneflux_mp' and detection_kwargs={'mp_kwargs': {...}}.",
-            FutureWarning, stacklevel=2)
+            FutureWarning, stacklevel=3)
         mp_kw = {k: v for k, v in (detector_kwargs or {}).items()
                  if k not in ('nee_col', 'ta_col', 'ustar_col', 'swin_col', 'verbose')}
         if len(mp_kw) != len({k: v for k, v in (detector_kwargs or {}).items() if k != 'verbose'}):
@@ -551,57 +738,35 @@ def run_level33_ustar_detection(
         **det_kwargs,
     )
     det.run()
-    cut = det.get_cut_threshold()
-    boot = det
-
     if verbose:
         _console.print(det.summary())
+    return det
 
-    # Extract the constant (CUT) threshold per percentile; raise if any are NaN.
-    cut_thresholds = []
+
+def _detected_values(det, percentiles, labels, mode, index) -> dict:
+    """Thresholds per label from a fitted detection: CUT ``{label: value}``,
+    VUT ``{label: {year: value}}`` (a year without a threshold uses the CUT)."""
+    from diive.flux.lowres.ustar_detection import _pfmt
+
+    cut = det.get_cut_threshold()
+    cut_values = []
     for p in percentiles:
-        thr = cut.get(f'p{p:g}', np.nan)
+        thr = cut.get(f'p{_pfmt(p)}', np.nan)
         if np.isnan(thr):
             raise RuntimeError(
-                f"USTAR threshold detection produced NaN for percentile {p}. "
+                f"USTAR threshold detection produced NaN for percentile {p:g}. "
                 "Check that the dataset has enough valid nighttime records "
                 "(see data.levels.ustar_detection.failures_ for the reasons per year)."
             )
-        cut_thresholds.append(float(thr))
-    # Zero-pad to a uniform width so labels can never be substrings of one
-    # another (two distinct equal-length strings can't contain each other).
-    # Without this, e.g. percentiles=(5, 50, 95) would generate 'CUT_5' /
-    # 'CUT_50' / 'CUT_95' and trip the substring-overlap guard ('CUT_5' in
-    # 'CUT_50') — crashing *after* the expensive bootstrap had already run.
-    _label_width = max(2, max(len(str(int(p))) for p in percentiles))
-
+        cut_values.append(float(thr))
     if mode == 'cut':
-        labels = [f'CUT_{int(p):0{_label_width}d}' for p in percentiles]
-        updated = run_level33_constant_ustar(
-            data, thresholds=cut_thresholds, threshold_labels=labels,
-            nighttime_only=nighttime_only, swin_col=swin_col,
-            showplot=showplot, verbose=verbose)
-    else:  # vut
-        # Build per-record (VUT) threshold Series per percentile from the per-year
-        # table, mapping each timestamp's year to that year's threshold. Years with
-        # no detected threshold (NaN) fall back to the pooled CUT value.
-        flux_corrected_col = data.levels.flux_corrected_col
-        index = data.fpc_df[flux_corrected_col].index
-        year_of = index.year
-        vut = boot.get_vut_thresholds()
-        threshold_series: dict = {}
-        for p, cut_val in zip(percentiles, cut_thresholds, strict=False):
-            col = f'p{p:g}'
-            per_year = {int(y): (vut.loc[y, col] if (y in vut.index
-                        and np.isfinite(vut.loc[y, col])) else cut_val)
-                        for y in vut.index}
-            values = np.array([per_year.get(int(y), cut_val) for y in year_of], dtype=float)
-            threshold_series[f'VUT_{int(p):0{_label_width}d}'] = pd.Series(values, index=index)
-        updated = run_level33_variable_ustar(
-            data, threshold_series=threshold_series,
-            nighttime_only=nighttime_only, swin_col=swin_col,
-            showplot=showplot, verbose=verbose)
-
-    # Attach the detection instance to levels for post-hoc inspection
-    new_levels = replace(updated.levels, ustar_detection=boot)
-    return replace(updated, levels=new_levels)
+        return dict(zip(labels, cut_values, strict=True))
+    vut = det.get_vut_thresholds()
+    years = sorted(set(int(y) for y in index.year))
+    out = {}
+    for lab, p, cut_val in zip(labels, percentiles, cut_values, strict=True):
+        col = f'p{_pfmt(p)}'
+        out[lab] = {y: (float(vut.loc[y, col]) if (y in vut.index
+                    and np.isfinite(vut.loc[y, col])) else cut_val)
+                    for y in years}
+    return out

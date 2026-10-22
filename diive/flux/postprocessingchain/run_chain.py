@@ -28,6 +28,7 @@ from diive.flux.postprocessingchain.levels import (
     run_level33_ustar_detection,
     run_level41_mds,
     run_level41_rf,
+    run_level41_ustar_reference,
     run_level41_xgb,
     run_level42_daytime_oneflux,
     run_level42_daytime_reddyproc,
@@ -115,6 +116,10 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
 
     - ``'constant'`` (default) — apply pre-computed thresholds from
       ``config.ustar_thresholds`` (e.g. produced by REddyProc externally).
+      A list goes to ``run_level33_constant_ustar`` with ``ustar_labels``. A
+      percentile-keyed dict (``{16: 0.18, 50: 0.22, 84: 0.27}``, per year for
+      VUT) goes to ``run_level33_ustar_detection(thresholds=...)`` and gets
+      the labels of detected thresholds (``CUT_16``, ...).
     - ``'bootstrap'`` — detect thresholds from the data with the method in
       ``config.ustar_bootstrap_detection_mode`` (ONEFlux by default). Requires
       ``config.ustar_bootstrap_ta_col`` / ``..._swin_col``; thresholds and
@@ -125,6 +130,11 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
 
     With ``config.ustar_nighttime_only=True`` only nighttime records are
     filtered (as REddyProc), otherwise day and night (as ONEFlux).
+    ``config.ustar_threshold_type='vut'`` applies one threshold per year
+    (``VUT_<p>``) instead of the constant CUT. ``config.ustar_reference=True``
+    adds the 40 ONEFlux REF percentiles as scenarios, and after MDS
+    ``run_level41_ustar_reference`` adds the REF series (``CUT_REF`` or
+    ``VUT_REF``).
 
     *Level-4.1 (gap-filling)* — runs only the methods whose
     ``config.gapfill_*`` flag is ``True``. MDS runs in ``config.mds_mode``
@@ -163,7 +173,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
       (``use_differencing``, ``repeat``, ``k``, ``window_length`` per call).
     - **L3.3** — diagnostic ``showplot=True`` and ``verbose=True`` (both
       forced to ``False`` here for non-interactive use), extra
-      ``detection_kwargs`` in bootstrap mode, and VUT (``mode='vut'``).
+      ``detection_kwargs`` in bootstrap mode.
     - **L4.1 MDS** — ``swin_tol`` / ``ta_tol`` / ``vpd_tol`` /
       ``avg_min_n_vals`` (fixed at :class:`FluxMDS` defaults).
     - **L4.1 RF / XGBoost** — model hyperparameters (``n_estimators``,
@@ -229,7 +239,24 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             f"ustar_detection_mode must be 'constant' or 'bootstrap'; "
             f"got {config.ustar_detection_mode!r}."
         )
+    if config.ustar_threshold_type not in ('cut', 'vut'):
+        raise ValueError(f"ustar_threshold_type must be 'cut' or 'vut'; "
+                         f"got {config.ustar_threshold_type!r}.")
+    _thr_by_percentile = isinstance(config.ustar_thresholds, dict)
+    if config.ustar_detection_mode == 'constant' and config.ustar_thresholds:
+        if config.ustar_threshold_type == 'vut' and not _thr_by_percentile:
+            raise ValueError(
+                "ustar_threshold_type='vut' with ustar_detection_mode='constant' needs "
+                "ustar_thresholds per year: {year: {percentile: threshold}}.")
+        if config.ustar_reference and not _thr_by_percentile:
+            raise ValueError(
+                "ustar_reference=True with ustar_detection_mode='constant' needs "
+                "ustar_thresholds keyed by percentile, including the 40 ONEFlux "
+                "percentiles (ONEFLUX_REF_PERCENTILES).")
     _missing: list[str] = []
+    if config.ustar_reference and not config.gapfill_mds:
+        _missing.append("gapfill_mds=True (ustar_reference=True selects the REF "
+                        "among the MDS gap-filled scenarios)")
     if config.ustar_detection_mode == 'constant':
         if not config.ustar_thresholds:
             _missing.append(
@@ -239,7 +266,8 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
         # labels prevents the auto-generated CUT_0/CUT_1/... fallback from
         # silently labelling percentile-based thresholds with non-percentile
         # names (a real footgun for FLUXNET-style 16/50/84 workflows).
-        elif len(config.ustar_thresholds) > 1 and not config.ustar_labels:
+        elif (not _thr_by_percentile and len(config.ustar_thresholds) > 1
+              and not config.ustar_labels):
             _missing.append(
                 "ustar_labels (required when ustar_thresholds has more than "
                 "one entry, to avoid silently mislabelling percentile-based "
@@ -366,6 +394,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     # scenarios — there is only one).
     if (config.ustar_detection_mode == 'constant'
             and config.ustar_thresholds
+            and not _thr_by_percentile
             and len(config.ustar_thresholds) == 1
             and not config.ustar_labels):
         import warnings
@@ -472,7 +501,19 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     data = run_level32(data, outlier_detector=sod)
 
     # -------------------------------------------------------------- Level-3.3
-    if config.ustar_detection_mode == 'constant':
+    if config.ustar_detection_mode == 'constant' and _thr_by_percentile:
+        # Percentile-keyed thresholds: same labels and record as detected ones.
+        data = run_level33_ustar_detection(
+            data,
+            thresholds=dict(config.ustar_thresholds),
+            mode=config.ustar_threshold_type,
+            reference=config.ustar_reference,
+            nighttime_only=config.ustar_nighttime_only,
+            swin_col=config.ustar_swin_col,
+            showplot=False,
+            verbose=False,
+        )
+    elif config.ustar_detection_mode == 'constant':
         data = run_level33_constant_ustar(
             data,
             thresholds=list(config.ustar_thresholds),
@@ -496,6 +537,8 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             n_iter=config.ustar_bootstrap_n_iter,
             n_jobs=config.ustar_bootstrap_n_jobs,
             percentiles=tuple(config.ustar_bootstrap_percentiles),
+            mode=config.ustar_threshold_type,
+            reference=config.ustar_reference,
             showplot=False,
             verbose=False,
         )
@@ -512,6 +555,8 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             ta_qc=config.mds_ta_qc,
             vpd_qc=config.mds_vpd_qc,
         )
+        if config.ustar_reference:
+            data = run_level41_ustar_reference(data, verbose=False)
 
     if config.gapfill_rf or config.gapfill_xgb:
         engineer = _default_engineer(config.gapfilling_features)

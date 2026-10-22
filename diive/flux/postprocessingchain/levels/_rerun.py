@@ -61,20 +61,20 @@ _LEVEL_FIELDS: dict[str, tuple[str, ...]] = {
     ),
     'L3.3': (
         'level33', 'level33_qcf', 'filteredseries_level33_qcf',
-        'filteredseries_level33_hq', 'ustar_detection',
+        'filteredseries_level33_hq', 'ustar_detection', 'ustar_scenarios',
     ),
 }
 
 # Additive-level (L4.1 + L4.2) LevelResults fields — always reset by a cascade
 # from any earlier level.
 _ADDITIVE_FIELDS: tuple[str, ...] = (
-    'level41_mds', 'level41_rf', 'level41_xgb',
+    'level41_mds', 'level41_rf', 'level41_xgb', 'ustar_reference',
     'level42_nt_of', 'level42_nt_rp', 'level42_dt_rp', 'level42_dt_of',
 )
 
 # Additive-level tracking sub-keys in added_columns.
 _ADDITIVE_TRACKED_KEYS: tuple[str, ...] = (
-    'L4.1_mds', 'L4.1_rf', 'L4.1_xgb',
+    'L4.1_mds', 'L4.1_rf', 'L4.1_xgb', 'L4.1_ref',
     'L4.2_nt_of', 'L4.2_nt_rp', 'L4.2_dt_rp', 'L4.2_dt_of',
 )
 
@@ -221,3 +221,17 @@ def drop_columns_for_key(
     fpc_df = data.fpc_df[keep].copy()
     new_added = {k: list(v) for k, v in data.added_columns.items() if k != key}
     return dataclasses.replace(data, fpc_df=fpc_df, added_columns=new_added)
+
+
+def clear_ustar_reference(data: FluxLevelData) -> FluxLevelData:
+    """Drop the REF output of ``run_level41_ustar_reference`` (columns and
+    ``levels.ustar_reference``).
+
+    Used by ``run_level41_mds``: re-running MDS changes the gap-filled
+    versions the REF was selected from, so the REF is stale.
+    """
+    if data.levels.ustar_reference is None and 'L4.1_ref' not in data.added_columns:
+        return data
+    data = drop_columns_for_key(data, 'L4.1_ref')
+    return dataclasses.replace(
+        data, levels=dataclasses.replace(data.levels, ustar_reference=None))

@@ -3,7 +3,8 @@ LEVEL 4.1: GAP-FILLING
 =======================
 
 Composable callables for the three gap-filling methods supported by the
-chain: MDS, long-term Random Forest, and long-term XGBoost.
+chain: MDS, long-term Random Forest, and long-term XGBoost. After MDS,
+``run_level41_ustar_reference`` selects the ONEFlux REF u* scenario.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -18,6 +19,7 @@ import pandas as pd
 from diive.core.utils.console import detail, rule, warn
 from diive.flux.postprocessingchain.container import FluxLevelData
 from diive.flux.postprocessingchain.levels._rerun import (
+    clear_ustar_reference,
     drop_columns_for_key,
     record_added_columns,
 )
@@ -25,6 +27,7 @@ from diive.flux.postprocessingchain.levels._shared import (
     append_level_id,
     assert_aligned_index,
     require_level33,
+    select_scenarios,
     warn_scenario_overwrite,
 )
 
@@ -216,6 +219,8 @@ def run_level41_mds(
     # *across methods* (mds / rf / xgb live in independent buckets), so this
     # cleanup is per-method; rf and xgb columns are untouched.
     data = drop_columns_for_key(data, 'L4.1_mds')
+    # The REF was selected from the previous MDS versions: drop it as well.
+    data = clear_ustar_reference(data)
     pre_columns = list(data.fpc_df.columns)
     fpc_df = data.fpc_df.copy()
     mds_results: dict = {}
@@ -265,6 +270,7 @@ def _run_level41_ml(
         verbose: int,
         model_kwargs: dict,
         results_attr: str,
+        scenarios=None,
 ) -> FluxLevelData:
     """Internal: shared workflow for Random Forest and XGBoost L4.1 gap-filling."""
     # Validate feature columns exist in full_df before doing any work.
@@ -280,7 +286,7 @@ def _run_level41_ml(
     # Require L3.3 *before* mutating state — see the same guard in
     # run_level41_mds. Dropping columns first and then raising would leave
     # the caller's data in a half-cleaned state on a recovery path.
-    filteredseries_l33 = require_level33(data)
+    filteredseries_l33 = select_scenarios(data, scenarios)
 
     # Re-run cleanup: drop this method's previous columns from fpc_df. The
     # tracking key is e.g. 'L4.1_rf' for results_attr='level41_rf'.
@@ -351,6 +357,7 @@ def run_level41_rf(
         features: list[str],
         engineer: 'FeatureEngineer',
         reduce_features: bool = False,
+        scenarios: list[str] | None = None,
         verbose: int = 0,
         **rf_kwargs,
 ) -> FluxLevelData:
@@ -393,6 +400,10 @@ def run_level41_rf(
                 )
 
         reduce_features: Apply SHAP-based feature selection across all years.
+        scenarios: USTAR scenario labels to gap-fill. None (default) takes all
+            Level 3.3 scenarios except the 40 REF versions of
+            ``reference=True`` (see ``select_scenarios``), so with REF on it
+            runs on e.g. CUT_16, CUT_50, CUT_84 and the REF scenario.
         verbose: Verbosity level (0=silent, 1+=progress).
         **rf_kwargs: sklearn ``RandomForestRegressor`` hyperparameters
             (``n_estimators``, ``max_depth``, ``min_samples_split``, ...).
@@ -413,6 +424,7 @@ def run_level41_rf(
         verbose=verbose,
         model_kwargs=rf_kwargs,
         results_attr='level41_rf',
+        scenarios=scenarios,
     )
 
 
@@ -422,6 +434,7 @@ def run_level41_xgb(
         features: list[str],
         engineer: 'FeatureEngineer',
         reduce_features: bool = False,
+        scenarios: list[str] | None = None,
         verbose: int = 0,
         **xgb_kwargs,
 ) -> FluxLevelData:
@@ -446,6 +459,7 @@ def run_level41_xgb(
             irrelevant for L4.1 feature engineering (see ``run_level41_rf``
             for a usage example).
         reduce_features: Apply SHAP-based feature selection across all years.
+        scenarios: As in :func:`run_level41_rf`.
         verbose: Verbosity level (0=silent, 1+=progress).
         **xgb_kwargs: ``XGBRegressor`` hyperparameters (``n_estimators``,
             ``max_depth``, ``learning_rate``, ``early_stopping_rounds``, ...).
@@ -466,4 +480,139 @@ def run_level41_xgb(
         verbose=verbose,
         model_kwargs=xgb_kwargs,
         results_attr='level41_xgb',
+        scenarios=scenarios,
     )
+
+
+def run_level41_ustar_reference(
+        data: FluxLevelData,
+        *,
+        mef_qc: int | None = None,
+        mef_min_gap: int | None = None,
+        mef_max_gap: int | None = None,
+        verbose: bool = True,
+) -> FluxLevelData:
+    """
+    Level-4.1: Select the REF u* scenario as ONEFlux does (``NEE_CUT_REF`` / ``NEE_VUT_REF``).
+
+    ONEFlux ``nee_proc`` gap-fills NEE filtered at 40 u* percentiles (1.25 to
+    98.75) and takes as REF the version most similar to all others, by model
+    efficiency. See :func:`diive.flux.lowres.ustar_reference.select_ustar_reference`
+    for the method and the ONEFlux details it reproduces.
+
+    Needs ``run_level33_ustar_detection(..., reference=True)`` (CUT or VUT,
+    detected or given) and ``run_level41_mds`` afterwards, so that each of the
+    40 scenarios has an MDS gap-filled series. ONEFlux gap-fills with its own
+    MDS: run ``run_level41_mds(mode='oneflux')`` for the REF ONEFlux would
+    select. With another MDS mode the REF is selected among those series.
+
+    .. important::
+
+        The u* filter of Level 3.3 keeps the first record above the threshold
+        after a period below it, ONEFlux removes it (finding L74). The
+        gap-filled versions then differ from ONEFlux's, and in the checks
+        against ONEFlux this changed the REF at some time resolutions in every
+        case, even with ``mode='oneflux'`` in MDS.
+
+    The half-hourly REF is added to ``fpc_df`` as its own series: the
+    gap-filled NEE and its flag of the selected scenario, with the scenario
+    label replaced by ``CUT_REF`` (or ``VUT_REF``), e.g.
+    ``NEE_L3.1_L3.3_CUT_REF_QCF_gfMDS``. The other scenarios are not changed.
+    The REF of the daily, weekly, monthly and yearly values are in
+    ``data.levels.ustar_reference.scenarios``.
+
+    Args:
+        data: FluxLevelData after ``run_level41_mds``.
+        mef_qc: Highest MDS quality kept for the selection (``nee_proc``
+            ``-mef_qc``, default 2).
+        mef_min_gap: Smallest block of records left out (default 240).
+        mef_max_gap: Distance in records from a good record beyond which
+            low-quality records are left out (default 720).
+        verbose: Print the selected REF per time resolution.
+
+    Returns:
+        Updated FluxLevelData with the REF columns in ``fpc_df`` and
+        ``data.levels.ustar_reference`` (:class:`UstarReference`): REF label,
+        the scenario and percentile it maps to, its threshold (per year for
+        VUT), the REF scenario per time resolution and the full selection
+        result (scores, model efficiency, records left out).
+
+    Raises:
+        RuntimeError: If L3.3 did not add the REF scenarios, MDS has not
+            gap-filled all of them, or ONEFlux finds no half-hourly REF.
+    """
+    import numpy as np
+
+    from diive.core.utils.console import console as _console
+    from diive.flux.lowres.ustar_reference import (
+        ONEFLUX_MEF_MAX_GAP, ONEFLUX_MEF_MIN_GAP, ONEFLUX_MEF_QC, REF_AGGREGATIONS,
+        select_ustar_reference,
+    )
+    from diive.flux.postprocessingchain.container import UstarReference
+
+    scen = data.levels.ustar_scenarios
+    if scen is None or not scen.reference_labels:
+        raise RuntimeError(
+            "run_level41_ustar_reference() needs the 40 ONEFlux REF scenarios: call "
+            "run_level33_ustar_detection(..., reference=True) first.")
+    labels = list(scen.reference_labels)
+    missing = [lab for lab in labels if lab not in data.levels.level41_mds]
+    if missing:
+        raise RuntimeError(
+            f"run_level41_ustar_reference() needs the MDS gap-filled series of every REF "
+            f"scenario: call run_level41_mds() first. Missing: {missing[:5]}"
+            f"{' ...' if len(missing) > 5 else ''}")
+
+    rule("Level 4.1: REF u* scenario (ONEFlux model efficiency)", verbose=verbose)
+    data = clear_ustar_reference(data)
+    pre_columns = list(data.fpc_df.columns)
+
+    nee, qc = {}, {}
+    for lab in labels:
+        inst = data.levels.level41_mds[lab]
+        gdf = inst.gapfilling_df_
+        flag = gdf[inst.target_gapfilled_flag].to_numpy(dtype=float)
+        quality = gdf['.PREDICTIONS_QUALITY'].to_numpy(dtype=float)
+        # nee_proc: QC 0 where the record is measured, else the MDS quality
+        # (dataset.c:5014); a record MDS could not fill has none.
+        qc[lab] = pd.Series(np.where(flag == 0, 0.0, np.where(np.isfinite(flag), quality, np.nan)),
+                            index=gdf.index)
+        nee[lab] = gdf[inst.target_gapfilled]
+    percentiles = [scen.percentiles[lab] for lab in labels]
+    result = select_ustar_reference(
+        pd.DataFrame(nee), pd.DataFrame(qc), percentiles,
+        mef_qc=ONEFLUX_MEF_QC if mef_qc is None else mef_qc,
+        mef_min_gap=ONEFLUX_MEF_MIN_GAP if mef_min_gap is None else mef_min_gap,
+        mef_max_gap=ONEFLUX_MEF_MAX_GAP if mef_max_gap is None else mef_max_gap)
+    if result.index['HH'] < 0:
+        raise RuntimeError("ONEFlux finds no half-hourly REF for these data "
+                           "(a version without any value).")
+
+    source = labels[result.index['HH']]
+    ref_label = f"{scen.threshold_type.upper()}_REF"
+    inst = data.levels.level41_mds[source]
+    gf_col, flag_col = inst.target_gapfilled, inst.target_gapfilled_flag
+    new_gf, new_flag = gf_col.replace(source, ref_label), flag_col.replace(source, ref_label)
+    fpc_df = data.fpc_df.copy()
+    assert_aligned_index(fpc_df, data.fpc_df[gf_col],
+                         context="run_level41_ustar_reference merge into fpc_df")
+    fpc_df[new_gf] = data.fpc_df[gf_col]
+    fpc_df[new_flag] = data.fpc_df[flag_col]
+
+    record = UstarReference(
+        label=ref_label,
+        scenario=source,
+        percentile=scen.percentiles[source],
+        threshold=scen.thresholds[source],
+        gapfilled_col=new_gf,
+        flag_col=new_flag,
+        scenarios={agg: (labels[result.index[agg]] if result.index[agg] >= 0 else None)
+                   for agg in REF_AGGREGATIONS},
+        result=result,
+    )
+    if verbose:
+        _console.print(result.summary())
+        _console.print(f"{ref_label} = {source}")
+    final = replace(data, fpc_df=fpc_df,
+                    levels=replace(data.levels, ustar_reference=record))
+    return replace(final, added_columns=record_added_columns(final, 'L4.1_ref', pre_columns))
