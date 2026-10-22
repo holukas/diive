@@ -52,7 +52,7 @@ from diive.flux.postprocessingchain.levels._rerun import (
 from diive.flux.postprocessingchain.levels._shared import (
     append_level_id,
     assert_aligned_index,
-    require_level33,
+    select_scenarios,
     warn_scenario_overwrite,
 )
 
@@ -140,6 +140,7 @@ def _run_level42(
         run_instances: Callable[[dict[str, pd.Series]], dict[str, object]] | None = None,
         needs_nee_f: bool,
         gapfill_method: str | None,
+        scenarios=None,
 ) -> FluxLevelData:
     """Internal: shared per-scenario partitioning loop for the four L4.2 variants.
 
@@ -155,7 +156,7 @@ def _run_level42(
     # Require L3.3 *before* mutating state — same ordering guard as L4.1: if we
     # dropped columns first and then raised, a caller recovering from the
     # exception would be left with a half-cleaned container.
-    filteredseries_l33 = require_level33(data)
+    filteredseries_l33 = select_scenarios(data, scenarios)
     scenarios = list(filteredseries_l33)
 
     # Resolve the gap-filled NEE source for the nighttime variants up front, so
@@ -218,6 +219,7 @@ def run_level42_nighttime_oneflux(
         sw_in: str,
         ta_f: str,
         gapfill_method: str = 'mds',
+        scenarios: list[str] | None = None,
         verbose: int = 1,
 ) -> FluxLevelData:
     """
@@ -237,6 +239,9 @@ def run_level42_nighttime_oneflux(
             (used to compute RECO at every record).
         gapfill_method: Which L4.1 gap-filled NEE to use for the GPP residual —
             ``'mds'`` (default), ``'rf'``, or ``'xgb'``. Must have run at L4.1.
+        scenarios: USTAR scenario labels to partition. None (default)
+            takes all Level 3.3 scenarios except the 40 REF versions of
+            ``reference=True`` (see ``select_scenarios``).
         verbose: Console verbosity passed to the partitioning instance
             (0 silent, 1 warnings, 2 progress + report, 3 debug).
 
@@ -266,6 +271,7 @@ def run_level42_nighttime_oneflux(
         make_instance=make_instance,
         needs_nee_f=True,
         gapfill_method=gapfill_method,
+        scenarios=scenarios,
     )
 
 
@@ -276,6 +282,7 @@ def run_level42_nighttime_reddyproc(
         sw_in: str,
         ta_f: str,
         gapfill_method: str = 'mds',
+        scenarios: list[str] | None = None,
         verbose: int = 1,
 ) -> FluxLevelData:
     """
@@ -294,6 +301,9 @@ def run_level42_nighttime_reddyproc(
         ta_f: Gap-filled air temperature column (**deg C**) in ``data.full_df``.
         gapfill_method: Which L4.1 gap-filled NEE to use (``'mds'`` default /
             ``'rf'`` / ``'xgb'``). Must have run at L4.1.
+        scenarios: USTAR scenario labels to partition. None (default)
+            takes all Level 3.3 scenarios except the 40 REF versions of
+            ``reference=True`` (see ``select_scenarios``).
         verbose: Console verbosity passed to the partitioning instance.
 
     Returns:
@@ -324,6 +334,7 @@ def run_level42_nighttime_reddyproc(
         make_instance=make_instance,
         needs_nee_f=True,
         gapfill_method=gapfill_method,
+        scenarios=scenarios,
     )
 
 
@@ -335,6 +346,7 @@ def run_level42_daytime_reddyproc(
         sw_in_f: str,
         nee_sd: str | None = None,
         vpd_in_kpa: bool = True,
+        scenarios: list[str] | None = None,
         verbose: int = 1,
 ) -> FluxLevelData:
     """
@@ -357,6 +369,9 @@ def run_level42_daytime_reddyproc(
             ``data.full_df`` used to weight the LRC fit. ``None`` reproduces
             REddyProc's default ``max(0.7, 0.2*|NEE|)``.
         vpd_in_kpa: Whether ``vpd_f`` is in kPa (default). Set ``False`` if hPa.
+        scenarios: USTAR scenario labels to partition. None (default)
+            takes all Level 3.3 scenarios except the 40 REF versions of
+            ``reference=True`` (see ``select_scenarios``).
         verbose: Console verbosity passed to the partitioning instance.
 
     Returns:
@@ -390,6 +405,7 @@ def run_level42_daytime_reddyproc(
         make_instance=make_instance,
         needs_nee_f=False,
         gapfill_method=None,
+        scenarios=scenarios,
     )
 
 
@@ -403,6 +419,7 @@ def run_level42_daytime_oneflux(
         vpd_f: str,
         vpd_in_kpa: bool = True,
         gapfill_method: str | None = 'mds',
+        scenarios: list[str] | None = None,
         verbose: int = 1,
 ) -> FluxLevelData:
     """
@@ -439,6 +456,9 @@ def run_level42_daytime_oneflux(
         gapfill_method: Which L4.1 gap-filled NEE to pass as ``nee_f``
             (``'mds'`` default / ``'rf'`` / ``'xgb'``), used where it has run.
             ``None`` passes none.
+        scenarios: USTAR scenario labels to partition. None (default)
+            takes all Level 3.3 scenarios except the 40 REF versions of
+            ``reference=True`` (see ``select_scenarios``).
         verbose: Console verbosity passed to the partitioning instance.
 
     Returns:
@@ -453,7 +473,7 @@ def run_level42_daytime_oneflux(
                                  'sw_in_f': sw_in_f, 'vpd_f': vpd_f})
     full_df = data.full_df
     nee_f_by_scen = _available_nee_f(data, gapfill_method,
-                                     list(require_level33(data)))
+                                     list(select_scenarios(data, scenarios)))
 
     def run_instances(nee_by_scen):
         # ONEFlux shares removed days only within one product (CUT or VUT).
@@ -474,6 +494,7 @@ def run_level42_daytime_oneflux(
         run_instances=run_instances,
         needs_nee_f=False,
         gapfill_method=None,
+        scenarios=scenarios,
     )
 
 
@@ -515,6 +536,7 @@ def run_level42_partitioning(
         nee_sd: str | None = None,
         gapfill_method: str = 'mds',
         vpd_in_kpa: bool = True,
+        scenarios: list[str] | None = None,
         verbose: int = 1,
 ) -> FluxLevelData:
     """
@@ -555,6 +577,8 @@ def run_level42_partitioning(
             (``'mds'`` default / ``'rf'`` / ``'xgb'``). Daytime ONEFlux passes
             it on as ``nee_f`` where it has run.
         vpd_in_kpa: Whether ``vpd_f`` is in kPa (default). Daytime method only.
+        scenarios: USTAR scenario labels to partition. None (default) takes all
+            Level 3.3 scenarios except the 40 REF versions of ``reference=True``.
         verbose: Console verbosity passed to the partitioning instances.
 
     Returns:
@@ -575,13 +599,16 @@ def run_level42_partitioning(
 
     if variant == 'nt_of':
         return run_level42_nighttime_oneflux(
-            data, **drivers, gapfill_method=gapfill_method, verbose=verbose)
+            data, **drivers, gapfill_method=gapfill_method, scenarios=scenarios,
+            verbose=verbose)
     if variant == 'nt_rp':
         return run_level42_nighttime_reddyproc(
-            data, **drivers, gapfill_method=gapfill_method, verbose=verbose)
+            data, **drivers, gapfill_method=gapfill_method, scenarios=scenarios,
+            verbose=verbose)
     if variant == 'dt_rp':
         return run_level42_daytime_reddyproc(
-            data, **drivers, nee_sd=nee_sd, vpd_in_kpa=vpd_in_kpa, verbose=verbose)
+            data, **drivers, nee_sd=nee_sd, vpd_in_kpa=vpd_in_kpa, scenarios=scenarios,
+            verbose=verbose)
     return run_level42_daytime_oneflux(
         data, **drivers, vpd_in_kpa=vpd_in_kpa, gapfill_method=gapfill_method,
-        verbose=verbose)
+        scenarios=scenarios, verbose=verbose)
