@@ -295,10 +295,13 @@ def december_flags(t: np.ndarray) -> np.ndarray:
     record). MATLAB reads it as a serial date number, so t = 1 is 1 January of
     year 0, a leap year: December is days 336-366 of year 0 whatever the real
     year. In a non-leap year the first real day of December therefore counts as
-    November. mydatevec gives 00:00 as 24:00 of the previous day. ``datevec`` is
-    assumed to round to the millisecond first. That only matters for hourly data,
-    where the accumulated t of the 1 December 00:00 record is 1.3e-11 days above
-    336 (it stays in November with rounding, moves to December without it).
+    November. mydatevec gives 00:00 as 24:00 of the previous day. ``datevec``
+    rounds to the millisecond first. That only matters for hourly data, where the
+    accumulated t of row 8040 (t = 336, the record ending on 1 December 00:00 in a
+    leap year, 2 December 00:00 otherwise) is 1.3e-11 days above 336. With the
+    rounding it stays in November. Checked against the compiled ONEFlux
+    ``ustar_cp``: 9 hourly site-years agree in all 900 values with the rounding,
+    only 374 agree without it (L371).
     """
     day = np.floor(t)
     ms = matlab_round((t - day) * 86400000.0)

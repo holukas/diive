@@ -115,6 +115,22 @@ class TestNumerics(unittest.TestCase):
         self.assertEqual(first, 335 * 48)  # first record after t = 336.0
         self.assertTrue(dec[-1])
 
+    def test_december_boundary_hourly(self):
+        # Hourly t accumulates 1.3e-11 days above 336 at row 8040. datevec rounds to
+        # the millisecond, so that record stays in November (ONEFlux, L371).
+        for year, nt in ((2019, 8760), (2020, 8784)):
+            idx = pd.date_range(f'{year}-01-01 01:00', periods=nt, freq='60min')
+            df = pd.DataFrame({'NEE': 1.0, 'TA': 5.0, 'USTAR': 0.3, 'SW_IN': 0.0}, index=idx)
+            det = UstarChangePointDetection(df, **COLS)
+            t, dec = det._t, det._dec
+            self.assertGreater(t[8039], 336.0)
+            self.assertFalse(dec[8039])
+            self.assertEqual(int(np.flatnonzero(dec)[0]), 8040)
+            # The last record (t = 366 or 367, also a bit above) is 24:00 of 31 December
+            self.assertGreater(t[-1], 1.0 + nt / 24)
+            self.assertTrue(dec[-1])
+            self.assertEqual(int(dec.sum()), (nt // 24 - 335) * 24)
+
 
 class TestChangePoint(unittest.TestCase):
 

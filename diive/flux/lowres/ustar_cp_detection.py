@@ -129,8 +129,8 @@ class UstarChangePointDetection:
     ONEFlux ``ustar_cp`` (MATLAB Runtime R2018a): all 1000 annual values of 10
     half-hourly site-years agree to the 8 significant digits ONEFlux writes,
     and 6 further site-years fail with the same message (harness in
-    ``diive-data/references/ustar_parity/cp/``). Hourly data are not checked
-    yet (see ``december_flags``).
+    ``diive-data/references/ustar_parity/cp/``). Hourly data match too: 9
+    site-years, all 900 values (see ``december_flags``).
 
     The 3-parameter diagnostic model of ``cpdFindChangePoint20100901`` is not
     ported. ONEFlux computes it but discards it (``launch.m:316-323``). The
