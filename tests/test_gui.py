@@ -2079,6 +2079,10 @@ def test_flux_chain_tab_level31(app, configured_site):
     tab.widget()  # build
     tab.on_data_loaded(df)
     assert tab.fluxcol.currentText() == "FC"  # default flux column detected
+    # TA is picked where it starts a name part, not inside FC_STAGE1 or USTAR (L394).
+    assert "FC_STAGE1" in df.columns
+    for combo in (tab.mds_ta, tab.l33_ta):
+        assert f"_{'TA'}" in f"_{combo.currentText().upper()}", combo.currentText()
     # Params carry their library docstring as a tooltip.
     assert "latitude" in tab.site_lat.toolTip().lower()
 

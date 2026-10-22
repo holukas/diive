@@ -1537,10 +1537,10 @@ class FluxChainTab(DiiveTab):
         self.l41_features.set_columns(cols, keep_selection=False)
         for combo, needle, avoid in (
             (self.mds_swin, "SW_IN", "POT"),
-            (self.mds_ta, "TA", "USTAR"),   # "TA" is a substring of "USTAR" — exclude it
+            (self.mds_ta, "TA", None),
             (self.mds_vpd, "VPD", None),
             (self.l33_swin, "SW_IN", "POT"),
-            (self.l33_ta, "TA", "USTAR"),
+            (self.l33_ta, "TA", None),
         ):
             combo.clear()
             combo.addItems(cols)
@@ -1548,7 +1548,9 @@ class FluxChainTab(DiiveTab):
                 up = c.upper()
                 if up.startswith("FLAG"):
                     continue  # FLAG_VPD_..._ISFILLED etc. are not driver columns
-                if needle in up and (avoid is None or avoid not in up):
+                # The needle must start a name part (TA_1_1_1, Tair_f), so TA does
+                # not match inside USTAR or FC_STAGE1 (L394).
+                if f"_{needle}" in f"_{up}" and (avoid is None or avoid not in up):
                     combo.setCurrentText(c)
                     break
         self._refresh_mds_qc_items()  # kept only if the column is still there
