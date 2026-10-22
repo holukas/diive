@@ -34,6 +34,7 @@ from diive.flux.postprocessingchain.levels import (
     run_level42_daytime_reddyproc,
     run_level42_nighttime_oneflux,
     run_level42_nighttime_reddyproc,
+    run_level42_ustar_reference,
 )
 
 
@@ -155,6 +156,9 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     its ``config.partition_*`` flag set to ``True``, plus the one selected by
     ``config.partition_method`` / ``config.partition_mode`` (ONEFlux by
     default). A variant selected both ways runs once.
+    ``config.partition_reference=True`` (with ``ustar_reference=True``) then
+    selects the REF of GPP and RECO for each variant with
+    ``run_level42_ustar_reference``, which partitions the 40 REF versions.
 
     What ``run_chain`` does *not* expose
     ------------------------------------
@@ -331,6 +335,17 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
                 f"nighttime partitioning variant reads its gap-filled NEE from "
                 f"partition_gapfill_method={config.partition_gapfill_method!r})"
             )
+    if config.partition_reference:
+        if not config.ustar_reference:
+            _missing.append("ustar_reference=True (partition_reference=True selects the "
+                            "GPP and RECO REF after the NEE REF)")
+        if not partition_enabled:
+            _missing.append("a partitioning variant (partition_reference=True needs "
+                            "partition_method or a partition_* flag)")
+        if (config.partition_gapfill_method != 'mds'
+                and any(f.startswith('partition_nighttime') for f in partition_enabled)):
+            _missing.append("partition_gapfill_method='mds' (partition_reference=True: "
+                            "only MDS fills the 40 REF versions the nighttime method needs)")
     if _missing:
         raise ValueError(
             "FluxConfig is missing field(s) required by the enabled features:\n"
@@ -616,6 +631,26 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             vpd_in_kpa=config.partition_vpd_in_kpa,
             gapfill_method=config.partition_gapfill_method,
         )
+
+    # GPP and RECO REF: each enabled variant partitions the 40 REF versions
+    # and the USTAR50 scenario once more, then ure's selection runs.
+    if config.partition_reference:
+        for flag in partition_enabled:
+            _, method, mode = flag.split('_')
+            data = run_level42_ustar_reference(
+                data,
+                method=method,
+                mode=mode,
+                ta=config.partition_ta,
+                sw_in=config.partition_sw_in,
+                ta_f=config.partition_ta_f,
+                sw_in_f=config.partition_sw_in_f,
+                vpd_f=config.partition_vpd_f,
+                nee_sd=config.partition_nee_sd,
+                gapfill_method=config.partition_gapfill_method,
+                vpd_in_kpa=config.partition_vpd_in_kpa,
+                verbose=0,
+            )
 
     return data
 

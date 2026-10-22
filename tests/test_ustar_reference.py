@@ -416,5 +416,317 @@ class TestRunChainUstarOptions(unittest.TestCase):
         self.assertEqual(ref.result.index['YY'], ref.result.index['MM'])  # single year
 
 
+# ---------------------------------------------------------------- GPP / RECO (ure)
+
+def _ure_versions(years, freq='30min'):
+    """40 versions: version i = base + i, base alternating 0 and 2.
+
+    All sums are exact: every version has mean base + i with base mean 1 and
+    variance 1, MSE(j, i) = (i - j)^2, so score j = 40 - sum_i (i - j)^2. The
+    best are 19 and 20 (48.75, 51.25), the tie goes to 19.
+    """
+    idx = pd.date_range(f'{years[0]}-01-01', f'{years[-1] + 1}-01-01', freq=freq,
+                        inclusive='left') + pd.Timedelta(freq) / 2
+    idx.name = 'TIMESTAMP_MIDDLE'
+    base = np.tile([0.0, 2.0], len(idx) // 2)
+    v = pd.DataFrame({p: base + i for i, p in enumerate(ONEFLUX_REF_PERCENTILES)}, index=idx)
+    return v, pd.Series(base + 19.5, index=idx)
+
+
+class TestUreRefMatrix(unittest.TestCase):
+
+    def test_valid_values_threshold_in_float(self):
+        from diive.flux.lowres.ustar_reference import _ure_ref_matrix
+        # (int)(0.7f * 90) is 63 in float, 62 in double ("0.7 * 90 = 62 instead
+        # of 63", ure dataset.c:411): a version with 62 valid values drops out.
+        m = np.zeros((90, 12))
+        m[62:, 0] = -9999.
+        red, versions = _ure_ref_matrix(m, 70, 10)
+        self.assertEqual(versions.tolist(), list(range(1, 12)))
+        self.assertEqual(red.shape, (90, 11))
+        m[62, 0] = 0.  # 63 valid: it takes part, the rows it misses go
+        red, versions = _ure_ref_matrix(m, 70, 10)
+        self.assertEqual(versions.tolist(), list(range(12)))
+        self.assertEqual(red.shape, (63, 12))
+
+    def test_rows_missing_everywhere_do_not_count(self):
+        from diive.flux.lowres.ustar_reference import _ure_ref_matrix
+        m = np.ones((10, 10))
+        m[5:] = -9999.
+        m[4, 0] = -9999.
+        # rows 5-9 go first: n_max = 5, need (int)(0.9f * 5) = 4, version 0 has 4
+        red, versions = _ure_ref_matrix(m, 90, 10)
+        self.assertEqual(len(versions), 10)
+        self.assertEqual(red.shape, (4, 10))
+
+    def test_too_few_versions_or_rows(self):
+        from diive.flux.lowres.ustar_reference import _ure_ref_matrix
+        self.assertIsNone(_ure_ref_matrix(np.ones((10, 9)), 90, 10))
+        self.assertIsNotNone(_ure_ref_matrix(np.ones((10, 10)), 90, 10))
+        self.assertIsNone(_ure_ref_matrix(np.full((10, 10), -9999.), 90, 10))
+
+    def test_percentile_positions(self):
+        from diive.flux.lowres.ustar_reference import _ure_percentile_index
+        # ROUND(p / 100 * n) - 1: 0.05 * 40 = 2 -> 1, 0.16 * 40 = 6.4 -> 5,
+        # 0.84 * 40 = 33.6 -> 33, 0.5 * 15 = 7.5 -> 7, 0.25 * 15 = 3.75 -> 3
+        self.assertEqual([_ure_percentile_index(p, 40) for p in (5, 16, 25, 50, 75, 84, 95)],
+                         [1, 5, 9, 19, 29, 33, 37])
+        self.assertEqual([_ure_percentile_index(p, 15) for p in (25, 50, 75)], [3, 7, 10])
+        self.assertEqual(_ure_percentile_index(5, 1), 0)
+
+
+class TestSelectPartitioningReference(unittest.TestCase):
+
+    def test_ref_and_statistics_by_hand(self):
+        from diive.flux.lowres.ustar_reference import select_partitioning_reference
+        v, u50 = _ure_versions([2021])
+        r = select_partitioning_reference(v, ust50=u50)
+        self.assertEqual(r.percentile['HH'], 48.75)
+        self.assertEqual(r.scores.loc['HH', 48.75], r.scores.loc['HH', 51.25])
+        self.assertEqual(r.scores.loc['HH', 48.75], 40 - sum((i - 19) ** 2 for i in range(40)))
+        hh = r.tables['HH']
+        base = v[1.25].to_numpy()
+        np.testing.assert_array_equal(hh['REF'], base + 19)
+        np.testing.assert_array_equal(hh['USTAR50'], base + 19.5)
+        np.testing.assert_array_equal(hh['MEAN'], base + 19.5)
+        for col, i in zip(('05', '16', '25', '50', '75', '84', '95'), (1, 5, 9, 19, 29, 33, 37),
+                          strict=True):
+            np.testing.assert_array_equal(hh[col], base + i)
+        np.testing.assert_allclose(hh['SE'], np.std(np.arange(40.), ddof=1) / np.sqrt(40),
+                                   rtol=1e-14)
+        # Single year, VUT: yearly REF = monthly REF
+        self.assertEqual(r.index['YY'], r.index['MM'])
+        self.assertTrue(r.scores.loc['YY'].isna().all())
+
+    def test_few_valid_versions_give_fewer_statistics(self):
+        from diive.flux.lowres.ustar_reference import select_partitioning_reference
+        v, u50 = _ure_versions([2021])
+        day1 = v.index.dayofyear == 10
+        day2 = v.index.dayofyear == 11
+        v.loc[day1, v.columns[:25]] = np.nan  # 15 valid
+        v.loc[day2, v.columns[:32]] = np.nan  # 8 valid
+        r = select_partitioning_reference(v, ust50=u50)
+        hh = r.tables['HH']
+        base = v[98.75].to_numpy() - 39
+        sel = hh.loc[day1]
+        for col in ('05', '16', '84', '95'):
+            self.assertTrue(sel[col].isna().all())
+        # sorted versions 25-39: positions 3, 7, 10
+        np.testing.assert_array_equal(sel['25'], base[day1] + 28)
+        np.testing.assert_array_equal(sel['50'], base[day1] + 32)
+        np.testing.assert_array_equal(sel['75'], base[day1] + 35)
+        np.testing.assert_array_equal(sel['MEAN'], base[day1] + 32)
+        self.assertTrue(hh.loc[day2].drop(columns=['REF', 'USTAR50']).isna().all().all())
+        # Rows with a missing version leave the selection
+        self.assertEqual(r.records_used['HH'], 17520 - 96)
+        self.assertEqual(len(r.versions_used['HH']), 40)
+
+    def test_version_with_fewer_values_is_left_out(self):
+        from diive.flux.lowres.ustar_reference import select_partitioning_reference
+        v, u50 = _ure_versions([2021])
+        v.loc[v.index.month <= 2, 3.75] = np.nan  # 59 of 365 days missing: 84 %
+        r = select_partitioning_reference(v, ust50=u50)
+        self.assertNotIn(3.75, r.versions_used['HH'])
+        self.assertEqual(len(r.versions_used['HH']), 39)
+        self.assertTrue(np.isnan(r.scores.loc['HH', 3.75]))
+        self.assertEqual(r.records_used['HH'], 17520)
+
+    def test_week_52_starts_after_the_valid_days_of_ustar50(self):
+        from diive.flux.lowres.ustar_reference import select_partitioning_reference
+        v, u50 = _ure_versions([2021])
+        r = select_partitioning_reference(v, ust50=u50)
+        self.assertEqual(r.tables['WW'].index[-1], pd.Timestamp('2021-12-24'))
+        # USTAR50 misses 2021-12-18 (day 352): one valid day in week 51
+        gap = u50.copy()
+        gap[gap.index.normalize() == pd.Timestamp('2021-12-18')] = np.nan
+        r = select_partitioning_reference(v, ust50=gap)
+        ww = r.tables['WW']
+        self.assertEqual(ww.index[-1], pd.Timestamp('2021-12-18'))
+        self.assertAlmostEqual(ww['MEAN'].iloc[-1], r.tables['DD']['MEAN'].iloc[351:].mean(),
+                               places=12)
+        # ust50_week decides, not ust50
+        r = select_partitioning_reference(v, ust50=gap, ust50_week=u50)
+        self.assertEqual(r.tables['WW'].index[-1], pd.Timestamp('2021-12-24'))
+        # Without USTAR50, ure sees it missing: week 52 starts at day 351
+        r = select_partitioning_reference(v)
+        self.assertEqual(r.tables['WW'].index[-1], pd.Timestamp('2021-12-17'))
+        self.assertTrue(r.tables['HH']['USTAR50'].isna().all())
+
+    def test_yearly_rule_vut_and_cut(self):
+        from diive.flux.lowres.ustar_reference import select_partitioning_reference
+        rng = np.random.default_rng(1)
+        idx = pd.date_range('2019-01-01', '2022-01-01', freq='30min',
+                            inclusive='left') + pd.Timedelta('15min')
+        v = pd.DataFrame({p: 5 + rng.normal(0, 1 + 0.01 * i, len(idx))
+                          for i, p in enumerate(ONEFLUX_REF_PERCENTILES)}, index=idx)
+        # 2019 and 2021 incomplete in every version: one complete year
+        v.iloc[100] = np.nan
+        v.iloc[-100] = np.nan
+        vut = select_partitioning_reference(v, threshold_type='vut')
+        cut = select_partitioning_reference(v, threshold_type='cut')
+        self.assertEqual(vut.records_used['YY'], 1)
+        self.assertEqual(vut.index['YY'], vut.index['MM'])
+        # ure has no such rule for CUT: NaN scores, the first version
+        self.assertEqual(cut.index['YY'], 0)
+        self.assertTrue(cut.scores.loc['YY'].isna().all())
+        self.assertIn('YY', cut.model_efficiency)
+        # CUT with fewer than 3 years (no ONEFlux CUT): diive applies the rule
+        one = select_partitioning_reference(v.loc['2020'], threshold_type='cut')
+        self.assertEqual(one.index['YY'], one.index['MM'])
+
+    def test_mask_leaves_out_the_versions_but_not_ustar50(self):
+        from diive.flux.lowres.ustar_reference import select_partitioning_reference
+        v, u50 = _ure_versions([2021])
+        mask = pd.Series(False, index=v.index)
+        mask.iloc[1000:1500] = True
+        r = select_partitioning_reference(v, ust50=u50, mask=mask)
+        hh = r.tables['HH']
+        self.assertTrue(hh['REF'].iloc[1000:1500].isna().all())
+        self.assertTrue(hh['MEAN'].iloc[1000:1500].isna().all())
+        self.assertFalse(hh['USTAR50'].iloc[1000:1500].isna().any())
+        self.assertEqual(int(r.masked.sum()), 500)
+        self.assertEqual(r.records_used['HH'], 17520 - 500)
+        # Days touched by the mask are missing in every version
+        self.assertTrue(r.tables['DD']['REF'].iloc[20:32].isna().all())
+        self.assertFalse(r.tables['DD']['USTAR50'].iloc[20:32].isna().any())
+
+    def test_timestamp_end_index_and_checks(self):
+        from diive.flux.lowres.ustar_reference import select_partitioning_reference
+        v, u50 = _ure_versions([2021])
+        r_mid = select_partitioning_reference(v, ust50=u50)
+        v_end = v.copy()
+        v_end.index = v.index + pd.Timedelta('15min')
+        v_end.index.name = 'TIMESTAMP_END'
+        r_end = select_partitioning_reference(v_end, ust50=u50.set_axis(v_end.index))
+        pd.testing.assert_frame_equal(r_mid.tables['HH'], r_end.tables['HH'])
+        with self.assertRaises(ValueError):
+            select_partitioning_reference(v.iloc[:, :3])
+        with self.assertRaises(ValueError):
+            select_partitioning_reference(v, ust50=u50.iloc[1:])
+        with self.assertRaises(ValueError):
+            select_partitioning_reference(v, threshold_type='x')
+
+
+class TestUreCleanup(unittest.TestCase):
+
+    def test_nighttime(self):
+        from diive.flux.lowres.ustar_reference import oneflux_ure_cleanup
+        reco = np.array([1., np.nan, 150., -150., 2., 3., -9999.5])
+        gpp = np.array([1., 1., 1., 1., np.inf, -7000., 1.])
+        r, g = oneflux_ure_cleanup(reco, gpp, 'nighttime')
+        # missing or out-of-range RECO removes GPP as well, not the other way
+        np.testing.assert_array_equal(r, [1., np.nan, np.nan, np.nan, 2., 3., np.nan])
+        np.testing.assert_array_equal(g, [1., np.nan, np.nan, np.nan, np.nan, np.nan, np.nan])
+
+    def test_daytime(self):
+        from diive.flux.lowres.ustar_reference import oneflux_ure_cleanup
+        reco = pd.Series([1., 150., np.nan, 2., 3.])
+        gpp = pd.Series([-0.1, 1., 1., 200., 0.])
+        r, g = oneflux_ure_cleanup(reco, gpp, 'daytime')
+        self.assertIsInstance(r, pd.Series)
+        np.testing.assert_array_equal(r, [1., np.nan, np.nan, 2., 3.])
+        np.testing.assert_array_equal(g, [np.nan, 1., 1., np.nan, 0.])
+        with self.assertRaises(ValueError):
+            oneflux_ure_cleanup(reco, gpp, 'x')
+
+
+def _chain_to_ref():
+    """Example data (one month) to the NEE REF, plus nighttime ONEFlux at L4.2."""
+    from diive.flux.postprocessingchain import (
+        run_level33_ustar_detection, run_level41_mds, run_level41_ustar_reference,
+        run_level42_partitioning,
+    )
+    d = run_level33_ustar_detection(_chain_to_l32(), thresholds=_ref_thresholds(),
+                                    reference=True, showplot=False, verbose=False)
+    d = run_level41_mds(d, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa', mode='oneflux')
+    d = run_level41_ustar_reference(d, verbose=False)
+    return run_level42_partitioning(d, method='nighttime', ta='TA_1_1_1', sw_in='SW_IN_1_1_1',
+                                    ta_f='TA_1_1_1', verbose=0)
+
+
+_NT = dict(ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_1_1_1', verbose=0)
+
+
+class TestLevel42UstarReference(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from diive.flux.postprocessingchain import run_level42_ustar_reference
+        cls.before = _chain_to_ref()
+        cls.data = run_level42_ustar_reference(cls.before, method='nighttime', **_NT)
+
+    def test_needs_the_nee_ref(self):
+        from diive.flux.postprocessingchain import (
+            run_level33_ustar_detection, run_level42_ustar_reference,
+        )
+        d = run_level33_ustar_detection(_chain_to_l32(), thresholds={50: 0.15},
+                                        showplot=False, verbose=False)
+        with self.assertRaisesRegex(RuntimeError, 'run_level41_ustar_reference'):
+            run_level42_ustar_reference(d, method='nighttime', **_NT)
+
+    def test_ref_columns_and_record(self):
+        from diive.flux.lowres.ustar_reference import oneflux_ure_cleanup
+        d = self.data
+        rec = d.levels.partitioning_reference['nt_of']
+        self.assertEqual((rec.variant, rec.label), ('nt_of', 'CUT_REF'))
+        self.assertEqual(rec.columns, {'GPP': 'GPP_NT_OF_CUT_REF', 'RECO': 'RECO_NT_OF_CUT_REF'})
+        self.assertEqual(d.added_columns['L4.2_ref_nt_of'], list(rec.columns.values()))
+        scen = d.levels.ustar_scenarios
+        self.assertEqual(set(rec.instances), set(scen.reference_labels) | {'CUT_50'})
+        for prod, pos in (('GPP', 1), ('RECO', 0)):
+            source = rec.scenarios[prod]['HH']
+            self.assertIn(source, scen.reference_labels)
+            self.assertEqual(rec.results[prod].percentile['HH'], scen.percentiles[source])
+            res = rec.instances[source].results
+            expected = oneflux_ure_cleanup(res['RECO_NT_OF'], res['GPP_NT_OF'], 'nighttime')[pos]
+            pd.testing.assert_series_equal(d.fpc_df[rec.columns[prod]], expected,
+                                           check_names=False)
+            self.assertEqual(set(rec.results[prod].tables), {'HH', 'DD', 'WW', 'MM', 'YY'})
+        # The variant's own L4.2 results are not changed
+        self.assertEqual(list(d.levels.level42_nt_of), list(self.before.levels.level42_nt_of))
+        pd.testing.assert_frame_equal(d.fpc_df[self.before.fpc_df.columns], self.before.fpc_df)
+
+    def test_rerun_replaces_and_variants_add_up(self):
+        from diive.flux.postprocessingchain import run_level42_ustar_reference
+        d = run_level42_ustar_reference(self.data, method='nighttime', **_NT)
+        self.assertEqual(list(d.fpc_df.columns), list(self.data.fpc_df.columns))
+        d = run_level42_ustar_reference(d, method='nighttime', mode='reddyproc', **_NT)
+        self.assertEqual(set(d.levels.partitioning_reference), {'nt_of', 'nt_rp'})
+        self.assertIn('GPP_NT_RP_CUT_REF', d.fpc_df.columns)
+        self.assertIn('GPP_NT_OF_CUT_REF', d.fpc_df.columns)
+
+    def test_upstream_reruns_clear_it(self):
+        from diive.flux.postprocessingchain import run_level33_ustar_detection, run_level41_mds
+        d = run_level41_mds(self.data, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa',
+                            mode='oneflux')
+        self.assertEqual(d.levels.partitioning_reference, {})
+        self.assertNotIn('GPP_NT_OF_CUT_REF', d.fpc_df.columns)
+        self.assertNotIn('L4.2_ref_nt_of', d.added_columns)
+        d = run_level33_ustar_detection(self.data, thresholds={50: 0.15}, showplot=False,
+                                        verbose=False)
+        self.assertEqual(d.levels.partitioning_reference, {})
+        self.assertNotIn('RECO_NT_OF_CUT_REF', d.fpc_df.columns)
+
+    def test_run_chain_option(self):
+        from diive.flux.postprocessingchain import run_chain
+        cfg = TestRunChainUstarOptions._cfg
+        data = TestRunChainUstarOptions._data()
+        kw = dict(ustar_thresholds=_ref_thresholds(), mds_mode='oneflux',
+                  partition_method='nighttime', partition_ta='TA_1_1_1',
+                  partition_sw_in='SW_IN_1_1_1', partition_ta_f='TA_1_1_1')
+        with self.assertRaisesRegex(ValueError, 'ustar_reference=True'):
+            run_chain(data, cfg(**kw, partition_reference=True))
+        with self.assertRaisesRegex(ValueError, 'a partitioning variant'):
+            run_chain(data, cfg(ustar_thresholds=_ref_thresholds(), ustar_reference=True,
+                                partition_reference=True))
+        out = run_chain(data, cfg(**kw, ustar_reference=True, partition_reference=True))
+        rec = out.levels.partitioning_reference['nt_of']
+        self.assertEqual(rec.label, 'CUT_REF')
+        for col in rec.columns.values():
+            self.assertGreater(out.fpc_df[col].notna().sum(), 0)
+        # L4.2 itself still runs on the main scenarios plus the NEE REF one
+        self.assertNotIn('CUT_0125', out.levels.level42_nt_of)
+
+
 if __name__ == '__main__':
     unittest.main()

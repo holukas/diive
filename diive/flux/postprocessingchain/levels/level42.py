@@ -10,7 +10,9 @@ USTAR scenario produced at Level-3.3 and merges its result columns into
 Daytime ONEFlux runs its scenarios together, because they share the days
 removed after a failed fit, as in ONEFlux. ``run_level42_partitioning``
 selects one of the four with ``method`` and ``mode`` (ONEFlux by default) and
-calls the matching per-variant function.
+calls the matching per-variant function. ``run_level42_ustar_reference``
+selects the REF of GPP and RECO as ONEFlux does, after the NEE REF of Level
+4.1.
 
 Mirrors Level-4.1 gap-filling structurally — same per-scenario loop, same
 additive-across-variants semantics, same re-run cleanup and scenario-overwrite
@@ -46,6 +48,7 @@ import pandas as pd
 from diive.core.utils.console import rule
 from diive.flux.postprocessingchain.container import FluxLevelData
 from diive.flux.postprocessingchain.levels._rerun import (
+    clear_partitioning_reference,
     drop_columns_for_key,
     record_added_columns,
 )
@@ -612,3 +615,199 @@ def run_level42_partitioning(
     return run_level42_daytime_oneflux(
         data, **drivers, vpd_in_kpa=vpd_in_kpa, gapfill_method=gapfill_method,
         scenarios=scenarios, verbose=verbose)
+
+
+#: L4.2 variant token -> tag of its result columns (``RECO_<tag>``, ``GPP_<tag>``).
+_VARIANT_TAGS: dict[str, str] = {
+    'nt_of': 'NT_OF', 'nt_rp': 'NT_RP', 'dt_rp': 'DT_RP', 'dt_of': 'DT_OF',
+}
+
+
+def _series_on_index(series_middle: pd.Series, index: pd.DatetimeIndex) -> pd.Series:
+    """``series_middle`` (TIMESTAMP_MIDDLE grid) on ``index``, whatever its timestamp convention."""
+    import numpy as np
+
+    from diive.flux.lowres.ustar_detection import _to_middle
+    pos = pd.DataFrame({'_pos': np.arange(len(index))}, index=index)
+    mid = _to_middle(pos)
+    out = np.full(len(index), np.nan)
+    out[mid['_pos'].to_numpy()] = series_middle.reindex(mid.index).to_numpy(float)
+    return pd.Series(out, index=index)
+
+
+def run_level42_ustar_reference(
+        data: FluxLevelData,
+        *,
+        method: str,
+        mode: str = 'oneflux',
+        ta: str | None = None,
+        sw_in: str | None = None,
+        ta_f: str | None = None,
+        sw_in_f: str | None = None,
+        vpd_f: str | None = None,
+        nee_sd: str | None = None,
+        gapfill_method: str = 'mds',
+        vpd_in_kpa: bool = True,
+        verbose: int = 1,
+) -> FluxLevelData:
+    """
+    Level-4.2: Select the REF of GPP and RECO as ONEFlux does (``GPP_NT_VUT_REF``, ...).
+
+    ONEFlux partitions each of the 40 gap-filled NEE versions of the REF
+    selection (u* percentiles 1.25 to 98.75) and selects a REF for GPP and
+    one for RECO in its step ``ure``, by the same model efficiency as the NEE
+    REF, on half-hourly, daily, weekly, monthly and yearly values. See
+    :func:`diive.flux.lowres.ustar_reference.select_partitioning_reference`
+    for the method and the ``ure`` details it reproduces.
+
+    This step partitions the 40 versions and the USTAR50 scenario (the
+    scenario at percentile 50, e.g. ``CUT_50``) with the variant ``method`` /
+    ``mode``, as :func:`run_level42_partitioning` would, cleans the results as
+    ONEFlux does before ``ure``
+    (:func:`~diive.flux.lowres.ustar_reference.oneflux_ure_cleanup`) and
+    selects the REF of each product. Daytime ONEFlux partitions the 41
+    versions together in ONEFlux's order (1.25 to 98.75, then 50), so they
+    share the days removed after a failed fit as in ONEFlux. The variant's
+    own Level 4.2 results (``data.levels.level42_<variant>``) are not changed.
+
+    The partitioning of the 41 versions makes this step slow: about 41 times
+    one partitioning. For one year of half-hourly data, nighttime ONEFlux
+    took about 7 seconds and daytime ONEFlux about 6 minutes in the parity
+    checks.
+
+    Needs the NEE REF: ``run_level33_ustar_detection(..., reference=True)``,
+    ``run_level41_mds`` and ``run_level41_ustar_reference``. The long gaps
+    that the NEE REF selection left out (``ustar_reference.result.masked``)
+    are left out of the 40 versions here as well, as ONEFlux passes them on
+    to ``ure``.
+
+    .. important::
+
+        Three differences from the ONEFlux pipeline. First, diive's u* filter
+        keeps the first record above the threshold after a period below it,
+        ONEFlux removes it (finding L74), so the versions and the REF can
+        differ even with ``mode='oneflux'`` in MDS. Second, the ONEFlux
+        pipeline gives ``ure`` the long gaps of the other threshold type
+        (VUT gets the CUT gaps, CUT the VUT gaps, and with fewer than 3 years
+        VUT gets none). The chain holds one threshold type and uses its own
+        gaps. Third, for VUT with 3 or more years, ``ure`` takes the start of
+        week 52 from the CUT USTAR50 version, here from the VUT one. That
+        changes the weekly values only when USTAR50 misses a day in week 51
+        (finding L395).
+
+    The half-hourly REF of each product is added to ``fpc_df`` as its own
+    series, named like the Level 4.2 columns with the REF label, e.g.
+    ``GPP_NT_OF_CUT_REF`` and ``RECO_NT_OF_CUT_REF``. Records left out as
+    long gaps are missing there, as in ``ure``. The REF of the daily, weekly,
+    monthly and yearly values, and the USTAR50 version, mean, standard error
+    and 7 percentiles across the versions (``GPP_NT_CUT_MEAN``, ``_SE``,
+    ``_05`` to ``_95`` in FLUXNET), are in
+    ``data.levels.partitioning_reference[variant].results[product].tables``.
+
+    Without a scenario at percentile 50, the USTAR50 column is missing and
+    the weekly values start week 52 at day 351, as ``ure`` would do without
+    its USTAR50 version.
+
+    For the REddyProc variants, which ONEFlux does not run, the same
+    selection is applied to their results (a diive extension): nighttime
+    REddyProc is cleaned like nighttime ONEFlux, daytime REddyProc like
+    daytime ONEFlux.
+
+    Args:
+        data: FluxLevelData after ``run_level41_ustar_reference``.
+        method: ``'nighttime'`` or ``'daytime'``.
+        mode: ``'oneflux'`` (default) or ``'reddyproc'``.
+        ta: Measured air temperature column, as in :func:`run_level42_partitioning`.
+        sw_in: Measured shortwave incoming radiation column.
+        ta_f: Gap-filled air temperature column.
+        sw_in_f: Gap-filled shortwave incoming radiation column.
+        vpd_f: Gap-filled VPD column, **kPa** by default (see ``vpd_in_kpa``).
+        nee_sd: Optional NEE uncertainty column, daytime REddyProc only.
+        gapfill_method: Which L4.1 gap-filled NEE the partitioning uses
+            (``'mds'`` default). It must have filled the 40 REF versions,
+            which only MDS does by default.
+        vpd_in_kpa: Whether ``vpd_f`` is in kPa (default). Daytime method only.
+        verbose: Console verbosity passed to the partitioning instances (0
+            silent, 1 warnings, 2 progress + report). From 1, the REF of each
+            product is printed.
+
+    Returns:
+        Updated FluxLevelData with the two REF columns in ``fpc_df`` and
+        ``data.levels.partitioning_reference[variant]``
+        (:class:`~diive.flux.postprocessingchain.container.PartitioningReference`).
+        A second call with the same variant replaces its REF, calls with other
+        variants add up.
+
+    Raises:
+        RuntimeError: If the NEE REF has not been selected.
+    """
+    from diive.core.utils.console import console as _console
+    from diive.core.utils.console import warn
+    from diive.flux.lowres.ustar_reference import (
+        REF_AGGREGATIONS, oneflux_ure_cleanup, select_partitioning_reference,
+    )
+    from diive.flux.postprocessingchain.container import PartitioningReference
+
+    variant = partition_variant(method, mode)
+    ref = data.levels.ustar_reference
+    scen = data.levels.ustar_scenarios
+    if ref is None or scen is None or not scen.reference_labels:
+        raise RuntimeError(
+            "run_level42_ustar_reference() needs the NEE REF: call "
+            "run_level33_ustar_detection(..., reference=True), run_level41_mds() and "
+            "run_level41_ustar_reference() first.")
+    labels = list(scen.reference_labels)
+    lab50 = next((lab for lab, p in scen.percentiles.items() if p == 50.0), None)
+    if lab50 is None:
+        warn("run_level42_ustar_reference: no u* scenario at percentile 50, so no USTAR50 "
+             "version. Its column stays empty and week 52 starts at day 351, as in ure "
+             "without USTAR50.", verbose=verbose)
+
+    rule(f"Level 4.2: REF of GPP and RECO (ONEFlux ure), variant {variant}",
+         verbose=verbose)
+    # Partition the 41 versions in a scratch container, without the variant's
+    # own results: they are not touched, and its USTAR50 columns would clash.
+    attr = f'level42_{variant}'
+    scratch = replace(data, levels=replace(data.levels, **{attr: {}}))
+    scratch = run_level42_partitioning(
+        scratch, method=method, mode=mode, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f,
+        vpd_f=vpd_f, nee_sd=nee_sd, gapfill_method=gapfill_method, vpd_in_kpa=vpd_in_kpa,
+        scenarios=labels + ([lab50] if lab50 else []), verbose=verbose)
+    instances = dict(getattr(scratch.levels, attr))
+    del scratch
+
+    data = clear_partitioning_reference(data, variant)
+    pre_columns = list(data.fpc_df.columns)
+    fpc_df = data.fpc_df.copy()
+    tag = _VARIANT_TAGS[variant]
+    cleaned = {lab: oneflux_ure_cleanup(instances[lab].results[f'RECO_{tag}'],
+                                        instances[lab].results[f'GPP_{tag}'], method)
+               for lab in instances}
+    percentiles = [scen.percentiles[lab] for lab in labels]
+    columns, scenarios, results = {}, {}, {}
+    for prod, pos in (('GPP', 1), ('RECO', 0)):
+        values = pd.DataFrame({lab: cleaned[lab][pos] for lab in labels})
+        res = select_partitioning_reference(
+            values, percentiles, ust50=cleaned[lab50][pos] if lab50 else None,
+            mask=ref.result.masked, threshold_type=scen.threshold_type)
+        col = f'{prod}_{tag}_{ref.label}'
+        if col in fpc_df.columns:
+            raise RuntimeError(f"run_level42_ustar_reference: column {col!r} already exists "
+                               f"in fpc_df.")
+        fpc_df[col] = _series_on_index(res.tables['HH']['REF'], fpc_df.index)
+        columns[prod] = col
+        scenarios[prod] = {agg: (labels[res.index[agg]] if res.index[agg] >= 0 else None)
+                           for agg in REF_AGGREGATIONS}
+        results[prod] = res
+        if verbose:
+            _console.print(f"{prod} ({variant}):")
+            _console.print(res.summary())
+
+    record = PartitioningReference(variant=variant, label=ref.label, columns=columns,
+                                   scenarios=scenarios, results=results, instances=instances)
+    refs = {**data.levels.partitioning_reference, variant: record}
+    final = replace(data, fpc_df=fpc_df,
+                    levels=replace(data.levels, partitioning_reference=refs),
+                    level_ids=append_level_id(data.level_ids, _LEVEL42_IDSTR))
+    return replace(final, added_columns=record_added_columns(final, f'L4.2_ref_{variant}',
+                                                             pre_columns))

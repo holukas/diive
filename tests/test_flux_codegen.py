@@ -254,6 +254,40 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertNotIn("sw_in", l42)
         self.assertIn("gapfill_method='rf',", l42)
 
+    def test_level42_to_code_partitioning_reference(self):
+        """ustar_reference in level42_cfg adds run_level42_ustar_reference per variant."""
+        from diive.flux.postprocessingchain import level42_to_code
+        code = level42_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={},
+            level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+            level33_kwargs={"_detection": True, "ta_col": "TA", "swin_col": "SW_IN",
+                            "reference": True},
+            level41_cfg={"methods": ["mds"], "ustar_reference": True,
+                         "mds": {"swin": "SW_IN", "ta": "TA", "vpd": "VPD", "mode": "oneflux"}},
+            level42_cfg={"method": "nighttime", "variants": ["dt_of"], "ta": "TA",
+                         "sw_in": "SW_IN", "ta_f": "TA_F", "sw_in_f": "SW_IN_F",
+                         "vpd_f": "VPD_F", "ustar_reference": True})
+        compile(code, "<gen>", "exec")
+        self.assertIn("run_level42_ustar_reference", code.split("init_flux_data(")[0])
+        calls = code.split("data = run_level42_ustar_reference(")[1:]
+        self.assertEqual(len(calls), 2)
+        self.assertIn("method='nighttime',", calls[0])
+        self.assertNotIn("vpd_f", calls[0].split(")")[0])
+        self.assertIn("method='daytime',", calls[1])
+        self.assertIn("vpd_f='VPD_F',", calls[1])
+        self.assertLess(code.index("data = run_level42_daytime_oneflux("),
+                        code.index("data = run_level42_ustar_reference("))
+        # Without the key nothing changes
+        code = level42_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={}, level31_kwargs={}, level32_steps=[],
+            level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]},
+            level41_cfg={"methods": ["mds"], "mds": {"swin": "SW_IN", "ta": "TA", "vpd": "VPD"}},
+            level42_cfg={"method": "nighttime", "ta": "TA", "sw_in": "SW_IN", "ta_f": "TA_F"})
+        self.assertNotIn("run_level42_ustar_reference", code)
+
 
 if __name__ == "__main__":
     unittest.main()

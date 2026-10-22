@@ -493,6 +493,13 @@ class FluxConfig:
     expect hPa and convert internally; set ``False`` if the column is already
     hPa."""
 
+    partition_reference: bool = False
+    """Select the REF of GPP and RECO as ONEFlux does (``GPP_NT_VUT_REF``,
+    ...), with ``run_level42_ustar_reference`` after each enabled partitioning
+    variant. Each variant then also partitions the 40 REF versions (and the
+    USTAR50 scenario), which takes about 40 times as long as one scenario.
+    Needs ``ustar_reference=True`` and at least one partitioning variant."""
+
 
 @dataclass(frozen=True)
 class FluxMeta:
@@ -663,6 +670,9 @@ class LevelResults:
     level42_nt_rp: dict[str, Any] = field(default_factory=dict)
     level42_dt_rp: dict[str, Any] = field(default_factory=dict)
     level42_dt_of: dict[str, Any] = field(default_factory=dict)
+    partitioning_reference: dict[str, 'PartitioningReference'] = field(default_factory=dict)
+    """REF of GPP and RECO per partitioning variant (``'nt_of'``, ...),
+    selected by ``run_level42_ustar_reference`` (ONEFlux ``ure``)."""
 
     def has_level42(self) -> bool:
         """True if any L4.2 partitioning variant has produced results."""
@@ -739,6 +749,35 @@ class UstarReference:
     flag_col: str
     scenarios: dict
     result: 'UstarReferenceResult'
+
+
+@dataclass(frozen=True)
+class PartitioningReference:
+    """REF of GPP and RECO of one partitioning variant, selected by
+    ``run_level42_ustar_reference`` (ONEFlux ``ure``).
+
+    Attributes:
+        variant: Partitioning variant (``'nt_of'``, ``'nt_rp'``, ``'dt_of'``,
+            ``'dt_rp'``).
+        label: REF label, ``'CUT_REF'`` or ``'VUT_REF'``.
+        columns: ``fpc_df`` column of the half-hourly REF per product, e.g.
+            ``{'GPP': 'GPP_NT_OF_CUT_REF', 'RECO': 'RECO_NT_OF_CUT_REF'}``.
+        scenarios: Per product, the L3.3 scenario label of the REF per time
+            resolution (``'HH'``, ``'DD'``, ``'WW'``, ``'MM'``, ``'YY'``), None
+            where there is no REF.
+        results: Per product the full
+            :class:`~diive.flux.lowres.ustar_reference.PartitioningReferenceResult`
+            (scores, versions used, and the REF, USTAR50, mean, standard error
+            and percentiles across the versions per time resolution).
+        instances: The partitioning instances of the 40 REF versions and of
+            the USTAR50 scenario, by scenario label.
+    """
+    variant: str
+    label: str
+    columns: dict
+    scenarios: dict
+    results: dict
+    instances: dict = field(repr=False)
 
 
 @dataclass

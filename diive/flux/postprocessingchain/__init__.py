@@ -112,6 +112,7 @@ from diive.flux.postprocessingchain.container import (
     FluxLevelData,
     FluxMeta,
     LevelResults,
+    PartitioningReference,
     UstarReference,
     UstarScenarios,
     add_driver,
@@ -140,6 +141,7 @@ from diive.flux.postprocessingchain.levels import (
     run_level42_nighttime_oneflux,
     run_level42_nighttime_reddyproc,
     run_level42_partitioning,
+    run_level42_ustar_reference,
     ustar_scenario_labels,
 )
 from diive.flux.postprocessingchain.run_chain import run_chain
@@ -169,6 +171,7 @@ __all__ = [
     'LevelResults',
     'UstarScenarios',
     'UstarReference',
+    'PartitioningReference',
     # Single-call convenience driver
     'run_chain',
     # Reproducible-script codegen
@@ -203,6 +206,7 @@ __all__ = [
     'run_level42_daytime_reddyproc',
     'run_level42_daytime_oneflux',
     'run_level42_partitioning',
+    'run_level42_ustar_reference',
     # Reporting over a finished chain
     'report_gapfilling_variables',
     'report_gapfilling_model_scores',

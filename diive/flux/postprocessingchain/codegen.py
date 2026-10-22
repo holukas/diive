@@ -424,9 +424,12 @@ def _level42_fn_names(level42_cfg: dict) -> list[str]:
     selected = _level42_selected(level42_cfg)
     variants = level42_cfg.get("variants", [])
     names = ["run_level42_partitioning"] if selected else []
-    return names + [f"run_level42_{_LEVEL42_VARIANTS[v][0]}"
-                    for v in ("nt_of", "nt_rp", "dt_rp", "dt_of")
-                    if v in variants and v != selected]
+    names += [f"run_level42_{_LEVEL42_VARIANTS[v][0]}"
+              for v in ("nt_of", "nt_rp", "dt_rp", "dt_of")
+              if v in variants and v != selected]
+    if level42_cfg.get("ustar_reference") and names:
+        names.append("run_level42_ustar_reference")
+    return names
 
 
 def _level42_defaults(fn_name: str) -> dict:
@@ -471,14 +474,17 @@ def _level42_block(level42_cfg: dict) -> list[str]:
          "ta": "...", "sw_in": "...",      # measured meteo
          "ta_f": "...", "sw_in_f": "...", "vpd_f": "...",   # gap-filled meteo
          "nee_sd": "...",                  # optional, daytime REddyProc
-         "vpd_in_kpa": True}               # optional, daytime variants
+         "vpd_in_kpa": True,               # optional, daytime variants
+         "ustar_reference": True}          # optional: GPP / RECO REF per variant
 
     With ``method`` set, the block starts with one ``run_level42_partitioning``
     call for that method and mode, with only the kwargs that variant uses.
     ``variants`` is then optional. Partitioning is additive across variants —
     each further selected variant emits its own ``run_level42_*`` call, just
     like the L4.1 gap-filling methods. A variant selected both ways is
-    rendered once.
+    rendered once. With ``ustar_reference`` each rendered variant is followed
+    by a ``run_level42_ustar_reference`` call (the GPP and RECO REF, after
+    ``run_level41_ustar_reference`` at L4.1).
     """
     selected = _level42_selected(level42_cfg)
     variants = level42_cfg.get("variants", [])
@@ -499,6 +505,19 @@ def _level42_block(level42_cfg: dict) -> list[str]:
         body += _level42_kwarg_lines(level42_cfg, keys, f"run_level42_{suffix}")
         body.append(")")
         lines += body
+    if level42_cfg.get("ustar_reference"):
+        from diive.flux.postprocessingchain.levels.level42 import PARTITION_VARIANTS
+        method_mode = {v: mm for mm, v in PARTITION_VARIANTS.items()}
+        rendered = ([selected] if selected else []) + [
+            v for v in ("nt_of", "nt_rp", "dt_rp", "dt_of") if v in variants and v != selected]
+        for variant in rendered:
+            method, mode = method_mode[variant]
+            body = ["", "data = run_level42_ustar_reference(", "    data,",
+                    f"    method={method!r},", f"    mode={mode!r},"]
+            body += _level42_kwarg_lines(level42_cfg, _LEVEL42_VARIANTS[variant][1],
+                                         "run_level42_ustar_reference")
+            body.append(")")
+            lines += body
     return lines
 
 
