@@ -25,6 +25,20 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   threshold, as REddyProc does.
 - **Chain settings:** `run_level33_ustar_detection(detection_mode=)` and
   `FluxConfig(ustar_bootstrap_detection_mode=)` select the detection method.
+- **REF threshold:** `select_ustar_reference` selects the REF u* threshold as ONEFlux does (model
+  efficiency over 40 gap-filled versions of NEE), for half-hourly, daily, weekly, monthly and yearly
+  values. In the chain, `run_level33_ustar_detection(reference=True)` adds the 40 scenarios and
+  `run_level41_ustar_reference` adds the REF series (`CUT_REF` or `VUT_REF`) after MDS. diive's u*
+  filter keeps the first record after a period below the threshold and ONEFlux removes it, so the REF
+  can differ from ONEFlux's at some time resolutions.
+- **Given thresholds:** `run_level33_ustar_detection(thresholds={16: 0.18, 50: 0.22, 84: 0.27})`
+  applies known thresholds without detection and labels them as detected ones (`CUT_16`, ...), also
+  per year for VUT. `FluxConfig(ustar_thresholds=)` accepts the same form.
+- **VUT and REF in `run_chain`:** `FluxConfig(ustar_threshold_type='vut')` applies one threshold per
+  year, `FluxConfig(ustar_reference=True)` adds the REF series.
+- **Scenarios for slow steps:** Random Forest, XGBoost and NEE partitioning take `scenarios=`. By
+  default they skip the 40 extra scenarios that REF needs and run on the requested percentiles and
+  the REF scenario only, also in `run_chain`.
 
 ### Changed
 
@@ -37,6 +51,8 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 - **Examples:** the USTAR examples show `UstarThresholdDetection` and compare its four modes.
 - **Dependencies:** numba is now a direct dependency (it came with shap before). Intel Macs get
   numba below 0.63, the last versions with wheels for them.
+- **Generated scripts:** constant thresholds labelled by percentile (`CUT_16`, `CUT_50`, ...) are
+  written as `run_level33_ustar_detection(thresholds=...)`, which gives the same flags.
 
 ### Deprecated
 
@@ -44,6 +60,11 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 - **`UstarVekuriThresholdDetection`:** not a published method, use `UstarThresholdDetection`.
 - **`detector_class` and `detector_kwargs`:** in `run_level33_ustar_detection`, use
   `detection_mode` and `detection_kwargs`.
+
+### Fixed
+
+- **Labels of percentiles with decimals:** `run_level33_ustar_detection(percentiles=(2.5, 50, 97.5))`
+  labelled 2.5 as `CUT_02`. Whole percentiles keep their labels (`CUT_50`), and percentiles with decimals get four digits in hundredths (`CUT_0250`, `CUT_9750`).
 
 ## [0.92.0] - 2026-10-21
 

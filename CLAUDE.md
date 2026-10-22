@@ -68,6 +68,8 @@ Four NEE partitioning ports coexist, with column suffixes `*_NT_OF`, `*_NT_RP`, 
 - **ONEFlux-mode input is rounded to `%g`** (6 significant digits, as `qc_auto` writes the yearly files, `_qc_auto_text`) and each year is padded to its full grid. Without the rounding a few records fall into another class.
 - **Random draws:** `random_state=42` by default. `random_state='oneflux'` draws the CP resamples from MATLAB's default stream, continued over the years in order (runs sequentially), so CP equals ONEFlux. MP is then unseeded, because ONEFlux seeds it with the clock. The Windows ONEFlux build draws only rows 0-16383 (`RAND_MAX`), diive draws all rows as on Linux (L357).
 - **`nighttime_only`** (L3.3 functions, u\* flag classes, `FluxConfig.ustar_nighttime_only`): filter only records with SW_IN below 10 W m-2 or missing, as REddyProc. The default (False) filters day and night, as ONEFlux.
+- **One L3.3 entry point for percentile scenarios:** `run_level33_ustar_detection` detects (default, CUT_16/50/84 unchanged) or takes `thresholds={p: value}` (per year `{year: {p: value}}` for `mode='vut'`) with the same labels; `levels.ustar_scenarios` records detected or given. `run_level33_constant_ustar`/`_variable_ustar` stay as the free-label lower level.
+- **REF (ONEFlux `NEE_CUT_REF`/`NEE_VUT_REF`):** `reference=True` adds the 40 percentiles 1.25..98.75 (whole percentiles keep `CUT_50`, others get four digits in hundredths, `CUT_0125`, `ustar_scenario_labels`; the label check compares whole `_label_` tokens, so `CUT_16` next to `CUT_1625` is fine), `run_level41_ustar_reference` selects after MDS (`ustar_reference.py`, bitwise to nee_proc, harness `diive-data/references/ustar_parity/ref/`). Quirks reproduced: masking by the QC of the 98.75 version, record counts 720/240 also for hourly data, YY of one year = MM. `run_chain`: `FluxConfig.ustar_threshold_type` ('cut'/'vut') and `ustar_reference`. MDS fills all 43 scenarios (the selection needs them), but RF/XGB and L4.2 default to `levels/_shared.py::select_scenarios`: the requested percentiles plus the REF scenario, so run `run_level41_ustar_reference` before them (L390). The REF equals ONEFlux's only on ONEFlux-filtered input: diive's u\* filter keeps the first record after a low-u\* period (L74), which moved the REF at some time resolutions in every parity case. Keep this stated in the FAQ and docstrings.
 
 ## Gap-filling
 
@@ -93,7 +95,7 @@ L2 → L3.1 → L3.2 → L3.3 → L4.1 → L4.2 (optional). `run_chain(data, Flu
 - `FLAG_*_ISFILLED` is informational only, not consumed by `FlagQCF`.
 - USTAR filtering applies only to CO2/CH4/N2O; for H/LE use `thresholds=[0], threshold_labels=['CUT_NONE']` and `run_level31(data, set_storage_to_zero=True)`.
 - **[DELIBERATE DEVIATION from ONEFlux — do not "fix"]** u\* filtering is `ustar >= threshold` only. ONEFlux also drops the first record above the threshold after a period below it; diive keeps it (L74). Missing u\* is rejected, as in ONEFlux.
-- Auto-generated threshold labels `CUT_0`, `CUT_1`, … are positional, not percentiles. `run_chain` only does CUT detection; VUT is composable-only.
+- Auto-generated threshold labels `CUT_0`, `CUT_1`, … (constant thresholds without labels) are positional, not percentiles.
 - Default `daytime_accept_qcf_below=1` is stricter than FLUXNET's `2`.
 
 ## Desktop GUI (`diive.gui`)

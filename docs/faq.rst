@@ -579,11 +579,22 @@ A: A friction velocity column. ``init_flux_data`` reads it under the name given
 
    To derive the thresholds from the data instead of supplying them, use
    ``run_level33_ustar_detection``, which also needs an air temperature and an
-   incoming shortwave radiation column.
+   incoming shortwave radiation column. It also takes known thresholds by
+   percentile, ``thresholds={16: 0.10, 50: 0.18, 84: 0.25}``, and then labels
+   the scenarios as for detected ones (``CUT_16``, ``CUT_50``, ``CUT_84``).
 
    By default, u* filtering removes day and night records below the threshold,
    as ONEFlux does. ``nighttime_only=True`` removes only nighttime records
    (SW_IN below 10 W m-2, or missing), as REddyProc does. It needs ``swin_col``.
+
+   .. important::
+
+      diive keeps the first record above the threshold after a period below it.
+      ONEFlux removes that record too, because CO2 stored under the canopy can
+      leave in one burst when turbulence returns. diive keeps it on purpose, to
+      lose less data. Its filtered and gap-filled NEE therefore differ from
+      ONEFlux's, and the REF selection can pick another percentile than ONEFlux
+      (see below). Records without u* are removed, as in ONEFlux.
 
 **Q: How do I detect the USTAR threshold from the data?**
 
@@ -632,6 +643,43 @@ A: ``dv.flux.UstarThresholdDetection`` bootstraps each calendar year and
    ``UstarVekuriThresholdDetection`` are deprecated and will be removed. Use
    ``UstarThresholdDetection`` instead.
 
+**Q: How do I get the REF threshold of ONEFlux (NEE_CUT_REF, NEE_VUT_REF)?**
+
+A: ONEFlux gap-fills NEE filtered at 40 u* percentiles (1.25 to 98.75) and
+   picks as REF the version most similar to all others, by model efficiency.
+   In the chain, ``reference=True`` adds the 40 scenarios, MDS gap-fills
+   them, and ``run_level41_ustar_reference`` selects the REF:
+
+   .. code-block:: python
+
+      data = run_level33_ustar_detection(
+          data, ta_col='TA_1_1_1', swin_col='SW_IN_1_1_1', reference=True)
+      data = run_level41_mds(data, swin='SW_IN_1_1_1', ta='TA_1_1_1',
+                             vpd='VPD_kPa', mode='oneflux')
+      data = run_level41_ustar_reference(data)
+      print(data.levels.ustar_reference.result.summary())
+
+   The REF series is added as ``..._CUT_REF_...`` (``VUT_REF`` with
+   ``mode='vut'``). ``data.levels.ustar_reference`` holds the percentile and
+   threshold it maps to and the REF of daily, weekly, monthly and yearly
+   values. With ``mode='oneflux'`` in MDS the selection is the one ONEFlux
+   makes. ``FluxConfig(ustar_reference=True)`` does the same in ``run_chain``.
+   ``dv.flux.select_ustar_reference`` runs the selection on any set of
+   gap-filled versions.
+
+   MDS has to fill all 43 scenarios, because the selection compares them.
+   Random Forest, XGBoost and NEE partitioning run afterwards only on the
+   requested percentiles (``CUT_16``, ``CUT_50``, ``CUT_84``) and the REF
+   scenario. ``scenarios=`` picks other ones.
+
+   .. important::
+
+      diive's REF equals ONEFlux's only for the same gap-filled versions.
+      diive keeps the first record above the threshold after a period below it,
+      ONEFlux removes it (see "What data do I need for USTAR filtering?"). In
+      the checks against ONEFlux this alone changed the REF at some time
+      resolutions in every case, even with ``mode='oneflux'`` in MDS.
+
 **Q: Why does diive give a different USTAR threshold than ONEFlux or REddyProc?**
 
 A: With the same input data it should not. The ONEFlux modes reproduce
@@ -647,9 +695,10 @@ A: With the same input data it should not. The ONEFlux modes reproduce
      random stream as ONEFlux, so the change point thresholds are identical.
      ONEFlux seeds the moving point draws with the clock, so those can never
      be repeated exactly.
-   - REF. ONEFlux reports a REF threshold besides the percentiles. ONEFlux
-     selects it afterwards from 40 gap-filled versions of NEE, and diive does
-     not compute it.
+   - REF. diive selects REF as ONEFlux does (``reference=True``), but its u*
+     filter keeps the first record above the threshold after a period below
+     it, and ONEFlux removes it. That changes the gap-filled versions and can
+     change the REF percentile.
 
 **Q: How do I get results out of the chain?**
 
