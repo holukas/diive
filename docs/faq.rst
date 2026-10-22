@@ -672,6 +672,32 @@ A: ONEFlux gap-fills NEE filtered at 40 u* percentiles (1.25 to 98.75) and
    requested percentiles (``CUT_16``, ``CUT_50``, ``CUT_84``) and the REF
    scenario. ``scenarios=`` picks other ones.
 
+   GPP and RECO get their own REF in ONEFlux (``GPP_NT_VUT_REF``,
+   ``RECO_DT_CUT_REF``, ...): ONEFlux partitions all 40 versions and selects
+   among them with the same model efficiency. After the NEE REF,
+   ``run_level42_ustar_reference`` does this for one partitioning variant:
+
+   .. code-block:: python
+
+      data = run_level42_ustar_reference(
+          data, method='nighttime', ta='TA_1_1_1', sw_in='SW_IN_1_1_1',
+          ta_f='TA_1_1_1')
+      rec = data.levels.partitioning_reference['nt_of']
+      print(rec.results['GPP'].summary())
+
+   It adds ``GPP_NT_OF_CUT_REF`` and ``RECO_NT_OF_CUT_REF``. The REF of
+   daily to yearly values and the USTAR50 version, mean, standard error and
+   percentiles across the versions (``GPP_NT_CUT_MEAN``, ``_SE``, ``_05`` to
+   ``_95`` in FLUXNET) are in ``rec.results['GPP'].tables``. The step
+   partitions the 40 versions itself, which takes about 40 times as long as
+   one partitioning. ``FluxConfig(partition_reference=True)`` does the same
+   in ``run_chain``, and ``dv.flux.select_partitioning_reference`` runs the
+   selection on any set of partitioned versions. The selection equals
+   ONEFlux's on the same versions, with one difference in the chain: ONEFlux
+   leaves out the long gaps of the NEE REF selection of the other threshold
+   type (CUT gaps for VUT and the other way round), the chain those of its
+   own type.
+
    .. important::
 
       diive's REF equals ONEFlux's only for the same gap-filled versions.

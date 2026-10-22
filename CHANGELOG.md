@@ -31,6 +31,11 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   `run_level41_ustar_reference` adds the REF series (`CUT_REF` or `VUT_REF`) after MDS. diive's u*
   filter keeps the first record after a period below the threshold and ONEFlux removes it, so the REF
   can differ from ONEFlux's at some time resolutions.
+- **REF of GPP and RECO:** `select_partitioning_reference` selects the REF of GPP and RECO as ONEFlux
+  does (`GPP_NT_VUT_REF`, ...) and gives the USTAR50 version, mean, standard error and percentiles
+  across the 40 versions. In the chain, `run_level42_ustar_reference` partitions the 40 versions and
+  adds the REF series (e.g. `GPP_NT_OF_CUT_REF`), also in `run_chain` with
+  `FluxConfig(partition_reference=True)`. This takes about 40 times as long as one partitioning.
 - **Given thresholds:** `run_level33_ustar_detection(thresholds={16: 0.18, 50: 0.22, 84: 0.27})`
   applies known thresholds without detection and labels them as detected ones (`CUT_16`, ...), also
   per year for VUT. `FluxConfig(ustar_thresholds=)` accepts the same form.
