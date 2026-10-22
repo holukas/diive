@@ -5,10 +5,11 @@ GUI.TABS.FLUXCHAIN: FLUX POST-PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3 
 A guided tab for the Swiss-FluxNet flux post-processing chain. It wires the **Input**
 (site + flux column), **Level 2** (quality-flag tests), **Level 3.1** (single-point
 storage correction), **Level 3.2** (an optional outlier-detection chain), and
-**Level 3.3** (optional USTAR filtering — constant thresholds or detection with
-ONEFlux / REddyProc, optionally nighttime only) using the composable library callables (`init_flux_data` + `run_level2`
-+ `run_level31` + `make_level32_detector` / `run_level32` +
-`run_level33_constant_ustar` / `run_level33_ustar_detection`), shows the
+**Level 3.3** (optional USTAR filtering — thresholds given by percentile or detected
+with ONEFlux / REddyProc, CUT or VUT, optionally nighttime only and with the 40
+ONEFlux REF scenarios) using the composable library callables (`init_flux_data` +
+`run_level2` + `run_level31` + `make_level32_detector` / `run_level32` +
+`run_level33_ustar_detection`), shows the
 deepest level's QCF-filtered flux as a heatmap plus the L3.2 QCF distribution /
 L3.3 scenarios, and — the point of the feature — emits the exact reproducible diive
 script via **Copy Python**. L3.3 requires at least one L3.2 outlier test, and applies
@@ -38,7 +39,13 @@ with an optional QC flag column, default none) and mode (diive / ONEFlux / REddy
 run fans out one gap-fill per USTAR scenario on the worker thread. The canvas
 then shows the method comparison (cumulative overlay or side-by-side heatmaps)
 via the library's `plot_cumulative_comparison(ax=...)` / `plot_gapfilled_heatmaps(fig=...)`,
-and **Copy Python** switches to `level41_to_code`.
+and **Copy Python** switches to `level41_to_code`. With REF on at L3.3, L4.1 runs
+MDS on all scenarios, then `run_level41_ustar_reference` (adds the CUT_REF /
+VUT_REF series), then rf / xgb. These leave out the 40 REF versions but include
+the scenario the REF maps to (the library's `select_scenarios`).
+
+Thresholds with free labels from projects saved before the percentile form
+(e.g. ``CUT_NONE``) still run through `run_level33_constant_ustar`.
 
 The chain stays on the **composable per-level** path (not `run_chain`/`FluxConfig`)
 so L3.2 can be a real inspected `StepwiseOutlierDetection` chain with a separate QCF
@@ -49,6 +56,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import re
 import threading
 
 from PySide6.QtCore import QObject, Qt, Signal
@@ -85,7 +93,8 @@ from diive.flux.postprocessingchain import (
     level31_to_code, level32_to_code, level33_to_code, level41_to_code,
     make_level32_detector, make_level41_engineer, run_level2, run_level31,
     run_level32, run_level33_constant_ustar, run_level33_ustar_detection,
-    run_level41_mds, run_level41_rf, run_level41_xgb,
+    run_level41_mds, run_level41_rf, run_level41_ustar_reference, run_level41_xgb,
+    ustar_scenario_labels,
 )
 from diive.flux.lowres.common import detect_fluxbasevar
 from diive.gui import site, theme
@@ -145,6 +154,34 @@ _L2_TESTS = [
     ("angle_of_attack", "Angle of attack", False),
     ("steadiness_of_horizontal_wind", "Steadiness of horiz. wind", False),
 ]
+
+
+#: Tooltip of the L3.3 REF option.
+_REF_TIP = (
+    "Prepare the REF u* threshold as ONEFlux selects it. Adds the 40 ONEFlux "
+    "percentiles (1.25 to 98.75) as extra u* scenarios. Level 4.1 gap-fills all "
+    "scenarios with MDS and then selects the REF (CUT_REF or VUT_REF) by model "
+    "efficiency.\n\n"
+    "With given thresholds, the list must also hold the 40 percentiles "
+    "1.25, 3.75, ..., 98.75.\n"
+    "For the REF ONEFlux would select, run MDS with mode ONEFlux.\n"
+    "The u* filter of diive keeps the first record after a low-u* period and "
+    "ONEFlux removes it. The REF can therefore differ from ONEFlux's at some "
+    "time resolutions.\n\n"
+    "Random Forest and XGBoost run after the REF selection, on the main scenarios "
+    "and the scenario the REF maps to, not on the other REF versions.")
+
+
+def _label_percentile(label: str) -> float | None:
+    """Percentile of a scenario label written as ``ustar_scenario_labels`` writes
+    it (``CUT_16`` -> 16, ``CUT_0125`` -> 1.25), else None (free labels such
+    as ``CUT_NONE`` or the auto labels ``CUT_0``, ``CUT_1``)."""
+    m = re.fullmatch(r"CUT_(\d{2,4})", str(label))
+    if m is None:
+        return None
+    digits = m.group(1)
+    p = int(digits) / 100 if len(digits) == 4 else float(int(digits))
+    return p if ustar_scenario_labels("CUT", [p]) == [label] else None
 
 
 class _ChainSignals(QObject):
@@ -331,15 +368,16 @@ class FluxChainTab(DiiveTab):
         n32 = len(self._steps)
         if self.l33_enable.isChecked():
             l33kw = self._level33_kwargs()
+            ref = " + REF" if l33kw and l33kw.get("reference") else ""
             if l33kw is None:
                 l33 = ("configure", "warn")
-            elif l33kw.get("_detection"):
+            elif l33kw.get("_detection") and "thresholds" not in l33kw:
                 n = len(l33kw["percentiles"])
                 tag = {"cut": "CUT", "vut": "VUT"}[l33kw.get("mode", "cut")]
-                l33 = (f"detect {tag} · {n}", "set")
+                l33 = (f"detect {tag} · {n}{ref}", "set")
             else:
                 n = len(self._ustar)
-                l33 = (f"{n} scenario" + ("s" if n != 1 else ""), "set")
+                l33 = (f"{n} scenario" + ("s" if n != 1 else "") + ref, "set")
         else:
             l33 = ("off", "off")
         methods = self._level41_methods()
@@ -753,17 +791,19 @@ class FluxChainTab(DiiveTab):
             "outlier test. Only for CO2/CH4/N2O — for H/LE use a constant threshold 0.")
         self.l33_enable.toggled.connect(self._update_run_label)
         self.l33_enable.toggled.connect(self._sync_l33_mode)
+        self.l33_enable.toggled.connect(self._sync_l41_ref)
         v.addWidget(self.l33_enable)
         # Which USTAR column it filters on (set on the Input page) + applicability.
         self.l33_info = self._info_marker()
         v.addWidget(self.l33_info)
 
-        # Mode: constant pre-known thresholds, or detection from the data.
+        # Mode: known thresholds by percentile, or detection from the data.
         modeform = QFormLayout()
         self.l33_mode = QComboBox()
-        self.l33_mode.addItems(["Constant thresholds", "Detect from the data"])
+        self.l33_mode.addItems(["Given thresholds", "Detect from the data"])
         self.l33_mode.setToolTip(
-            "Constant: apply known threshold(s).\n"
+            "Given: apply known thresholds, one per percentile. The scenarios get "
+            "the labels of detected thresholds (CUT_16, CUT_50, CUT_84).\n"
             "Detect: estimate the threshold from the data with a bootstrap over the "
             "years (ONEFlux or REddyProc), then apply the percentiles as scenarios.")
         self.l33_mode.currentIndexChanged.connect(self._sync_l33_mode)
@@ -783,6 +823,19 @@ class FluxChainTab(DiiveTab):
         self.l33_swin.setToolTip("Incoming shortwave radiation (W m-2). Defines the "
                                  "night for the detection and for night-only filtering.")
         modeform.addRow("Shortwave in (SW_IN)", self.l33_swin)
+        # REF: the 40 ONEFlux percentiles as extra scenarios (both modes).
+        self.l33_ref = QCheckBox("Add REF (ONEFlux)")
+        self.l33_ref.setToolTip(_REF_TIP)
+        self.l33_ref.toggled.connect(self._sync_l33_mode)
+        self.l33_ref.toggled.connect(self._sync_l41_ref)
+        self.l33_ref.toggled.connect(self._update_run_label)
+        modeform.addRow(self.l33_ref)
+        self.l33_ref_note = self._info_marker()
+        self.l33_ref_note.setText(
+            "Adds 40 u* scenarios (percentiles 1.25 to 98.75). Level 4.1 gap-fills "
+            "them with MDS and selects CUT_REF / VUT_REF. Random Forest and XGBoost "
+            "run on the main scenarios and the REF scenario only.")
+        modeform.addRow(self.l33_ref_note)
         self._l33_modeform = modeform
         v.addLayout(modeform)
 
@@ -793,27 +846,40 @@ class FluxChainTab(DiiveTab):
         return box
 
     def _level33_constant_box(self) -> QGroupBox:
-        gb = QGroupBox("Constant thresholds")
+        gb = QGroupBox("Given thresholds")
         v = QVBoxLayout(gb)
-        note = QLabel("One scenario per threshold (m s⁻¹). Label is optional "
-                      "(auto CUT_0, CUT_1, …); use e.g. CUT_50 for a percentile.")
+        note = QLabel("One scenario per percentile, threshold in m s⁻¹. The labels "
+                      "are those of detected thresholds (CUT_16, CUT_50, CUT_84). "
+                      "Adding a percentile again replaces its value.")
         note.setWordWrap(True)
         v.addWidget(note)
         row = QHBoxLayout()
+        row.addWidget(QLabel("Percentile"))
+        self.l33_pct = self._dspin(50.0, 0.0, 100.0, 2)
+        self.l33_pct.setToolTip("Percentile of the threshold (0 to 100, two decimals).")
+        row.addWidget(self.l33_pct)
+        row.addWidget(QLabel("Threshold"))
         self.l33_value = self._dspin(0.10, 0.0, 5.0, 3)
+        self.l33_value.setToolTip("u* threshold (m s-1).")
         row.addWidget(self.l33_value)
-        self.l33_label = QLineEdit()
-        self.l33_label.setPlaceholderText("label (optional)")
-        row.addWidget(self.l33_label)
         add_btn = QPushButton("Add")
         add_btn.clicked.connect(self._add_ustar)
         row.addWidget(add_btn)
         v.addLayout(row)
-        # Thresholds as (value, label) — label "" means auto.
+        # Thresholds as (value, label). The label is the percentile label
+        # (CUT_50). Projects saved before the percentile form can hold free
+        # labels (CUT_NONE, or "" for auto): those run as constant thresholds.
         self._ustar: list[tuple[float, str]] = []
         self.l33_list = QListWidget()
         self.l33_list.setMaximumHeight(90)
         v.addWidget(self.l33_list)
+        self.l33_legacy_note = self._info_marker()
+        self.l33_legacy_note.setText(
+            "Thresholds with their own labels (from an older project) run as "
+            "constant thresholds with these labels, without REF. Remove them to "
+            "use thresholds by percentile.")
+        self.l33_legacy_note.setVisible(False)
+        v.addWidget(self.l33_legacy_note)
         rm = QPushButton("Remove threshold")
         rm.clicked.connect(self._remove_ustar)
         v.addWidget(rm)
@@ -834,7 +900,7 @@ class FluxChainTab(DiiveTab):
         form.addRow("Method", self.l33_method)
         # Which detected threshold(s) to apply.
         self.l33_apply = QComboBox()
-        self.l33_apply.addItems(["CUT (constant)", "VUT (per-year)"])
+        self.l33_apply.addItems(["CUT (one for all years)", "VUT (one per year)"])
         self.l33_apply.setToolTip(
             "CUT: one constant threshold per percentile, applied to the whole record "
             "(CUT_16/50/84).\n"
@@ -842,7 +908,7 @@ class FluxChainTab(DiiveTab):
             "value (VUT_16/50/84).\n\n" + VUT_CUT_TIP + "\n\n"
             "CUT and VUT are alternatives. Pick one filtering strategy.")
         self.l33_apply.currentIndexChanged.connect(self._update_run_label)
-        form.addRow("Apply", self.l33_apply)
+        form.addRow("Thresholds", self.l33_apply)
         # Met driver the detector stratifies on (SW_IN is picked above).
         self.l33_ta = QComboBox()
         form.addRow("Air temperature (TA)", self.l33_ta)
@@ -861,7 +927,8 @@ class FluxChainTab(DiiveTab):
         self.l33_njobs.setToolTip("Parallel workers (1 = sequential, -1 = all CPUs).")
         form.addRow("Parallel workers", self.l33_njobs)
         self.l33_percentiles = QLineEdit("16, 50, 84")
-        self.l33_percentiles.setToolTip("Comma-separated percentiles → one CUT scenario each.")
+        self.l33_percentiles.setToolTip("Comma-separated percentiles → one scenario "
+                                        "each (CUT_<p> or VUT_<p>).")
         form.addRow("Percentiles", self.l33_percentiles)
         self.l33_ta_classes = QSpinBox()
         self.l33_ta_classes.setRange(2, 30)
@@ -896,6 +963,8 @@ class FluxChainTab(DiiveTab):
         # SW_IN is needed by the detection and by night-only filtering.
         self._l33_modeform.setRowVisible(
             self.l33_swin, on and (detect or self.l33_night.isChecked()))
+        self._l33_modeform.setRowVisible(self.l33_ref, on)
+        self._l33_modeform.setRowVisible(self.l33_ref_note, on and self.l33_ref.isChecked())
         # The stratification feeds the moving point method only.
         mp = self.l33_method.currentData() in USTAR_MP_MODES
         for w in (self.l33_ta_classes, self.l33_ustar_classes, self.l33_fw):
@@ -903,31 +972,79 @@ class FluxChainTab(DiiveTab):
 
     def _add_ustar(self) -> None:
         value = self.l33_value.value()
-        label = self.l33_label.text().strip()
-        self._ustar.append((value, label))
-        self.l33_list.addItem(f"{value:g}" + (f"  ({label})" if label else ""))
-        self.l33_label.clear()
+        label = ustar_scenario_labels("CUT", [self.l33_pct.value()])[0]
+        for i, (_, lab) in enumerate(self._ustar):
+            if lab == label:  # one threshold per percentile: replace
+                self._ustar[i] = (value, label)
+                break
+        else:
+            self._ustar.append((value, label))
+        self._refill_ustar_list()
         self._update_run_label()
 
     def _remove_ustar(self) -> None:
         row = self.l33_list.currentRow()
         if row < 0:
             return
-        self.l33_list.takeItem(row)
         del self._ustar[row]
+        self._refill_ustar_list()
         self._update_run_label()
+
+    def _refill_ustar_list(self) -> None:
+        """Show the given thresholds; free labels from older projects as such."""
+        self.l33_list.clear()
+        legacy = False
+        for value, label in self._ustar:
+            if _label_percentile(label) is not None:
+                self.l33_list.addItem(f"{label}:  {value:g} m s⁻¹")
+            else:
+                legacy = True
+                self.l33_list.addItem(f"{value:g}  ({label or 'auto label'})")
+        self.l33_legacy_note.setVisible(legacy)
+
+    def _ustar_by_percentile(self) -> dict | None:
+        """``{percentile: threshold}`` of the given thresholds, or None when one
+        of them carries a free label (projects saved before the percentile form)."""
+        out: dict = {}
+        for value, label in self._ustar:
+            p = _label_percentile(label)
+            if p is None:
+                return None
+            out[int(p) if p.is_integer() else p] = value
+        return out
+
+    def _ref_on(self) -> bool:
+        """True when L3.3 is on with 'Add REF (ONEFlux)'."""
+        return self.l33_enable.isChecked() and self.l33_ref.isChecked()
+
+    def _l33_problem(self) -> str:
+        """Why `_level33_kwargs` returns None (for the status line)."""
+        if not self.l33_enable.isChecked():
+            return "Enable Level 3.3 and add at least one USTAR threshold."
+        if self.l33_mode.currentIndex() == 1:
+            return ("Pick TA and SW_IN columns and at least one percentile "
+                    "for the threshold detection.")
+        if not self._ustar:
+            return "Add at least one USTAR threshold."
+        if self.l33_ref.isChecked() and self._ustar_by_percentile() is None:
+            return ("REF needs thresholds by percentile. Remove the thresholds "
+                    "with their own labels (from an older project).")
+        return "Pick an SW_IN column for nighttime-only filtering."
 
     def _level33_kwargs(self) -> dict | None:
         """L3.3 kwargs, or None when L3.3 is off / incompletely configured.
 
-        Constant mode -> ``run_level33_constant_ustar`` kwargs.
-        Detect mode   -> ``run_level33_ustar_detection`` kwargs, tagged with a
-        ``_detection`` marker the worker + codegen branch on.
+        Detect mode and given thresholds by percentile ->
+        ``run_level33_ustar_detection`` kwargs (``thresholds={p: value}`` for
+        given ones), tagged with a ``_detection`` marker the worker + codegen
+        branch on. Thresholds with free labels from older projects ->
+        ``run_level33_constant_ustar`` kwargs, as before.
         """
         if not self.l33_enable.isChecked():
             return None
         night = self.l33_night.isChecked()
         swin = self.l33_swin.currentText().strip()
+        ref = self.l33_ref.isChecked()
         if self.l33_mode.currentIndex() == 1:  # detect
             ta = self.l33_ta.currentText().strip()
             pcts = self._l33_percentiles()
@@ -945,6 +1062,8 @@ class FluxChainTab(DiiveTab):
                 "percentiles": pcts,
                 "mode": mode,
             }
+            if ref:
+                kwargs["reference"] = True
             if night:
                 kwargs["nighttime_only"] = True
             # Moving point knobs only when that method runs and they differ from
@@ -960,9 +1079,21 @@ class FluxChainTab(DiiveTab):
             if mp:
                 kwargs["detection_kwargs"] = {"mp_kwargs": mp}
             return kwargs
-        # constant
+        # given
         if not self._ustar or (night and not swin):
             return None
+        by_pct = self._ustar_by_percentile()
+        if by_pct is not None:
+            kwargs = {"_detection": True, "thresholds": by_pct}
+            if ref:
+                kwargs["reference"] = True
+            if night:
+                kwargs["nighttime_only"] = True
+                kwargs["swin_col"] = swin
+            return kwargs
+        if ref:
+            return None  # REF needs thresholds by percentile
+        # Free labels from an older project: constant thresholds, as before.
         thresholds = [v for v, _ in self._ustar]
         labels = [lab for _, lab in self._ustar]
         kwargs = {"thresholds": thresholds}
@@ -1007,6 +1138,10 @@ class FluxChainTab(DiiveTab):
             cb.toggled.connect(self._update_run_label)
             cb.toggled.connect(self._sync_l41_visibility)
             v.addWidget(cb)
+        self.l41_mds.toggled.connect(self._sync_l41_ref)
+        # REF (set at L3.3): MDS only, then the REF selection.
+        self.l41_ref_note = self._info_marker()
+        v.addWidget(self.l41_ref_note)
 
         v.addWidget(self._l41_shared_box())
         v.addWidget(self._l41_rf_box_w())
@@ -1021,7 +1156,27 @@ class FluxChainTab(DiiveTab):
         v.addLayout(form2)
         v.addLayout(self._level_button_row(5, "Run Level 4.1"))
         self._sync_l41_visibility()
+        self._sync_l41_ref()
         return box
+
+    def _sync_l41_ref(self, *_) -> None:
+        """With REF on, say what L4.1 runs and that the REF needs MDS."""
+        if not hasattr(self, "l41_ref_note"):
+            return  # the L3.3 controls fire before the L4.1 page exists
+        ref = self._ref_on()
+        if ref and self.l41_mds.isChecked():
+            self._set_marker(
+                self.l41_ref_note, True,
+                "REF (ONEFlux) is on in Level 3.3: MDS gap-fills every u* scenario, "
+                "then the REF is selected and added as CUT_REF / VUT_REF. Use MDS "
+                "mode ONEFlux for the REF ONEFlux would select. Random Forest and "
+                "XGBoost run after it, on the main scenarios and the REF scenario "
+                "only (not on the other 39 REF versions).")
+        elif ref:
+            self._set_marker(self.l41_ref_note, False,
+                             "REF (ONEFlux) is on in Level 3.3 and needs MDS: tick "
+                             "Marginal Distribution Sampling.")
+        self.l41_ref_note.setVisible(ref)
 
     def _l41_shared_box(self) -> QGroupBox:
         """RF/XGB predictors + shared settings (one feature set drives both)."""
@@ -1103,6 +1258,10 @@ class FluxChainTab(DiiveTab):
         self.mds_vpd_tol = self._dspin(0.5, 0.05, 10.0, 2)
         form.addRow("VPD tolerance (kPa)", self.mds_vpd_tol)
         self.mds_mode = make_mode_combo()
+        self.mds_mode.setToolTip(
+            (self.mds_mode.toolTip() + "\n\n" if self.mds_mode.toolTip() else "")
+            + "With REF (ONEFlux) on in Level 3.3, mode ONEFlux gives the REF "
+              "ONEFlux would select.")
         form.addRow("Mode", self.mds_mode)
         gv.addLayout(form)
         self.mds_mark = self._info_marker()
@@ -1192,6 +1351,8 @@ class FluxChainTab(DiiveTab):
                 if col is not None:
                     mds[f"{key}_qc"] = col
             cfg["mds"] = mds
+            if self._ref_on():
+                cfg["ustar_reference"] = True  # run_level41_ustar_reference after MDS
         return cfg
 
     def _update_run_label(self, *_) -> None:
@@ -1257,7 +1418,8 @@ class FluxChainTab(DiiveTab):
                 "l31_gapfill": self.l31_gapfill, "l31_zero": self.l31_zero,
                 "strgcol": self.strgcol,
                 "l33_mode": self.l33_mode, "l33_apply": self.l33_apply,
-                "l33_night": self.l33_night, "l33_ta": self.l33_ta,
+                "l33_night": self.l33_night, "l33_ref": self.l33_ref,
+                "l33_ta": self.l33_ta,
                 "l33_swin": self.l33_swin, "l33_niter": self.l33_niter,
                 "l33_njobs": self.l33_njobs, "l33_percentiles": self.l33_percentiles,
                 "l33_ta_classes": self.l33_ta_classes,
@@ -1304,6 +1466,13 @@ class FluxChainTab(DiiveTab):
                          saved.get("l33_method", "oneflux_mp" if saved else None))
         if str(saved.get("l33_mode", "")).startswith("Detect"):
             self.l33_mode.setCurrentIndex(1)  # older label "Detect (moving point, ...)"
+        elif str(saved.get("l33_mode", "")).startswith("Constant"):
+            self.l33_mode.setCurrentIndex(0)  # older label of "Given thresholds"
+        # Older labels "CUT (constant)" / "VUT (per-year)".
+        if str(saved.get("l33_apply", "")).startswith("VUT"):
+            self.l33_apply.setCurrentIndex(1)
+        elif str(saved.get("l33_apply", "")).startswith("CUT"):
+            self.l33_apply.setCurrentIndex(0)
         for k, val in (state.get("l2") or {}).items():
             if k in self.l2_checks:
                 self.l2_checks[k].setChecked(bool(val))
@@ -1320,17 +1489,17 @@ class FluxChainTab(DiiveTab):
         self.l32_steps_list.clear()
         for step in self._steps:
             self.l32_steps_list.addItem(self._step_summary(step))
-        # Rebuild the L3.3 USTAR thresholds.
+        # Rebuild the L3.3 USTAR thresholds. Same [value, label] pairs as before
+        # the percentile form, so older projects restore unchanged.
         self.l33_enable.setChecked(bool(state.get("l33_enabled")))
-        self._ustar = [tuple(u) for u in (state.get("l33_ustar") or [])]
-        self.l33_list.clear()
-        for value, label in self._ustar:
-            self.l33_list.addItem(f"{value:g}" + (f"  ({label})" if label else ""))
+        self._ustar = [(float(v), str(lab)) for v, lab in (state.get("l33_ustar") or [])]
+        self._refill_ustar_list()
         # Re-check the saved L4.1 features (the picker was filled by on_data_loaded).
         self.l41_features.set_selected(state.get("l41_features") or [])
         self._refresh_l2_availability()
         self._refresh_levels_info()
         self._sync_l33_mode()
+        self._sync_l41_ref()
         self._update_run_label()
 
     # --- data ---
@@ -1550,19 +1719,29 @@ class FluxChainTab(DiiveTab):
 
     @staticmethod
     def _run_level41(data, cfg: dict):
-        """Run the selected L4.1 gap-filling methods (additive across methods)."""
+        """Run the selected L4.1 gap-filling methods (additive across methods).
+
+        With REF: MDS -> REF -> rf -> xgb. rf / xgb leave out the 40 REF
+        versions but take the scenario the REF maps to, once it is selected."""
         methods = cfg["methods"]
-        if "rf" in methods or "xgb" in methods:
-            # One engineer, reused across rf/xgb (feature engineering runs once).
-            features = cfg["features"]
-            engineer = make_level41_engineer(data, features=features)
-            reduce = cfg.get("reduce_features", False)
-            if "rf" in methods:
-                data = run_level41_rf(data, features=features, engineer=engineer,
-                                      reduce_features=reduce, **cfg.get("rf_kwargs", {}))
-            if "xgb" in methods:
-                data = run_level41_xgb(data, features=features, engineer=engineer,
-                                       reduce_features=reduce, **cfg.get("xgb_kwargs", {}))
+
+        def ml(data):
+            if "rf" in methods or "xgb" in methods:
+                # One engineer, reused across rf/xgb (feature engineering runs once).
+                features = cfg["features"]
+                engineer = make_level41_engineer(data, features=features)
+                reduce = cfg.get("reduce_features", False)
+                if "rf" in methods:
+                    data = run_level41_rf(data, features=features, engineer=engineer,
+                                          reduce_features=reduce, **cfg.get("rf_kwargs", {}))
+                if "xgb" in methods:
+                    data = run_level41_xgb(data, features=features, engineer=engineer,
+                                           reduce_features=reduce, **cfg.get("xgb_kwargs", {}))
+            return data
+
+        with_ref = "mds" in methods and cfg.get("ustar_reference")
+        if not with_ref:
+            data = ml(data)
         if "mds" in methods:
             mds = cfg["mds"]
             extra = {k: mds[k] for k in ("ta_tol", "vpd_tol", "mode",
@@ -1570,6 +1749,9 @@ class FluxChainTab(DiiveTab):
                      if k in mds}
             data = run_level41_mds(data, swin=mds["swin"], ta=mds["ta"], vpd=mds["vpd"],
                                    **extra)
+        if with_ref:
+            data = run_level41_ustar_reference(data, verbose=False)
+            data = ml(data)
         return data
 
     def _run(self) -> None:
@@ -1585,15 +1767,19 @@ class FluxChainTab(DiiveTab):
         if l41 and not l33:
             # L4.1 gap-fills the L3.3 (per-scenario USTAR) flux (library raises
             # without it). Surface the requirement up front.
-            self.summary.setPlainText(
-                "Level 4.1 (gap-filling) requires Level 3.3 (USTAR). Enable Level "
-                "3.3 with a threshold, or disable the Level 4.1 methods.")
+            msg = ("Level 4.1 (gap-filling) requires Level 3.3 (USTAR). Enable Level "
+                   "3.3 with a threshold, or disable the Level 4.1 methods.")
+            if self.l33_enable.isChecked():
+                msg += "\n" + self._l33_problem()
+            self.summary.setPlainText(msg)
             return
         if l33 and not steps:
             # USTAR filtering must operate on outlier-screened data (library raises).
             self.summary.setPlainText(
                 "Level 3.3 (USTAR) requires at least one Level 3.2 outlier test. "
                 "Add a step or disable Level 3.3.")
+            return
+        if l41 and self._ref_needs_mds(l41):
             return
         if l41 and ("rf" in l41["methods"] or "xgb" in l41["methods"]) \
                 and not l41.get("features"):
@@ -1666,20 +1852,19 @@ class FluxChainTab(DiiveTab):
         if idx == 4:
             l33 = self._level33_kwargs()
             if not l33:
-                if self.l33_enable.isChecked() and self.l33_mode.currentIndex() == 1:
-                    msg = ("Pick TA and SW_IN columns and at least one percentile "
-                           "for the threshold detection.")
-                elif self.l33_enable.isChecked() and self._ustar:
-                    msg = "Pick an SW_IN column for nighttime-only filtering."
-                else:
-                    msg = "Enable Level 3.3 and add at least one USTAR threshold."
-                self.summary.setPlainText(msg)
+                self.summary.setPlainText(self._l33_problem())
                 return None
             return {"idx": 4, "kind": "level33", "kwargs": l33}
         # idx == 5
         l41 = self._level41_cfg()
-        if not l41:
-            self.summary.setPlainText("Select a Level 4.1 method (rf / xgb / mds).")
+        if not l41 or self._ref_needs_mds(l41):
+            return None
+        scen = getattr(self._data.levels, "ustar_scenarios", None) \
+            if self._data is not None else None
+        if l41.get("ustar_reference") and (scen is None or not scen.reference_labels):
+            self.summary.setPlainText(
+                "The REF needs the 40 REF scenarios of Level 3.3. Run Level 3.3 "
+                "again with 'Add REF (ONEFlux)' on.")
             return None
         if ("rf" in l41["methods"] or "xgb" in l41["methods"]) and not l41.get("features"):
             self.summary.setPlainText(
@@ -1687,6 +1872,19 @@ class FluxChainTab(DiiveTab):
                 "predictor columns in the Level 4.1 feature list.")
             return None
         return {"idx": 5, "kind": "level41", "cfg": l41}
+
+    def _ref_needs_mds(self, l41: dict | None) -> bool:
+        """Refuse an L4.1 run without a method, or with REF on but no MDS (the
+        REF is selected among the MDS gap-filled versions), and say why."""
+        if not l41:
+            self.summary.setPlainText("Select a Level 4.1 method (rf / xgb / mds).")
+            return True
+        if self._ref_on() and "mds" not in l41["methods"]:
+            self.summary.setPlainText(
+                "REF (ONEFlux) is on in Level 3.3 and needs MDS: tick Marginal "
+                "Distribution Sampling (mds).")
+            return True
+        return False
 
     def _level_worker(self, plan: dict, base, df) -> None:
         try:
@@ -1761,6 +1959,16 @@ class FluxChainTab(DiiveTab):
     def _update_report(self, idx: int, data) -> None:
         """Fill the QCF report panel with the screening report for this level."""
         qcf = self._level_qcf(idx, data)
+        ref = getattr(data.levels, "ustar_reference", None) if idx >= 5 else None
+        if ref is not None:
+            # L4.1 with REF: the selection per time resolution instead of a QCF.
+            text = (self._ref_text(ref) + "\n" + ref.result.summary() + "\n\n"
+                    "The u* filter of diive keeps the first record after a low-u* "
+                    "period and ONEFlux removes it. The REF can therefore differ "
+                    "from ONEFlux's at some time resolutions.")
+            self.report.setPlainText(text)
+            self.report_copy.setEnabled(True)
+            return
         if qcf is None:
             self.report.setPlainText("")
             self.report_copy.setEnabled(False)
@@ -1787,26 +1995,14 @@ class FluxChainTab(DiiveTab):
             label = "Input"
         elif idx == 4:
             scen = data.levels.filteredseries_level33_qcf
-            first = next(iter(scen))
+            main, n_ref = self._main_scenarios(data, scen)
+            first = main[0]
             series = scen[first]
             label = "L3.3"
-            note = f"\nUSTAR scenarios: {', '.join(scen)} (preview: {first})."
-            # In detection mode, report the bootstrap-detected CUT thresholds
-            # and the years and methods that gave no thresholds.
-            boot = getattr(data.levels, "ustar_detection", None)
-            if boot is not None:
-                try:
-                    cut = boot.get_cut_threshold()
-                    method = USTAR_METHOD_SHORT.get(getattr(boot, "mode", ""), "")
-                    note += f"\nDetected CUT ({method}): " + "  ".join(
-                        f"{k}={v:.3f}" for k, v in cut.items())
-                    fails = [f"{y} {m.upper()}: {why}"
-                             for y, d in sorted((boot.failures_ or {}).items())
-                             for m, why in d.items()]
-                    if fails:
-                        note += "\nNo thresholds for: " + ". ".join(fails) + "."
-                except Exception:
-                    pass
+            note = (f"\nUSTAR scenarios: {', '.join(main)}"
+                    + (f" + {n_ref} REF versions" if n_ref else "")
+                    + f" (preview: {first}).")
+            note += self._l33_threshold_note(data, main)
         else:
             series = data.filteredseries
             label = {1: "L2", 2: "L3.1", 3: "L3.2"}.get(idx, f"L{idx}")
@@ -1835,16 +2031,76 @@ class FluxChainTab(DiiveTab):
                     wrap=True, transform=ax.transAxes)
         self.canvas.draw()
 
+    @staticmethod
+    def _main_scenarios(data, scenarios) -> tuple[list[str], int]:
+        """The scenarios without the 40 REF versions, and the number of REF
+        versions (all scenarios when every one is a REF version)."""
+        rec = getattr(data.levels, "ustar_scenarios", None)
+        ref = set(rec.reference_labels) if rec is not None else set()
+        main = [s for s in scenarios if s not in ref]
+        return (main or list(scenarios)), len(ref)
+
+    @staticmethod
+    def _l33_threshold_note(data, labels: list[str]) -> str:
+        """Thresholds of the shown scenarios (detected or given), and the years
+        and methods of a detection that gave no thresholds."""
+        rec = getattr(data.levels, "ustar_scenarios", None)
+        boot = getattr(data.levels, "ustar_detection", None)
+        note = ""
+        try:
+            if rec is not None:
+                parts = []
+                for lab in labels:
+                    v = rec.thresholds[lab]
+                    if isinstance(v, dict):  # VUT: {year: threshold}
+                        vals = [x for x in v.values() if x == x]
+                        if vals:
+                            parts.append(f"{lab}={min(vals):.3f}-{max(vals):.3f}")
+                    else:
+                        parts.append(f"{lab}={v:.3f}")
+                src = "Detected" if rec.source == "detected" else "Given"
+                method = (f" ({USTAR_METHOD_SHORT.get(getattr(boot, 'mode', ''), '')})"
+                          if boot is not None else "")
+                note += (f"\n{src} {rec.threshold_type.upper()}{method}: "
+                         + "  ".join(parts))
+            if boot is not None:
+                fails = [f"{y} {m.upper()}: {why}"
+                         for y, d in sorted((boot.failures_ or {}).items())
+                         for m, why in d.items()]
+                if fails:
+                    note += "\nNo thresholds for: " + ". ".join(fails) + "."
+        except Exception:
+            pass
+        return note
+
+    @staticmethod
+    def _ref_text(ref) -> str:
+        """REF result as text: scenario, percentile, threshold, REF per time
+        resolution."""
+        thr = ref.threshold
+        if isinstance(thr, dict):  # VUT: {year: threshold}
+            thr_txt = ", ".join(f"{y}: {v:.3f}" for y, v in thr.items()) + " m s-1"
+        else:
+            thr_txt = f"{thr:.3f} m s-1"
+        per = "  ".join(f"{agg} {lab or 'none'}" for agg, lab in ref.scenarios.items())
+        return (f"{ref.label} = {ref.scenario} (percentile {ref.percentile:g}, "
+                f"threshold {thr_txt}).\nREF per time resolution: {per}.\n")
+
     def _show_level41(self, data) -> None:
         """Render the L4.1 method comparison (cumulative or heatmaps) into the canvas."""
         cols = data.gapfilled_cols()
         scenarios = sorted({s for mc in cols.values() for s in mc})
+        main, n_ref = self._main_scenarios(data, scenarios)
         methods = ", ".join(sorted(cols))
-        first = scenarios[0]
+        ref = getattr(data.levels, "ustar_reference", None)
+        first = ref.scenario if ref is not None else main[0]
         self.summary.setPlainText(
             f"Level 4.1 done — gap-filling methods: {methods}.\n"
-            f"USTAR scenarios: {', '.join(scenarios)} (preview: {first}).\n"
-            f"Use 'Copy Python' for the reproducible script.")
+            f"USTAR scenarios: {', '.join(main)}"
+            + (f" + {n_ref} REF versions" if n_ref else "")
+            + f" (preview: {first}).\n"
+            + (self._ref_text(ref) if ref is not None else "")
+            + "Use 'Copy Python' for the reproducible script.")
         heatmaps = self.l41_view.currentText().startswith("Gap-filled")
         try:
             if heatmaps:
@@ -1924,7 +2180,7 @@ class FluxChainTab(DiiveTab):
     # --- pushing a level's results back into the dataset ---
     #: Stage index -> the idstr(s) keying that level's columns in added_columns.
     _LEVEL_IDSTRS = {1: ("L2",), 2: ("L3.1",), 3: ("L3.2",), 4: ("L3.3",),
-                     5: ("L4.1_mds", "L4.1_rf", "L4.1_xgb")}
+                     5: ("L4.1_mds", "L4.1_rf", "L4.1_xgb", "L4.1_ref")}
 
     def _level_output_columns(self, idx: int, data) -> list[str]:
         """The fpc_df columns a level appended (flags / QCF / gap-filled)."""

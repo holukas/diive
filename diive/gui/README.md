@@ -66,7 +66,7 @@ To ship the GUI as a **standalone Windows app** (no Python/uv for end users), se
 | `icons.py` | `menu_icon(label)` — tiny `QPainter`-drawn glyphs for **all** menu entries (folder/disk/calendar/gear/palette/… + plot shapes), keyword-matched |
 | `widgets/plot_settings.py` | `PlotSettingsPanel(plot_type)` — plot-parameter controls (between list and canvas); `changed` enables the tab's **Update plot** button; defines `HEATMAP`/`TIMESERIES` |
 | `tabs/features.py` | Feature engineering tab (FeatureEngineer; created features get a "NEW" pill) |
-| `tabs/fluxchain.py` | Flux post-processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`); L3.3 supports constant thresholds **or** detection (`detection_mode`: ONEFlux MP + CP / MP / CP / REddyProc; Apply: CUT / VUT), both optionally night-only (`nighttime_only` + `swin_col`); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
+| `tabs/fluxchain.py` | Flux post-processing chain tab — Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 via the composable callables (`init_flux_data`/`run_level2`/`run_level31`/`make_level32_detector`+`run_level32`/`run_level33_constant_ustar`/`run_level33_ustar_detection`/`run_level41_*`/`run_level41_ustar_reference`); L3.3 supports thresholds given by percentile **or** detection (`detection_mode`: ONEFlux MP + CP / MP / CP / REddyProc; Thresholds: CUT / VUT), both optionally night-only (`nighttime_only` + `swin_col`) and with the ONEFlux REF (`reference=True`, L4.1 then MDS only + `run_level41_ustar_reference`); shows the deepest level's QCF-filtered flux as a heatmap, **Copy Python** emits a reproducible script. Per-level **Add to dataset** buttons (`_add_level`, gated on the level having run) emit that level's columns + QCF-filtered flux via `featuresCreated` (DERIVED provenance) |
 | `tabs/ustar_detection.py` | **USTAR detection** tab — standalone u\* threshold detection: **Method** combo (`UstarThresholdDetection` modes `oneflux`/`oneflux_mp`/`oneflux_cp`/`reddyproc`) bootstrapped over the years for VUT (per-year) + CUT (all years), with per-year `failures_` in the table; or a single seasonal detection (`UstarMovingPointDetection`, MP methods only); table + diagnostic plot, worker thread. Also holds the method combo helpers (`make_ustar_method_combo`, `USTAR_MP_MODES`) shared with the chain's L3.3 |
 | `tabs/timelag.py` | Time-lag analysis tab — pick a gas, analyse its `*_TLAG_ACTUAL` lag distribution (`dv.flux.TimeLagAnalysis`), embed the 4-panel peak/range/EddyPro figure; **Load example TLAG data** loads the bundled level-0 lag dataset locally |
 | `tabs/_partitioning_base.py` | `BasePartitioningTab` — shared machinery for the NEE partitioning tab (declarative input-column combos + ✓/✗ markers, site coords from `site.manager`, optional VPD-in-kPa toggle, worker thread, GPP/RECO daily-mean + cumulative preview, Add results). Every control is built once. `_apply_variant` shows only the inputs (`_active_inputs`), coordinate rows (`needs_*`) and options (`has_vpd_unit`) the current variant needs. The subclass implements `_build_partitioner` and `_python_code_for`, and `_variant()` hands the worker the method/mode as plain data so `_compute_payload` stays pure |
@@ -261,12 +261,23 @@ callables (`init_flux_data` → `run_level2` → `run_level31` → `make_level32
 flux as a date/time heatmap (plus the L3.2 QCF distribution / L3.3 scenarios), and — the point of the feature — **Copy
 Python** emits the exact runnable script via the library's per-level codegen
 (`level2_to_code`/`level31_to_code`/`level32_to_code`/`level33_to_code`/`level41_to_code`). **L3.3 has two modes**
-(a Mode selector swaps the inspector page): *constant thresholds* (enter value/label scenarios) or *detection*
-(`run_level33_ustar_detection`, with a Method combo → `detection_mode`, TA/SW_IN pickers, bootstrap params, MP
-stratification → `detection_kwargs={'mp_kwargs': ...}` for the MP methods only, and an **Apply** selector choosing
-**CUT** (constant → `CUT_16/50/84`) vs **VUT** (per-year → `VUT_16/50/84`) — mutually exclusive strategies). A
-**Filter nighttime only** checkbox (both modes) passes `nighttime_only=True` + `swin_col`. Older projects restore the
-old "Detect (moving point, ...)" label as detection with `oneflux_mp`. The
+(a Mode selector swaps the inspector page): *given thresholds* (percentile + value rows →
+`run_level33_ustar_detection(thresholds={16: ..., 50: ...})`, labels `CUT_16/50/84`, same flags as the constant form)
+or *detection* (`run_level33_ustar_detection`, with a Method combo → `detection_mode`, TA/SW_IN pickers, bootstrap
+params, MP stratification → `detection_kwargs={'mp_kwargs': ...}` for the MP methods only, and a **Thresholds**
+selector choosing **CUT** (one for all years → `CUT_16/50/84`) vs **VUT** (one per year → `VUT_16/50/84`, `mode='vut'`)
+— mutually exclusive strategies). A **Filter nighttime only** checkbox (both modes) passes `nighttime_only=True` +
+`swin_col`. **Add REF (ONEFlux)** (both modes) passes `reference=True` (40 extra scenarios), and L4.1 then runs
+`run_level41_mds` + `run_level41_ustar_reference` (`_level41_cfg()["ustar_reference"]`). With REF on, `_run_level41`
+and the codegen order L4.1 as MDS -> REF -> rf -> xgb: rf / xgb take the library default `scenarios=None`
+(`select_scenarios`), which leaves out the 40 REF versions but keeps the REF scenario once it is selected (L390). The
+REF record (`levels.ustar_reference`) goes to the status line (`_ref_text`) and the report panel
+(`result.summary()`), and the REF columns (idstr `L4.1_ref`) to Level 4.1's **Add to dataset**. The saved state keeps
+the `l33_ustar` `[value, label]` pairs: labels written by `ustar_scenario_labels` (`CUT_50`, `CUT_0125`) map back to
+percentiles (`_label_percentile`), free labels from older projects (`CUT_NONE`, `""`) still run through
+`run_level33_constant_ustar`. Older projects restore the old "Detect (moving point, ...)" label as detection with
+`oneflux_mp`, "Constant thresholds" as given thresholds, and the old Apply items "CUT (constant)" / "VUT (per-year)"
+by prefix. The
 script-gen lives in the library (`flux/postprocessingchain/codegen.py`: `chain_to_code` for the full
 `run_chain`/`FluxConfig` path, the `level*_to_code` functions for the composable path) because it encodes the API call
 shape; the GUI only calls it. Needs real EddyPro-FLUXNET input (FC/USTAR/`*_TEST` columns) —

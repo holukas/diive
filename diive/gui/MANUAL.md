@@ -1147,14 +1147,17 @@ intermediate results out of the chain without waiting for the whole pipeline.
 
 **Level 3.3: USTAR filtering** has two modes (a *Mode* dropdown):
 
-- **Constant thresholds.** Type one or more known u\* thresholds (m s⁻¹) with
-  optional labels. Each becomes a filtering scenario.
+- **Given thresholds.** Enter known u\* thresholds (m s⁻¹), one per percentile:
+  pick the **Percentile** and the **Threshold** and click **Add**. Each becomes a
+  filtering scenario with the label a detected threshold gets (`CUT_16`, `CUT_50`,
+  `CUT_84`), so the flags and the column names match a detection run. Adding a
+  percentile again replaces its value. For H and LE use one threshold of 0.
 - **Detect from the data.** Estimate the threshold with a bootstrap over the years.
   Pick the **Method**, the TA and SW_IN columns, the bootstrap iterations and the
-  percentiles, and choose what to **Apply**:
-  - **CUT** (constant): one threshold per percentile applied to the whole record
-    (`CUT_16/50/84`).
-  - **VUT** (per-year): each year filtered by its own threshold (`VUT_16/50/84`).
+  percentiles, and choose the **Thresholds**:
+  - **CUT (one for all years)**: one threshold per percentile applied to the whole
+    record (`CUT_16/50/84`).
+  - **VUT (one per year)**: each year filtered by its own threshold (`VUT_16/50/84`).
 
   CUT and VUT are alternative strategies, so pick one. The percentiles (16/50/84)
   are the uncertainty scenarios within it. Each scenario is gap-filled separately at
@@ -1168,7 +1171,29 @@ intermediate results out of the chain without waiting for the whole pipeline.
 at night: SW_IN below 10 W m⁻², or SW_IN missing. This is the REddyProc default.
 Off, day and night records are flagged, as in ONEFlux. Pick the SW_IN column for it
 under the checkbox. Projects saved before the method choice load with *ONEFlux: moving
-point only*, the method they ran.
+point only*, the method they ran. Projects saved with constant thresholds labelled by
+percentile (`CUT_50`) load as given thresholds. Thresholds with other labels (such as
+`CUT_NONE`, or no label) still run as constant thresholds with these labels, and the
+page says so.
+
+**Add REF (ONEFlux)** (both modes, off by default) prepares the REF threshold as
+ONEFlux selects it. It adds the 40 ONEFlux percentiles (1.25 to 98.75) as extra
+scenarios (`CUT_0125`, `CUT_0375`, ...). With given thresholds, the list must also
+hold these 40 percentiles. Level 4.1 then gap-fills every scenario with MDS and
+selects the REF: the version most similar to all others, by model efficiency. The
+REF is added as its own series, `CUT_REF` (or `VUT_REF`). MDS is required. Random
+Forest and XGBoost run after the REF selection, on the main scenarios (`CUT_16`,
+`CUT_50`, `CUT_84`) and the scenario the REF maps to, not on the other REF versions.
+Run MDS with
+mode **ONEFlux** for the REF ONEFlux would select. The u\* filter of diive keeps the
+first record after a low-u\* period and ONEFlux removes it, so the REF can differ
+from ONEFlux's at some time resolutions.
+
+After Level 4.1 with REF, the status line shows the REF: the scenario it maps to,
+its percentile and threshold, and the REF per time resolution (half-hourly, daily,
+weekly, monthly, yearly). The report panel shows the full selection. **Add to
+dataset** of Level 4.1 adds the `CUT_REF` series and its flag with the other
+gap-filled series.
 
 **Level 4.1: gap-filling** runs any of Random Forest, XGBoost and MDS on each USTAR
 scenario. For MDS, pick the SW_IN, TA and VPD driver columns and the tolerances.

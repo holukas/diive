@@ -3562,14 +3562,224 @@ def test_flux_chain_tab_level33_vut(app, configured_site):
 
     kw = tab._level33_kwargs()
     assert kw.get("mode") == "vut"
+    # The per-level path takes the same kwargs as run-all.
+    assert tab._level_plan(4)["kwargs"]["mode"] == "vut"
+    assert tab._stage_statuses()[4] == ("detect VUT · 3", "set")
     code = tab._code()
     compile(code, "<gen>", "exec")
     assert "mode='vut'" in code
 
+    # Run-all (the synchronous core of the worker thread).
     data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
                         tab._level31_kwargs(), tab._steps, kw)
     scen = list(data.levels.filteredseries_level33_qcf)
-    assert scen and all(s.startswith("VUT_") for s in scen)
+    assert scen == ["VUT_16", "VUT_50", "VUT_84"]
+    assert data.levels.ustar_scenarios.threshold_type == "vut"
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert "Detected VUT (ONEFlux MP): VUT_16=" in tab.summary.toPlainText()
+
+    # The VUT choice round-trips, also from the older item text.
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._level33_kwargs()["mode"] == "vut"
+    tab3 = FluxChainTab(); tab3.widget()
+    tab3.restore_state({"controls": {"l33_apply": "VUT (per-year)"}})
+    assert tab3.l33_apply.currentIndex() == 1
+
+
+def test_flux_chain_tab_level33_given_thresholds(app, configured_site):
+    # Given thresholds are entered per percentile and run through
+    # run_level33_ustar_detection(thresholds={...}): labels CUT_16/50/84, the
+    # same flags as the constant thresholds with these labels.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.flux.postprocessingchain import run_level33_constant_ustar
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    assert tab.l33_mode.currentText() == "Given thresholds"
+    for p, v in ((16, 0.18), (50, 0.30), (84, 0.27)):
+        tab.l33_pct.setValue(p)
+        tab.l33_value.setValue(v)
+        tab._add_ustar()
+    tab.l33_pct.setValue(50)        # a percentile again replaces its value
+    tab.l33_value.setValue(0.22)
+    tab._add_ustar()
+    assert tab._ustar == [(0.18, "CUT_16"), (0.22, "CUT_50"), (0.27, "CUT_84")]
+    assert tab.l33_list.count() == 3 and tab.l33_list.item(0).text().startswith("CUT_16")
+    assert not tab.l33_legacy_note.isVisibleTo(tab._l33_constant_box)
+    kw = tab._level33_kwargs()
+    assert kw == {"_detection": True, "thresholds": {16: 0.18, 50: 0.22, 84: 0.27}}
+    assert tab._stage_statuses()[4] == ("3 scenarios", "set")
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "run_level33_ustar_detection(" in code
+    assert "thresholds={16: 0.18, 50: 0.22, 84: 0.27}" in code
+    assert "run_level33_constant_ustar" not in code
+
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, kw)
+    assert list(data.levels.level33_qcf) == ["CUT_16", "CUT_50", "CUT_84"]
+    assert data.levels.ustar_scenarios.source == "given"
+    l32 = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                       tab._level31_kwargs(), tab._steps)
+    const = run_level33_constant_ustar(
+        l32, thresholds=[0.18, 0.22, 0.27], threshold_labels=["CUT_16", "CUT_50", "CUT_84"],
+        showplot=False, verbose=False)
+    pd.testing.assert_frame_equal(data.fpc_df, const.fpc_df)
+    tab._on_done(data)
+    QApplication.processEvents()
+    assert "Given CUT: CUT_16=0.180  CUT_50=0.220  CUT_84=0.270" in tab.summary.toPlainText()
+
+    # Saved state round trip: same [value, label] pairs as before.
+    state = tab.save_state()
+    assert state["l33_ustar"] == [[0.18, "CUT_16"], [0.22, "CUT_50"], [0.27, "CUT_84"]]
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._level33_kwargs() == kw
+
+
+def test_flux_chain_tab_level33_old_constant_state(app, configured_site):
+    # Projects saved before the percentile form: thresholds labelled by
+    # percentile restore to it, free labels (CUT_NONE for H / LE, or none)
+    # still run as constant thresholds with these labels.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+    steps = [HampelParams().step()]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab.restore_state({"controls": {"l33_mode": "Constant thresholds"},
+                       "l33_enabled": True, "l32_steps": steps,
+                       "l33_ustar": [[0.1, "CUT_50"], [0.2, "CUT_0125"]]})
+    assert tab.l33_mode.currentIndex() == 0
+    assert tab._level33_kwargs() == {"_detection": True,
+                                     "thresholds": {50: 0.1, 1.25: 0.2}}
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab.restore_state({"controls": {"l33_mode": "Constant thresholds"},
+                       "l33_enabled": True, "l32_steps": steps,
+                       "l33_ustar": [[0.0, "CUT_NONE"]]})
+    assert tab.l33_legacy_note.isVisibleTo(tab._l33_constant_box)
+    assert "CUT_NONE" in tab.l33_list.item(0).text()
+    kw = tab._level33_kwargs()
+    assert kw == {"thresholds": [0.0], "threshold_labels": ["CUT_NONE"]}
+    assert "run_level33_constant_ustar(" in tab._code()
+    data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
+                        tab._level31_kwargs(), tab._steps, kw)
+    assert list(data.levels.level33_qcf) == ["CUT_NONE"]
+    # REF needs thresholds by percentile: refused with a message.
+    tab.l33_ref.setChecked(True)
+    assert tab._level33_kwargs() is None
+    assert tab._level_plan(4) is None
+    assert "REF needs thresholds by percentile" in tab.summary.toPlainText()
+
+
+def test_flux_chain_tab_level33_reference(app, configured_site):
+    # "Add REF (ONEFlux)": L3.3 adds the 40 REF scenarios. L4.1 runs MDS on all,
+    # run_level41_ustar_reference adds CUT_REF, then RF runs on the main
+    # scenarios and the REF scenario only (finding L390).
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.flux.lowres.ustar_reference import ONEFLUX_REF_PERCENTILES
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+    ta = [c for c in df.columns if c.upper().startswith("TA_")][0]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    for p, v in [(16, 0.10), (50, 0.15), (84, 0.20)] + [
+            (p, 0.05 + 0.002 * p) for p in ONEFLUX_REF_PERCENTILES]:
+        tab.l33_pct.setValue(p)
+        tab.l33_value.setValue(v)
+        tab._add_ustar()
+    assert len(tab._ustar) == 43 and tab._ustar[3][1] == "CUT_0125"
+    tab.l41_rf.setChecked(True)
+    tab.rf_n_est.setValue(3)        # keep the RF run fast
+    tab.l41_mds.setChecked(True)
+    tab.mds_ta.setCurrentText(ta)
+    tab.l41_features.set_selected([ta])
+
+    def run(idx):
+        plan = tab._level_plan(idx)
+        assert plan is not None, tab.summary.toPlainText()
+        tab._level_worker(plan, tab._data, tab._df)
+        QApplication.processEvents()
+
+    for idx in range(5):            # through L3.3, without REF
+        run(idx)
+    assert len(tab._data.levels.level33_qcf) == 43
+    assert tab._level41_methods() == ["mds", "rf"]
+
+    # REF on: rf stays on, MDS is required.
+    tab.l33_ref.setChecked(True)
+    assert tab.l41_rf.isEnabled() and tab._level41_methods() == ["mds", "rf"]
+    assert tab.l41_ref_note.isVisibleTo(tab._pages.widget(5))
+    assert "REF scenario" in tab.l41_ref_note.text()
+    assert tab._stage_statuses()[4] == ("43 scenarios + REF", "set")
+    tab.l41_mds.setChecked(False)
+    assert tab._level_plan(5) is None
+    assert "needs MDS" in tab.summary.toPlainText()
+    tab.l41_mds.setChecked(True)
+    # L3.3 ran without REF: the REF selection is refused up front.
+    assert tab._level_plan(5) is None
+    assert "Run Level 3.3 again" in tab.summary.toPlainText()
+
+    kw, cfg = tab._level33_kwargs(), tab._level41_cfg()
+    assert kw["reference"] is True and cfg["ustar_reference"] is True
+    assert cfg["methods"] == ["mds", "rf"]
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "reference=True" in code
+    # Order: MDS -> REF -> RF, so RF includes the REF scenario.
+    order = [code.index(s) for s in ("data = run_level41_mds(",
+                                     "data = run_level41_ustar_reference(data)",
+                                     "engineer = make_level41_engineer(",
+                                     "data = run_level41_rf(")]
+    assert order == sorted(order)
+
+    run(4)                          # L3.3 with the 40 REF scenarios
+    rec = tab._data.levels.ustar_scenarios
+    assert len(rec.reference_labels) == 40 and "REF versions" in tab.summary.toPlainText()
+    run(5)                          # MDS + REF + RF
+    data = tab._data
+    ref = data.levels.ustar_reference
+    assert ref.label == "CUT_REF" and ref.scenario in rec.reference_labels
+    assert ref.percentile in ONEFLUX_REF_PERCENTILES
+    assert ref.gapfilled_col in data.fpc_df.columns and "CUT_REF" in ref.gapfilled_col
+    # RF: the main scenarios and the REF scenario, not the other REF versions.
+    assert sorted(data.gapfilled_cols()["rf"]) == sorted(
+        ["CUT_16", "CUT_50", "CUT_84", ref.scenario])
+    assert len(data.gapfilled_cols()["mds"]) == 43
+    text = tab.summary.toPlainText()
+    assert f"CUT_REF = {ref.scenario} (percentile {ref.percentile:g}" in text
+    assert "REF per time resolution: HH" in text
+    assert "REF u* percentile" in tab.report.toPlainText()
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+    # The REF series reaches the dataset with the other gap-filled outputs.
+    tab._add_level(5)
+    QApplication.processEvents()
+    assert ref.gapfilled_col in emitted["df"].columns
+    assert ref.flag_col in emitted["df"].columns
+
+    # Saved state round trip: REF on, rf ticked.
+    state = tab.save_state()
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2.l33_ref.isChecked() and tab2._level33_kwargs()["reference"] is True
+    assert tab2._level41_methods() == ["mds", "rf"]
+    assert tab2._level41_cfg()["ustar_reference"] is True
 
 
 def test_ustar_detection_tab(app):
@@ -3706,7 +3916,10 @@ def test_flux_chain_tab_level33(app, configured_site):
     tab._steps = [HampelParams().step()]
     code = tab._code()
     compile(code, "<gen>", "exec")
-    assert "run_level33_constant_ustar(" in code
+    # Percentile labels: the script uses the given-thresholds form of the one
+    # L3.3 entry point, which gives the same flags as run_level33_constant_ustar.
+    assert "run_level33_ustar_detection(" in code
+    assert "thresholds={50: 0.1}" in code
 
     data = tab._compute(df, tab._init_kwargs(), tab._level2_settings(),
                         tab._level31_kwargs(), tab._steps, tab._level33_kwargs())
