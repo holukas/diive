@@ -197,7 +197,9 @@ class FlagQCF:
         if ustar_scenarios:
             # Get ID of USTAR scenario, e.g. 'CUT_50'. Info about the scenario is in the ID string.
             # Therefore, here we can check if any USTAR scenario string appears in the ID string.
-            current_ustar_scenario = [u for u in self.ustar_scenarios if u in self.idstr]
+            # Match whole '_label_' tokens: 'CUT_16' is not the scenario of '_L3.3_CUT_1625'.
+            current_ustar_scenario = [u for u in self.ustar_scenarios
+                                      if f"_{u}_" in f"_{self.idstr}_"]
             # Make sure there is only one detected scenario
             if len(current_ustar_scenario) == 1:
                 current_ustar_scenario = str(current_ustar_scenario[0])

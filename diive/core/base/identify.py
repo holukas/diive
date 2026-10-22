@@ -55,6 +55,8 @@ def identify_flagcols(df: DataFrame, seriescol: str, exclude_ustar_ids: list = N
     # This keeps flags for the current USTAR scenario by excluding all other scenarios.
     # Searching for the string of the current scenario would not work
     if exclude_ustar_ids:
-        flagcols = [f for f in flagcols if not any(n in f for n in exclude_ustar_ids)]
+        # Match whole '_label_' tokens: 'CUT_16' must not exclude 'CUT_1625'.
+        flagcols = [f for f in flagcols
+                    if not any(f"_{n}_" in f"_{f}_" for n in exclude_ustar_ids)]
 
     return flagcols
