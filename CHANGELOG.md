@@ -3,7 +3,7 @@
 ![diive](images/logo_diive1_256px.png)
 
 
-## [Unreleased]
+## [0.93.0] - unreleased
 
 USTAR threshold detection now reproduces ONEFlux and REddyProc. The new `UstarThresholdDetection`
 selects the method with `mode`, and the flux post-processing chain detects thresholds as ONEFlux by
