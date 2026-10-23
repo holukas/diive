@@ -368,3 +368,143 @@ def test_new_tab_and_restore_unchanged(window):
     assert fresh._panels == ["GPP_DT_CUT_84", "GPP_DT_CUT_REF"]
     assert fresh._panel_settings == tab._panel_settings
     assert fresh._active_panel == "GPP_DT_CUT_REF"
+
+
+# --- 3-D surface tabs ---------------------------------------------------------
+
+def _stub_pyvista_canvas(monkeypatch):
+    """Replace the 3-D tabs' GL canvas with a recording stub.
+
+    VTK cannot create an OpenGL window under the offscreen Qt platform, so the
+    real `Pyvista3DCanvas` can't be built in tests. Mesh construction is pure
+    CPU work, so a stub plotter lets the render pipeline run (copied from
+    tests/test_gui.py).
+    """
+    pytest.importorskip("pyvista")
+    from PySide6.QtWidgets import QWidget
+
+    import diive.gui.tabs.surface3d as surface3d
+
+    class _StubPlotter:
+        def __init__(self):
+            self.meshes = []
+
+        def clear(self):
+            self.meshes.clear()
+
+        def add_mesh(self, mesh, **_kw):
+            self.meshes.append(mesh)
+
+        def show_axes(self):
+            pass
+
+    class _StubCanvas(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.plotter = _StubPlotter()
+
+        def on_interaction_start(self, _cb):
+            pass
+
+        def on_first_show(self, _cb):
+            pass
+
+        def clear(self):
+            self.plotter.clear()
+
+        def render(self):
+            pass
+
+        def set_view(self, *_a, **_kw):
+            pass
+
+        def apply_shadows(self, *_a, **_kw):
+            pass
+
+    monkeypatch.setattr(surface3d, "Pyvista3DCanvas", _StubCanvas)
+
+
+def _surface3d(win, monkeypatch, name):
+    _stub_pyvista_canvas(monkeypatch)
+    tab = _open(win, "3D surface")
+    tab._on_select(name)
+    _settle(tab)
+    tab.ybin.setValue(3)
+    tab.cmap.setCurrentText("viridis")
+    tab._rerender_debounce.flush()
+    QApplication.processEvents()
+    assert tab._target == name and tab._framed_target == name
+    assert tab._grid_height is not None
+    return tab
+
+
+def test_surface3d_keeps_variable_and_settings_on_data_push(window, monkeypatch):
+    tab = _surface3d(window, monkeypatch, "Tair_f")
+    prev_height = tab._grid_height
+
+    _add_column(window)
+
+    assert "BRANDNEW" in tab.varpanel.names()
+    assert tab._target == "Tair_f"
+    assert tab._framed_target == "Tair_f"  # camera view kept
+    assert tab.ybin.value() == 3
+    assert tab.cmap.currentText() == "viridis"
+    # Re-rendered from the pushed data.
+    assert tab._grid_height is not None and tab._grid_height is not prev_height
+
+
+def test_surface3d_falls_back_to_default_when_variable_is_gone(window, monkeypatch):
+    tab = _surface3d(window, monkeypatch, "GPP_DT_CUT_84")
+
+    _delete_column(window, monkeypatch, "GPP_DT_CUT_84")
+
+    assert tab._target == tab.default_var == "NEE_CUT_REF_f"
+    assert tab._framed_target == "NEE_CUT_REF_f"
+    assert tab.ybin.value() == 3
+    assert tab._grid_height is not None
+
+
+def _surfacexyz(win, monkeypatch, x, y, z):
+    _stub_pyvista_canvas(monkeypatch)
+    tab = _open(win, "3D surface (X/Y/Z)")
+    combos = tab.picker.combos()
+    for key, name in zip(("x", "y", "z"), (x, y, z), strict=True):
+        combos[key].setCurrentText(name)
+    tab.nbins.setValue(12)
+    tab.agg.setCurrentText("median")
+    tab._rerender_debounce.flush()
+    QApplication.processEvents()
+    assert tab.picker.picks() == {"x": x, "y": y, "z": z}
+    assert tab._framed_target == (x, y, z)
+    return tab
+
+
+def test_surfacexyz_keeps_roles_and_settings_on_data_push(window, monkeypatch):
+    roles = ("VPD_f", "Tair_f", "GPP_DT_CUT_84")
+    tab = _surfacexyz(window, monkeypatch, *roles)
+    prev_height = tab._grid_height
+
+    _add_column(window)
+
+    assert "BRANDNEW" in tab.varpanel.names()
+    assert tab.picker.combos()["x"].findText("BRANDNEW") >= 0
+    assert tab.picker.picks() == dict(zip(("x", "y", "z"), roles, strict=True))
+    assert tab.nbins.value() == 12
+    assert tab.agg.currentText() == "median"
+    assert tab._framed_target == roles  # camera view kept
+    assert tab._grid_height is not None and tab._grid_height is not prev_height
+
+
+def test_surfacexyz_gone_role_takes_its_default(window, monkeypatch):
+    tab = _surfacexyz(window, monkeypatch, "VPD_f", "Tair_f", "GPP_DT_CUT_84")
+
+    _delete_column(window, monkeypatch, "Tair_f")
+
+    # The gone Y role takes the default of the first load (second numeric
+    # column), X and Z stay.
+    numeric = [str(c) for c in
+               window._data.select_dtypes(include="number").columns]
+    assert tab.picker.picks() == {"x": "VPD_f", "y": numeric[1],
+                                  "z": "GPP_DT_CUT_84"}
+    assert tab.nbins.value() == 12
+    assert tab._grid_height is not None

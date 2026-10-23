@@ -86,11 +86,18 @@ class SurfaceXYZTab(Surface3DTab):
     def on_data_loaded(self, df, created=None) -> None:
         self._df = df
         self.varpanel.set_variables(df.columns, created)
+        # A data push (e.g. a column added in another tab) keeps each role
+        # while its variable is still in the data (L338). `seed` keeps those picks.
+        cols = {str(c) for c in df.columns}
+        kept = {k for k, v in self.picker.picks().items() if v in cols}
         self.picker.seed(df.columns)
-        # Seed X/Y/Z to three distinct numeric columns for a sensible first view.
+        # Seed the other roles (all of them on the first load) to three
+        # distinct numeric columns for a sensible first view.
         numeric = [str(c) for c in df.select_dtypes(include="number").columns]
         combos = self.picker.combos()
         for key, col in zip(("x", "y", "z"), numeric[:3], strict=False):
+            if key in kept:
+                continue
             combo = combos[key]
             combo.blockSignals(True)
             combo.setCurrentText(col)

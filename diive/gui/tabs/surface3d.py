@@ -564,6 +564,14 @@ class Surface3DTab(SingleVariableExplorerTab):
             self._on_select(t)
 
     # --- data flow -----------------------------------------------------
+    def _default_variable(self, df) -> str | None:
+        # A data push (e.g. a column added in another tab) keeps the shown
+        # variable while it is still in the data (L338). The controls are not
+        # reset on a push, and the camera keeps its view for the same variable.
+        if self._target is not None and self._target in {str(c) for c in df.columns}:
+            return self._target
+        return super()._default_variable(df)
+
     def _rerender_view(self, *_a) -> None:
         # Colormap / exaggeration / shading all need the mesh rebuilt (height is
         # baked into geometry), but it's cheap, so just re-render the current var.
