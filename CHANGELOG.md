@@ -44,8 +44,22 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 - **Scenarios for slow steps:** Random Forest, XGBoost and NEE partitioning take `scenarios=`. By
   default they skip the 40 extra scenarios that REF needs and run on the requested percentiles and
   the REF scenario only, also in `run_chain`.
+- **Long gaps:** `FluxMDS(fill_long_gaps=)`, `run_level41_mds(fill_long_gaps=)` and
+  `FluxConfig(mds_fill_long_gaps=)` choose whether long gaps stay filled. `oneflux_long_gap_mask`
+  finds them as the FLUXNET product of ONEFlux does.
+- **GUI, flux chain partitioning:** the flux chain tab has a Level 4.2 stage that partitions NEE
+  into GPP and RECO, with the option to add the GPP and RECO REF.
+- **GUI, long gaps:** the MDS tab and Level 4.1 of the flux chain tab have a "Fill long gaps"
+  option.
 
 ### Changed
+
+- **MDS in ONEFlux mode removes long gaps (changes results):** with `mode='oneflux'`, gap-filled
+  values in long gaps are set missing again, as in the FLUXNET product of ONEFlux since 2025. This
+  applies to gaps where more than 15 days in a row are filled with the lowest quality, and 15 days
+  next to the measured data stay filled. The NEE REF selection and NEE partitioning still use all
+  filled values, as in ONEFlux, and GPP and RECO are set missing in the same records. The modes
+  `'diive'` and `'reddyproc'` are unchanged.
 
 - **Moving point method (changes results):** `UstarMovingPointDetection` now gives the same
   thresholds as the compiled ONEFlux code, also in its rules for short records and in its bootstrap.
@@ -70,6 +84,13 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 
 - **Labels of percentiles with decimals:** `run_level33_ustar_detection(percentiles=(2.5, 50, 97.5))`
   labelled 2.5 as `CUT_02`. Whole percentiles keep their labels (`CUT_50`), and percentiles with decimals get four digits in hundredths (`CUT_0250`, `CUT_9750`).
+- **Plots with infinite or missing values:** `Cumulative`, `ScatterXY`, `ShiftedDistributionPlot`,
+  `HeatmapXYZ` and `TreeRingPlot` leave out infinite values and show a note when no finite value is
+  left, instead of raising an error.
+- **GUI, 3D surface tabs:** adding a column in another tab no longer resets the selected variables.
+- **Daytime partitioning (REddyProc):** no longer stops with a division by zero when the E0
+  smoothing starts on a flat likelihood, which happened on short records. It continues as
+  REddyProc does.
 
 ## [0.92.0] - 2026-10-21
 
