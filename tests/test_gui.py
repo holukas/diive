@@ -379,6 +379,57 @@ def test_dropped_tab_is_collectable(app, example_year):
             f"{cls.__name__} leaked widgets after being dropped")
 
 
+#: Garbage a failing `test_dropped_tab_widgets_go_before_gc_clears_them` keeps
+#: alive: letting the collector free it would crash the interpreter.
+_UNSAFE_GARBAGE: list = []
+
+
+def test_dropped_tab_widgets_go_before_gc_clears_them(app):
+    """A dropped tab's widget tree is deleted before the collector clears it (L399).
+
+    PySide's ``addLayout`` wraps the ``QWidgetItem``/``QSpacerItem`` entries of
+    the added layout. When the collector clears such a wrapper while the C++
+    item still exists, Python deletes an item its layout still lists, and the
+    layout deletes it again later: heap corruption (0xc0000374) inside
+    ``gc.collect()``. Two MDS tabs freed in one pass crashed that way, but only
+    in some clear orders. ``DiiveTab.__del__`` deletes the tree first, so by
+    the time the collector clears the wrappers, every one of them is invalid.
+    ``DEBUG_SAVEALL`` stops the pass after the finalizers (nothing is cleared),
+    which makes this check independent of the clear order.
+    """
+    from PySide6.QtWidgets import QLayout, QLayoutItem
+
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+
+    def layout_items():
+        return [o for o in gc.get_objects()
+                if isinstance(o, QLayoutItem) and not isinstance(o, QLayout)]
+
+    gc.collect()
+    older = layout_items()  # held, so their ids stay unique
+    old_ids = {id(o) for o in older}
+    tab = MdsGapFillingTab()
+    tab.widget()
+    items = [o for o in layout_items() if id(o) not in old_ids]
+    del older
+    assert items, "expected PySide wrappers of the tab's layout items"
+    gc.set_debug(gc.DEBUG_SAVEALL)
+    try:
+        del tab
+        gc.collect()
+    finally:
+        gc.set_debug(0)
+    garbage = gc.garbage[:]
+    gc.garbage.clear()
+    live = [o for o in items if shiboken6.isValid(o)]
+    if live:
+        _UNSAFE_GARBAGE.append((garbage, items))
+    assert not live, (
+        f"{len(live)} of {len(items)} layout item wrappers still own a live C++ "
+        "item when the collector would clear them")
+    del garbage, items, live
+
+
 def test_pill_classification():
     from diive.gui.widgets.variable_delegate import _pill_for
     assert _pill_for("GPP_CUT_REF_f")[0] == "GPP"

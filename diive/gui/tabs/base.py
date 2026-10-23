@@ -15,6 +15,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from PySide6.QtWidgets import QWidget
+from shiboken6 import Shiboken
 
 
 #: Key the main window sets in a frame's ``attrs`` when the user declines to add
@@ -46,6 +47,29 @@ class DiiveTab(ABC):
         if self._widget is None:
             self._widget = self.build()
         return self._widget
+
+    def __del__(self, _sbk=Shiboken) -> None:
+        """Delete a dropped tab's widget tree on the C++ side, in one piece.
+
+        Without this, a tab in a reference cycle (most are) leaves its widgets
+        to the garbage collector, which clears the Python wrappers in no
+        particular order. PySide's ``addLayout`` creates wrappers for the
+        ``QWidgetItem``/``QSpacerItem`` entries of the added layout, and
+        clearing such a wrapper hands its C++ item to Python, which deletes it
+        while the layout still lists it. The layout deletes it again when the
+        tree goes: a double free, 0xc0000374 inside ``gc.collect()`` (L399).
+        Finalizers run before the collector clears anything, so deleting the
+        tree here destroys every item once, through its layout, and leaves only
+        invalid wrappers to clear.
+
+        Only a root that Python owns is deleted (one nobody parented, e.g. a
+        tab a test dropped). A root inside the main window is Qt's, and the
+        main window deletes a closed tab's widget itself. ``_sbk`` is bound at
+        definition time because module globals can be gone at shutdown.
+        """
+        w = getattr(self, "_widget", None)
+        if w is not None and _sbk.isValid(w) and _sbk.ownedByPython(w):
+            _sbk.delete(w)
 
     def _emit_features(self, df) -> bool:
         """Send `df` to the main window to add it to the dataset.

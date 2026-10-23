@@ -211,6 +211,13 @@ class GapFillResultsPanel(QScrollArea):
         self._root = QVBoxLayout(self._host)
         self._root.setContentsMargins(14, 12, 14, 16)
         self._root.setSpacing(14)
+        # Take the previous host back and delete it deliberately: `setWidget`
+        # alone destroys it on the C++ side and leaves its Python wrappers
+        # behind (CLAUDE.md, "Replacing a container's child").
+        old = self.takeWidget()
+        if old is not None:
+            old.setParent(None)
+            old.deleteLater()
         self.setWidget(self._host)
 
     def reset(self, message: str) -> None:
