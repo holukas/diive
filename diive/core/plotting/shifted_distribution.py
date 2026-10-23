@@ -40,7 +40,7 @@ class ShiftedDistributionPlot:
             fraction, zone breakpoints) on construction (default False). Records
             lost to missing values are warned about either way.
 
-    Missing values are dropped per period before the density is fitted. How many
+    Missing and infinite values are dropped per period before the density is fitted. How many
     each period lost is kept in the ``n_*`` attributes, warned about when it is
     not zero, and stated on the figure itself: :meth:`plot` appends the sample
     size to both legend labels, as ``n = 201 of 4018`` when records were dropped
@@ -55,7 +55,7 @@ class ShiftedDistributionPlot:
         n_ref_records / n_comp_records: Records the period holds, gaps included.
         n_ref_used / n_comp_used: Records the density (and, for the reference,
             the zone breakpoints) is built from.
-        n_ref_missing / n_comp_missing: Records the period lost to missing values.
+        n_ref_missing / n_comp_missing: Records the period lost to missing or infinite values.
 
     See Also:
         examples/visualization/plot_shifted_distribution.py
@@ -135,7 +135,7 @@ class ShiftedDistributionPlot:
             self.report()
 
     def _period_values(self, period: tuple, which: str) -> tuple:
-        """Return one period's non-missing values plus (records held, records kept).
+        """Return one period's finite values plus (records held, records kept).
 
         Reports what the gaps cost, because nothing downstream can: the KDE is a
         density, so it is normalized to the same unit area whether it was fitted on
@@ -143,7 +143,9 @@ class ShiftedDistributionPlot:
         that fix the zone breakpoints.
         """
         in_period = self.series.loc[period[0]:period[1]]
-        kept = in_period.dropna()
+        # An infinite value would make the mean, the sd and the KDE bandwidth
+        # infinite (L353), so it is dropped as a missing value is.
+        kept, n_infinite = pf.drop_infinite(in_period.dropna())
         n_records, n_used = len(in_period), len(kept)
         n_missing = n_records - n_used
         if n_missing:
@@ -155,7 +157,7 @@ class ShiftedDistributionPlot:
                     "kept records too.") if which == 'reference' else ""
             warn(f"Shifted distribution: the {which} period ({period[0]} - {period[1]}) holds "
                  f"{n_records} records, of which {n_missing} ({100 * n_missing / n_records:.1f}%) "
-                 f"are missing, so its density is built from the remaining {n_used}.{tail}")
+                 f"are missing{' or infinite' if n_infinite else ''}, so its density is built from the remaining {n_used}.{tail}")
         return kept.values, n_records, n_used
 
     def report(self):

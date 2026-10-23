@@ -32,6 +32,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
+import diive.core.plotting.plotfuncs as pf
 from diive.core.plotting.heatmap_base import HeatmapBase
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
@@ -75,6 +76,9 @@ class HeatmapXYZ(HeatmapBase):
                  yticklabels: list = None,
                  verbose: bool = False):
         """Prepare 2D grid data for heatmap plotting (Phase 1 of two-phase design).
+
+        Infinite values (+inf, -inf) in x, y or z count as missing. Without a
+        single finite cell, :meth:`plot` shows the note "no finite values".
 
         Args:
             x: Series of x-coordinates (becomes column axis after pivoting).
@@ -243,7 +247,18 @@ class HeatmapXYZ(HeatmapBase):
             self._z_series.name: self._z_series,
         }
         df = pd.DataFrame.from_dict(data, orient='columns')
+        # An infinite coordinate makes the cell edges infinite, which pcolormesh
+        # rejects (L353). Infinite values become NaN, which the pivot leaves out.
+        df = df.replace([np.inf, -np.inf], np.nan)
         pivot_df = pd.pivot_table(df, index=self._y_series.name, columns=self._x_series.name, values=self._z_series.name)
+
+        # No finite cell left (all NaN or all inf): there is no last coordinate
+        # to extend the edges from, and plot() shows a note instead (L353).
+        if pivot_df.empty:
+            self.x = np.array([])
+            self.y = np.array([])
+            self.z = np.empty((0, 0))
+            return
 
         x_coords = pivot_df.columns.to_numpy()
         y_coords = pivot_df.index.to_numpy()
@@ -359,6 +374,15 @@ class HeatmapXYZ(HeatmapBase):
             show_values_fontsize=show_values_fontsize,
             show_values_n_dec_places=show_values_n_dec_places
         )
+
+        if self.z.size == 0:
+            pf.no_values_note(self.ax, f"{self._z_series.name}: no finite values")
+            self.ax.set_xlabel(xlabel)
+            self.ax.set_ylabel(ylabel)
+            if self.showplot:
+                self.fig.patch.set_facecolor('white')
+                self.fig.show()
+            return
 
         # Domain-specific rendering (pcolormesh + formatting)
         self.p = self.plot_pcolormesh(shading='flat')

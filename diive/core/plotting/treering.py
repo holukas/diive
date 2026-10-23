@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.collections import LineCollection
 
+import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.utils.console import detail
@@ -51,6 +52,9 @@ class TreeRingPlot:
                  verbose: bool = False):
         """Prepare time series data for tree-ring plotting (Phase 1 of two-phase design).
 
+        Infinite values (+inf, -inf) count as missing. Without a single finite
+        value, :meth:`plot` and :meth:`plot_line` show the note "no finite values".
+
         Args:
             df: DataFrame with DatetimeIndex at any sub-annual frequency
             value_col: Column name with the numeric values to visualize
@@ -73,6 +77,13 @@ class TreeRingPlot:
             raise ValueError("df cannot be empty")
 
         self.df = df[[value_col]].copy()
+        # An infinite value would make the colour range infinite (L353). It becomes
+        # a gap, as a missing value, so the years and the time step stay those of
+        # the data.
+        is_inf = np.isinf(self.df[value_col].to_numpy(dtype=float, na_value=np.nan))
+        self.n_infinite = int(is_inf.sum())
+        if self.n_infinite:
+            self.df[value_col] = self.df[value_col].mask(is_inf)
         self.value_col = value_col
         self.resample_freq = resample_freq
         self.verbose = verbose
@@ -129,6 +140,18 @@ class TreeRingPlot:
             total = self.n_years * n_slots
             detail(f"Grid: {self.n_years} years x {n_slots} slots, {filled}/{total} filled "
                    f"(freq={self.resample_freq})", verbose=self.verbose)
+
+    def _plot_empty(self, ax, figsize: tuple, figdpi: int):
+        """Draw an empty axes with a note: no finite value is left to plot (L353)."""
+        if ax is None:
+            fig = plt.figure(figsize=figsize, dpi=figdpi)
+            ax = fig.add_subplot(111, projection='polar')
+            self._fig = fig
+        else:
+            self._fig = ax.figure
+        self.ax = ax
+        ax.axis('off')
+        pf.no_values_note(ax, f"{self.value_col}: no finite values")
 
     def plot(self,
              ax=None,
@@ -191,6 +214,9 @@ class TreeRingPlot:
         title_color = style.text_color if style.text_color is not None else theme.COLOR_TEXT
 
         flat = self.grid[~np.isnan(self.grid)]
+        if flat.size == 0:
+            self._plot_empty(ax, figsize, figdpi)
+            return
         data_min = float(np.nanmin(flat))
         data_max = float(np.nanmax(flat))
 
@@ -417,6 +443,9 @@ class TreeRingPlot:
         title_color = style.text_color if style.text_color is not None else theme.COLOR_TEXT
 
         flat = self.grid[~np.isnan(self.grid)]
+        if flat.size == 0:
+            self._plot_empty(ax, figsize, figdpi)
+            return
         data_min = float(np.nanmin(flat))
         data_max = float(np.nanmax(flat))
         if vmin is None:

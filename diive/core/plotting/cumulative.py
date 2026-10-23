@@ -13,8 +13,7 @@ import matplotlib.dates as mdates
 import numpy as np
 from matplotlib.collections import PolyCollection
 from matplotlib.path import Path
-from pandas import Series
-from pandas.core.interchange.dataframe_protocol import DataFrame
+from pandas import DataFrame, Series
 
 import diive.core.plotting.plotfuncs as pf
 import diive.core.plotting.styles.LightTheme as theme
@@ -249,7 +248,8 @@ class Cumulative:
     with values displayed at the end of each series.
 
     Args:
-        df: Dataframe, cumulatives are plotted for each column.
+        df: Dataframe, cumulatives are plotted for each column. Missing values
+            (NaN) and infinite values (+inf, -inf) are left out.
         units: Units shown in plot, LaTeX format is supported.
         start_year: Start year of shown data.
         end_year: End year of shown data.
@@ -272,6 +272,13 @@ class Cumulative:
 
         if self.start_year | self.end_year:
             self.df = keep_years(data=self.df, start_year=self.start_year, end_year=self.end_year)
+
+        # An infinite value would make its column's cumulative and the y-limits
+        # infinite (L353). It counts as a gap, as a missing value does.
+        is_inf = np.isinf(self.df.to_numpy(dtype=float, na_value=np.nan))
+        self.n_infinite = int(is_inf.sum())
+        if self.n_infinite:
+            self.df = self.df.mask(is_inf)
 
         self.show_grid = True
         self.show_legend = True
@@ -371,6 +378,9 @@ class Cumulative:
              ):
         """Plot the cumulative sum of each column, with the final total in each legend label.
 
+        Without a single finite value in any column, the axes stay empty and show
+        the note "no finite values".
+
         Args:
             ax: Matplotlib axes to draw on; a standalone figure is created if None.
             format_style: Shared chrome (labels/fonts/grid/legend). None = house style.
@@ -401,6 +411,17 @@ class Cumulative:
         # show_title has no FormatStyle field (the dynamic title is class-owned), so it
         # stays on the instance and is read by _apply_format.
         self.show_title = show_title
+
+        # Nothing finite left in any column (all NaN or all inf): there is no
+        # y-range for the limits (L353).
+        if self.cumulative.dropna(how='all').empty:
+            pf.no_values_note(self.ax, "no finite values")
+            chrome = style.merged(title="")
+            chrome.show_legend = False
+            chrome.apply(ax=self.ax, default_xlabel="Date", default_ylabel=self.ylabel or "Cumulative")
+            if self._own_fig and showplot:
+                self.fig.show()
+            return self.ax
 
         color_list = theme.colorwheel_36()  # get some colors
 

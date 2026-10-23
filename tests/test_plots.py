@@ -1834,7 +1834,9 @@ class TestL219PlottingFixes(unittest.TestCase):
 
 class TestL353NonFiniteValues(unittest.TestCase):
     """L353: CumulativeYear, HistogramPlot and RidgeLinePlot raised on +inf/-inf,
-    CumulativeYear and RidgeLinePlot also on an all-NaN series.
+    CumulativeYear and RidgeLinePlot also on an all-NaN series. Cumulative,
+    ScatterXY, ShiftedDistributionPlot, HeatmapXYZ and TreeRingPlot raised on
+    +inf/-inf or on all-NaN input.
 
     Infinite values are left out. When no finite value is left, the plot shows
     a note instead of raising. Axes come from a bare ``Figure()``.
@@ -1886,6 +1888,62 @@ class TestL353NonFiniteValues(unittest.TestCase):
         ridge.plot(fig=fig, how='monthly', showplot=False)
         return fig, ridge
 
+    def _plot_cumulative(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.cumulative import Cumulative
+        fig = Figure()
+        cum = Cumulative(df=series.to_frame())
+        cum.plot(ax=fig.add_subplot(), showplot=False, fill=True)
+        return fig, cum
+
+    def _plot_scatter(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.scatter import ScatterXY
+        fig = Figure()
+        x = _synthetic_series(years=2, name="x")
+        sc = ScatterXY(x=x, y=series, z=series.rename("z"), nbins=10)
+        sc.plot(ax=fig.add_subplot(), ylim='auto')
+        return fig, sc
+
+    def _plot_shifted(self, series):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
+        fig = Figure()
+        sd = ShiftedDistributionPlot(series, ref_period=("2019-01-01", "2019-12-31"),
+                                     comp_period=("2020-01-01", "2020-12-31"))
+        sd.plot(ax=fig.add_subplot())
+        return fig, sd
+
+    @staticmethod
+    def _plot_heatmap(kind: str):
+        import numpy as np
+        import pandas as pd
+        from matplotlib.figure import Figure
+        from diive.core.plotting.heatmap_xyz import HeatmapXYZ
+        gx, gy = np.meshgrid(np.arange(5.), np.arange(4.))
+        x = pd.Series(gx.ravel(), name="x")
+        z = pd.Series(np.arange(20.), name="TA")
+        if kind in ("+inf", "-inf"):
+            # One infinite coordinate and one infinite value, in different cells
+            x.iloc[3] = z.iloc[7] = np.inf if kind == "+inf" else -np.inf
+        elif kind == "allnan":
+            z[:] = np.nan
+        elif kind == "allinf":
+            z[:] = np.inf
+        fig = Figure()
+        hm = HeatmapXYZ(x=x, y=pd.Series(gy.ravel(), name="y"), z=z)
+        hm.plot(ax=fig.add_subplot(), fig=fig)
+        return fig, hm
+
+    @staticmethod
+    def _plot_treering(series, method: str):
+        from matplotlib.figure import Figure
+        from diive.core.plotting.treering import TreeRingPlot
+        fig = Figure()
+        tr = TreeRingPlot(series.to_frame(), "TA")
+        getattr(tr, method)(ax=fig.add_subplot(projection="polar"))
+        return fig, tr
+
     def test_infinite_values_are_left_out(self):
         import numpy as np
         finite = _synthetic_series(years=2)
@@ -1909,6 +1967,44 @@ class TestL353NonFiniteValues(unittest.TestCase):
                 self.assertEqual(ridge.n_infinite, 2)
                 self.assertEqual(len(fig.axes), 12)
                 self.assertTrue(np.isfinite(ridge.xlim).all())
+            with self.subTest(kind=kind, cls="Cumulative"):
+                fig, cum = self._plot_cumulative(series)
+                self.assertNotIn("no finite values", self._texts(fig))
+                self.assertEqual(cum.n_infinite, 2)
+                expected = finite.drop(finite.index[[100, 9000]]).sum()
+                self.assertAlmostEqual(cum.cumulative["TA"].iloc[-1], expected, places=6)
+                self.assertTrue(np.isfinite(fig.axes[0].get_ylim()).all())
+            with self.subTest(kind=kind, cls="ScatterXY"):
+                fig, sc = self._plot_scatter(series)
+                self.assertNotIn("TA vs. x: no finite values", self._texts(fig))
+                self.assertEqual(sc.n_infinite, 2)
+                self.assertEqual(len(sc.xy_df), len(finite) - 2)
+                self.assertEqual(int(sc.xy_df_binned["_y"]["count"].sum()), len(finite) - 2)
+                self.assertTrue(np.isfinite(fig.axes[0].get_xlim()).all())
+                self.assertTrue(np.isfinite(fig.axes[0].get_ylim()).all())
+            with self.subTest(kind=kind, cls="ShiftedDistributionPlot"):
+                fig, sd = self._plot_shifted(series)
+                # Record 100 is in the reference year, record 9000 in the comparison year.
+                self.assertEqual((sd.n_ref_missing, sd.n_comp_missing), (1, 1))
+                self.assertTrue(np.isfinite(sd.breakpoints).all())
+                self.assertTrue(np.isfinite(sd._ref_kde).all())
+                self.assertTrue(np.isfinite(sd._comp_kde).all())
+                self.assertTrue(np.isfinite(fig.axes[0].get_xlim()).all())
+            with self.subTest(kind=kind, cls="HeatmapXYZ"):
+                fig, hm = self._plot_heatmap(kind)
+                self.assertNotIn(self.NOTE, self._texts(fig))
+                self.assertEqual(len(hm.x), 6)  # 5 x coordinates plus the closing edge
+                self.assertTrue(np.isfinite(hm.x).all())
+                self.assertEqual(int(np.isnan(hm.z).sum()), 2)  # the two infinite cells
+                self.assertTrue(np.isfinite(fig.axes[0].get_xlim()).all())
+            for method in ("plot", "plot_line"):
+                with self.subTest(kind=kind, cls=f"TreeRingPlot.{method}"):
+                    fig, tr = self._plot_treering(series, method)
+                    self.assertNotIn(self.NOTE, self._texts(fig))
+                    self.assertEqual(tr.n_infinite, 2)
+                    self.assertFalse(np.isinf(tr.grid).any())
+                    self.assertEqual(len(fig.axes), 2)  # polar axes and colorbar
+                    self.assertTrue(np.isfinite(fig.axes[1].get_ylim()).all())
 
     def test_no_finite_values_shows_a_note(self):
         for kind in ("allnan", "allinf"):
@@ -1925,3 +2021,23 @@ class TestL353NonFiniteValues(unittest.TestCase):
                 fig, _ = self._plot_ridgeline(series)
                 self.assertEqual(len(fig.axes), 1)
                 self.assertIn(self.NOTE, self._texts(fig))
+            with self.subTest(kind=kind, cls="Cumulative"):
+                fig, _ = self._plot_cumulative(series)
+                self.assertIn("no finite values", self._texts(fig))
+            with self.subTest(kind=kind, cls="ScatterXY"):
+                fig, sc = self._plot_scatter(series)
+                self.assertTrue(sc.xy_df.empty)
+                self.assertIn("TA vs. x: no finite values", self._texts(fig))
+            with self.subTest(kind=kind, cls="ShiftedDistributionPlot"):
+                fig, sd = self._plot_shifted(series)
+                self.assertEqual((sd.n_ref_used, sd.n_comp_used), (0, 0))
+                self.assertIn("No data in reference or comparison period", self._texts(fig))
+            with self.subTest(kind=kind, cls="HeatmapXYZ"):
+                fig, hm = self._plot_heatmap(kind)
+                self.assertIsNone(hm.p)
+                self.assertIn(self.NOTE, self._texts(fig))
+            for method in ("plot", "plot_line"):
+                with self.subTest(kind=kind, cls=f"TreeRingPlot.{method}"):
+                    fig, _ = self._plot_treering(series, method)
+                    self.assertEqual(len(fig.axes), 1)  # no colorbar
+                    self.assertIn(self.NOTE, self._texts(fig))

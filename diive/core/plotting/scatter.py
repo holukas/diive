@@ -316,6 +316,9 @@ class ScatterXY:
         by a third variable (z). Supports optional binning and aggregation for trend
         visualization with confidence intervals (median ± IQR or mean ± std).
 
+        Points with a missing (NaN) or infinite (+inf, -inf) x, y or z are left
+        out. Without any point left, :meth:`plot` shows the note "no finite values".
+
         Args:
             x: Series for x-axis
             y: Series for y-axis
@@ -367,10 +370,17 @@ class ScatterXY:
             df_list.append(z.rename(self._zc))
         self.xy_df = pd.concat(df_list, axis=1)
         self.xy_df = self.xy_df.dropna()
+        # A point with an infinite coordinate or colour value would make the
+        # axis or colour range infinite (L353).
+        is_inf = np.isinf(self.xy_df.select_dtypes('number').to_numpy(dtype=float)).any(axis=1)
+        self.n_infinite = int(is_inf.sum())
+        if self.n_infinite:
+            self.xy_df = self.xy_df[~is_inf]
 
         self.binagg = None if self.nbins == 0 else self.binagg
 
-        if self.nbins > 0:
+        # Without a point there is nothing to bin (L353).
+        if self.nbins > 0 and not self.xy_df.empty:
             self._databinning()
 
     def _databinning(self):
@@ -448,6 +458,14 @@ class ScatterXY:
               markersize: float = 40, alpha: float = 1.0, vmin: float = None, vmax: float = None):
         """Generate plot on axis"""
         nbins += 1  # To include zero
+
+        # No point left with finite x, y (and z): nothing to scatter and no
+        # range for the limits (L353).
+        if self.xy_df.empty:
+            pf.no_values_note(ax, f"{self.yname} vs. {self.xname}: no finite values")
+            style.apply(ax=ax, default_title=f"{self.yname} vs. {self.xname}",
+                        default_xlabel=self.xname, default_ylabel=self.yname)
+            return
 
         # Scatter plot with optional color
         if self.zname is not None:
