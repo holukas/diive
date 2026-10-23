@@ -1,6 +1,6 @@
 """
-GUI.TABS.FLUXCHAIN: FLUX POST-PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3 + L4.1)
-======================================================================================
+GUI.TABS.FLUXCHAIN: FLUX POST-PROCESSING CHAIN (Input + L2 + L3.1 + L3.2 + L3.3 + L4.1 + L4.2)
+=============================================================================================
 
 A guided tab for the Swiss-FluxNet flux post-processing chain. It wires the **Input**
 (site + flux column), **Level 2** (quality-flag tests), **Level 3.1** (single-point
@@ -35,7 +35,9 @@ can no longer be added to the dataset.
 **Level 4.1** gap-fills the per-scenario L3.3 flux: tick any of rf / xgb / mds
 (additive across methods — each replaces only its own previous result), pick
 rf/xgb predictor features and the MDS SW_IN / TA / VPD driver columns (each
-with an optional QC flag column, default none) and mode (diive / ONEFlux / REddyProc), and the
+with an optional QC flag column, default none), mode (diive / ONEFlux / REddyProc)
+and **Fill long gaps** (follows the mode, as ``fill_long_gaps=None``, until the
+user clicks it, and only a choice other than the mode default is passed), and the
 run fans out one gap-fill per USTAR scenario on the worker thread. The canvas
 then shows the method comparison (cumulative overlay or side-by-side heatmaps)
 via the library's `plot_cumulative_comparison(ax=...)` / `plot_gapfilled_heatmaps(fig=...)`,
@@ -43,6 +45,17 @@ and **Copy Python** switches to `level41_to_code`. With REF on at L3.3, L4.1 run
 MDS on all scenarios, then `run_level41_ustar_reference` (adds the CUT_REF /
 VUT_REF series), then rf / xgb. These leave out the 40 REF versions but include
 the scenario the REF maps to (the library's `select_scenarios`).
+
+**Level 4.2** partitions the NEE of each u* scenario into GPP and RECO with
+`run_level42_partitioning`: a method (nighttime / daytime) and a mode (ONEFlux /
+REddyProc), the driver columns that variant needs, and for the nighttime method
+(and daytime ONEFlux) the L4.1 method that gives the gap-filled NEE. Runs with
+other variants add up, as at L4.1. With the NEE REF on (L3.3 REF and L4.1 MDS),
+**Add GPP / RECO REF (ONEFlux)** also runs `run_level42_ustar_reference` for the
+variant, which adds ``GPP_<tag>_CUT_REF`` / ``RECO_<tag>_CUT_REF`` (or VUT) and
+reports the REF percentile per product and time resolution. **Copy Python**
+switches to `level42_to_code`. Re-running L4.1 starts from the container L4.2
+started from, so the partitioning of the old gap-filling goes.
 
 Thresholds with free labels from projects saved before the percentile form
 (e.g. ``CUT_NONE``) still run through `run_level33_constant_ustar`.
@@ -90,12 +103,14 @@ import diive as dv
 from diive.core.metadata import ATTRS_KEY, DERIVED, provenance_attr
 from diive.flux.postprocessingchain import (
     VM97_SUBTESTS, init_flux_data, level2_test_inputs, level31_storage_col,
-    level31_to_code, level32_to_code, level33_to_code, level41_to_code,
+    level31_to_code, level32_to_code, level33_to_code, level41_to_code, level42_to_code,
     make_level32_detector, make_level41_engineer, run_level2, run_level31,
     run_level32, run_level33_constant_ustar, run_level33_ustar_detection,
     run_level41_mds, run_level41_rf, run_level41_ustar_reference, run_level41_xgb,
-    ustar_scenario_labels,
+    run_level42_partitioning, run_level42_ustar_reference, ustar_scenario_labels,
 )
+from diive.flux.postprocessingchain.levels.level42 import partition_variant
+from diive.flux.partitioning import partitioning_inputs, partitioning_optional_inputs
 from diive.flux.lowres.common import detect_fluxbasevar
 from diive.gui import site, theme
 from diive.gui.tabs.base import DiiveTab
@@ -107,6 +122,10 @@ from diive.gui.widgets.copy_button import CopyPythonButton
 from diive.gui.widgets.driver_qc import QC_TIP, fill_qc_combo, qc_value, set_qc_value
 from diive.gui.widgets.feature_picker import FeaturePicker
 from diive.gui.widgets.mds_mode import make_mode_combo, mode_value, set_mode_value
+from diive.gui.widgets.partitioning_mode import (
+    combo_value, make_method_combo, set_combo_value,
+)
+from diive.gui.widgets.partitioning_mode import make_mode_combo as make_partition_mode_combo
 from diive.gui.widgets.flux_pipeline_rail import PipelineRail
 from diive.gui.widgets.mpl_canvas import MplCanvas
 from diive.gui.widgets.project_offset import ProjectUtcOffset, project_utc_offset
@@ -123,6 +142,7 @@ _STAGES = [
     ("L3.2", "Outliers"),
     ("L3.3", "USTAR"),
     ("L4.1", "Gap-filling"),
+    ("L4.2", "Partitioning"),
 ]
 
 #: Columns init_flux_data computes itself and rejects if already present.
@@ -171,6 +191,35 @@ _REF_TIP = (
     "Random Forest and XGBoost run after the REF selection, on the main scenarios "
     "and the scenario the REF maps to, not on the other REF versions.")
 
+#: L4.2 driver columns -> row label. The keys are run_level42_partitioning
+#: arguments. Which rows show depends on the method and mode.
+_L42_DRIVERS = (
+    ("ta", "TA measured (°C)"),
+    ("sw_in", "SW_IN measured (W m⁻²)"),
+    ("ta_f", "TA gap-filled (°C)"),
+    ("sw_in_f", "SW_IN gap-filled (W m⁻²)"),
+    ("vpd_f", "VPD gap-filled (kPa)"),
+)
+
+#: PartitioningNEE input name -> run_level42_partitioning driver argument.
+_L42_DRIVER_ARGS = {"ta": "ta", "sw_in": "sw_in", "ta_f": "ta_f",
+                    "sw_in_f": "sw_in_f", "vpd": "vpd_f"}
+
+#: Tooltip of the L4.2 GPP / RECO REF option.
+_REF42_TIP = (
+    "Select the REF of GPP and RECO as ONEFlux does (step ure). Partitions the 40 "
+    "REF versions of the NEE REF and the u* scenario at percentile 50 with this "
+    "method and mode, then selects one REF for GPP and one for RECO by model "
+    "efficiency, on half-hourly, daily, weekly, monthly and yearly values.\n\n"
+    "Needs the NEE REF: 'Add REF (ONEFlux)' in Level 3.3 and MDS in Level 4.1.\n"
+    "Slow: about 41 partitionings. Daytime ONEFlux takes minutes per year.\n\n"
+    "For the REddyProc modes, which ONEFlux does not run, the same selection is "
+    "applied to their results (a diive extension).")
+
+#: Line colours of the L4.2 preview (as in the NEE partitioning tab).
+_C_GPP = "#43A047"
+_C_RECO = "#E53935"
+
 
 def _label_percentile(label: str) -> float | None:
     """Percentile of a scenario label written as ``ustar_scenario_labels`` writes
@@ -201,6 +250,9 @@ class FluxChainTab(DiiveTab):
         self._df = None
         self._data = None        # the evolving container; each level appends to it
         self._reached = -1        # deepest stage index run on _data (-1 = none)
+        # The container L4.2 started from. Re-running L4.1 starts from it, so
+        # the partitioning of the old gap-filling goes with the confirm prompt.
+        self._l41_data = None
         self._running = False
         self._level_run_btns: dict[int, QPushButton] = {}
         self._level_add_btns: dict[int, QPushButton] = {}
@@ -243,7 +295,8 @@ class FluxChainTab(DiiveTab):
         lower = QHBoxLayout()
         self._pages = QStackedWidget()
         for page in (self._input_group(), self._level2_group(), self._level31_group(),
-                     self._level32_group(), self._level33_group(), self._level41_group()):
+                     self._level32_group(), self._level33_group(), self._level41_group(),
+                     self._level42_group()):
             self._pages.addWidget(page)
         # Combos with long item text (column names) would otherwise force the page
         # wider than the inspector, overflowing it (the left-clip). Cap their width
@@ -353,7 +406,7 @@ class FluxChainTab(DiiveTab):
     @staticmethod
     def _level_to_stage(level: str) -> int:
         """Map a reached level label to its rail card index (run reaches >= L3.1)."""
-        return {"3.1": 2, "3.2": 3, "3.3": 4, "4.1": 5}.get(level, 2)
+        return {"3.1": 2, "3.2": 3, "3.3": 4, "4.1": 5, "4.2": 6}.get(level, 2)
 
     def _stage_statuses(self) -> list[tuple[str, str]]:
         """One ``(pill_text, kind)`` per stage, derived from the live controls."""
@@ -381,6 +434,14 @@ class FluxChainTab(DiiveTab):
         else:
             l33 = ("off", "off")
         methods = self._level41_methods()
+        l42cfg = self._level42_cfg()
+        if l42cfg:
+            l42 = ("NT" if l42cfg["method"] == "nighttime" else "DT") + " · " \
+                + ("ONEFlux" if l42cfg["mode"] == "oneflux" else "REddyProc") \
+                + (" + REF" if l42cfg.get("ustar_reference") else "")
+            l42 = (l42, "set")
+        else:
+            l42 = ("off", "off")
         return [
             (fc or "—", "set" if fc else "todo"),
             (f"{n2} test" + ("s" if n2 != 1 else ""), "warn" if n2 == 0 else "set"),
@@ -388,6 +449,7 @@ class FluxChainTab(DiiveTab):
             (f"{n32} step" + ("s" if n32 != 1 else ""), "set") if n32 else ("none", "off"),
             l33,
             (" · ".join(methods), "set") if methods else ("off", "off"),
+            l42,
         ]
 
     def _refresh_rail(self, *_) -> None:
@@ -574,6 +636,16 @@ class FluxChainTab(DiiveTab):
                 allok = allok and ok
                 parts.append(f"{role} {'✓' if ok else '✗'}")
             self._set_marker(self.mds_mark, allok, "MDS drivers — " + "   ".join(parts))
+        # L4.2: the driver columns the selected method and mode need.
+        if hasattr(self, "l42_mark"):
+            parts, allok = [], True
+            for arg in self._l42_drivers():
+                c = self._l42_cols[arg].currentText().strip()
+                ok = bool(c) and c in cols
+                allok = allok and ok
+                parts.append(f"{arg} {'✓' if ok else '✗'}")
+            self._set_marker(self.l42_mark, allok,
+                             "Partitioning drivers: " + "   ".join(parts))
 
     def _signal_strength_options(self) -> QFormLayout:
         """Column + direction + threshold for the signal-strength (AGC) test."""
@@ -1263,6 +1335,19 @@ class FluxChainTab(DiiveTab):
             + "With REF (ONEFlux) on in Level 3.3, mode ONEFlux gives the REF "
               "ONEFlux would select.")
         form.addRow("Mode", self.mds_mode)
+        # Follows the mode (the library default) until the user clicks it.
+        self._mds_fill_user: bool | None = None
+        self.mds_fill = QCheckBox("Fill long gaps")
+        self.mds_fill.setToolTip(
+            "Off: runs of poorest-quality fills longer than 15 days are set missing "
+            "again, except for 15 days next to measured data, as in the ONEFlux "
+            "FLUXNET product.\nOn: every gap MDS can fill stays filled.\n\n"
+            "Default: off in mode ONEFlux, on in the other modes. The box follows "
+            "the mode until you change it.")
+        self.mds_fill.clicked.connect(self._on_mds_fill_clicked)
+        self.mds_mode.currentIndexChanged.connect(self._sync_mds_fill)
+        form.addRow(self.mds_fill)
+        self._sync_mds_fill()
         gv.addLayout(form)
         self.mds_mark = self._info_marker()
         gv.addWidget(self.mds_mark)
@@ -1272,6 +1357,19 @@ class FluxChainTab(DiiveTab):
         gv.addWidget(vpd_note)
         self._l41_mds = gb
         return gb
+
+    def _mds_fill_default(self) -> bool:
+        """``fill_long_gaps`` of the library for the selected MDS mode (None)."""
+        return mode_value(self.mds_mode) != "oneflux"
+
+    def _on_mds_fill_clicked(self, checked: bool) -> None:
+        self._mds_fill_user = bool(checked)
+
+    def _sync_mds_fill(self, *_) -> None:
+        """Show the user's choice, or the mode default when there is none."""
+        fill = self._mds_fill_default() if self._mds_fill_user is None \
+            else self._mds_fill_user
+        self.mds_fill.setChecked(fill)
 
     def _refresh_mds_qc_items(self, *_) -> None:
         """Refill the MDS QC combos, listing each driver's flag columns first."""
@@ -1346,6 +1444,9 @@ class FluxChainTab(DiiveTab):
             # Always written: the default changed from the plain mean to 'diive',
             # so the script states which one it used.
             mds["mode"] = mode_value(self.mds_mode)
+            # Only when it differs from the mode default (the library's None).
+            if self.mds_fill.isChecked() != self._mds_fill_default():
+                mds["fill_long_gaps"] = self.mds_fill.isChecked()
             for key, combo in self._mds_qc.items():  # only the flags that are set
                 col = qc_value(combo)
                 if col is not None:
@@ -1355,10 +1456,144 @@ class FluxChainTab(DiiveTab):
                 cfg["ustar_reference"] = True  # run_level41_ustar_reference after MDS
         return cfg
 
+    def _level42_group(self) -> QGroupBox:
+        box = QGroupBox("Level 4.2: NEE partitioning (optional)")
+        v = QVBoxLayout(box)
+        self.l42_enable = QCheckBox("Partition NEE into GPP and RECO")
+        self.l42_enable.setToolTip(
+            "Split the NEE of each u* scenario into gross primary production (GPP) "
+            "and ecosystem respiration (RECO). Requires Level 4.1.")
+        v.addWidget(self.l42_enable)
+        note = QLabel("One partitioning per u* scenario of Level 3.3 (with REF on: the "
+                      "main scenarios and the REF scenario). Each method and mode writes "
+                      "its own columns, so runs with other settings add up.")
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        v.addWidget(note)
+
+        self._l42_box = QWidget()
+        form = QFormLayout(self._l42_box)
+        form.setContentsMargins(0, 0, 0, 0)
+        self.l42_method = make_method_combo()
+        form.addRow("Method", self.l42_method)
+        self.l42_mode = make_partition_mode_combo()
+        form.addRow("Mode", self.l42_mode)
+        self._l42_cols: dict[str, QComboBox] = {}
+        for arg, label in _L42_DRIVERS:
+            combo = QComboBox()
+            combo.currentTextChanged.connect(self._refresh_levels_info)
+            form.addRow(label, combo)
+            self._l42_cols[arg] = combo
+        self.l42_gapfill = QComboBox()
+        self.l42_gapfill.addItems(["mds", "rf", "xgb"])
+        self.l42_gapfill.setToolTip(
+            "Which Level 4.1 gap-filled NEE the partitioning uses. The nighttime "
+            "method needs it for GPP. Daytime ONEFlux uses it for windows without "
+            "measured nighttime NEE. The method must have run in Level 4.1.")
+        form.addRow("Gap-filled NEE from", self.l42_gapfill)
+        self.l42_mark = self._info_marker()
+        form.addRow(self.l42_mark)
+        units = QLabel("Units: TA in °C, SW_IN in W m⁻², VPD in kPa.")
+        units.setWordWrap(True)
+        units.setStyleSheet(f"color: {_C_MUTED}; font-size: 11px;")
+        form.addRow(units)
+        self.l42_ref = QCheckBox("Add GPP / RECO REF (ONEFlux)")
+        self.l42_ref.setToolTip(_REF42_TIP)
+        form.addRow(self.l42_ref)
+        self.l42_ref_note = self._info_marker()
+        form.addRow(self.l42_ref_note)
+        self._l42_form = form
+        v.addWidget(self._l42_box)
+        v.addLayout(self._level_button_row(6, "Run Level 4.2"))
+
+        self.l42_enable.toggled.connect(self._sync_l42)
+        self.l42_enable.toggled.connect(self._update_run_label)
+        for combo in (self.l42_method, self.l42_mode):
+            combo.currentIndexChanged.connect(self._sync_l42)
+            combo.currentIndexChanged.connect(self._update_run_label)
+        self.l42_ref.toggled.connect(self._update_run_label)
+        # The REF option follows the NEE REF set in Level 3.3 and Level 4.1.
+        for cb in (self.l33_enable, self.l33_ref, self.l41_mds):
+            cb.toggled.connect(self._sync_l42)
+        self._sync_l42()
+        return box
+
+    def _l42_variant(self) -> str:
+        """The L4.2 variant token of the selected method and mode ('nt_of', ...)."""
+        return partition_variant(combo_value(self.l42_method), combo_value(self.l42_mode))
+
+    def _l42_drivers(self) -> tuple[str, ...]:
+        """The driver arguments the selected method and mode need, in row order."""
+        inputs = partitioning_inputs(combo_value(self.l42_method), combo_value(self.l42_mode))
+        return tuple(_L42_DRIVER_ARGS[k] for k in inputs if k in _L42_DRIVER_ARGS)
+
+    def _l42_uses_nee_f(self) -> bool:
+        """True when the selected variant reads an L4.1 gap-filled NEE."""
+        m, mo = combo_value(self.l42_method), combo_value(self.l42_mode)
+        return "nee_f" in partitioning_inputs(m, mo) + partitioning_optional_inputs(m, mo)
+
+    def _l42_ref_allowed(self) -> bool:
+        """The GPP / RECO REF needs the NEE REF: L3.3 REF on and L4.1 MDS ticked."""
+        return self._ref_on() and self.l41_mds.isChecked()
+
+    def _sync_l42(self, *_) -> None:
+        """Show the controls of the selected variant and gate the REF option."""
+        if not hasattr(self, "l42_ref_note"):
+            return  # fired while the page is built
+        self._l42_box.setVisible(self.l42_enable.isChecked())
+        needed = set(self._l42_drivers())
+        for arg, combo in self._l42_cols.items():
+            self._l42_form.setRowVisible(combo, arg in needed)
+        self._l42_form.setRowVisible(self.l42_gapfill, self._l42_uses_nee_f())
+        allowed = self._l42_ref_allowed()
+        self.l42_ref.setEnabled(allowed)
+        if allowed:
+            tag = self._l42_variant().upper()
+            text = (f"Adds GPP_{tag}_CUT_REF and RECO_{tag}_CUT_REF (VUT_REF with VUT "
+                    "thresholds). Partitions the 40 REF versions and the scenario at "
+                    "percentile 50 again, so the run takes about 41 times longer.")
+        else:
+            text = ("Needs the NEE REF: tick 'Add REF (ONEFlux)' in Level 3.3 and "
+                    "Marginal Distribution Sampling in Level 4.1.")
+        self._set_marker(self.l42_ref_note, allowed, text)
+        self._refresh_levels_info()
+
+    def _level42_cfg(self) -> dict | None:
+        """run/codegen config for L4.2 (``level42_cfg``), or None when L4.2 is off.
+
+        Holds the method, mode, the drivers that variant needs, the L4.1
+        gap-filled NEE where the variant reads one, and ``ustar_reference``
+        when the GPP / RECO REF is ticked and allowed."""
+        if not hasattr(self, "l42_enable") or not self.l42_enable.isChecked():
+            return None
+        cfg: dict = {"method": combo_value(self.l42_method),
+                     "mode": combo_value(self.l42_mode)}
+        for arg in self._l42_drivers():
+            cfg[arg] = self._l42_cols[arg].currentText().strip()
+        if self._l42_uses_nee_f():
+            cfg["gapfill_method"] = self.l42_gapfill.currentText()
+        if self.l42_ref.isChecked() and self._l42_ref_allowed():
+            cfg["ustar_reference"] = True
+        return cfg
+
+    def _l42_problem(self, l42: dict, l41_methods) -> str | None:
+        """Why an L4.2 run cannot start (missing drivers, or the nighttime method
+        without its L4.1 gap-filled NEE), or None."""
+        missing = [arg for arg in self._l42_drivers() if not l42.get(arg)]
+        if missing:
+            return ("Pick the Level 4.2 driver columns: " + ", ".join(missing) + ".")
+        method = l42.get("gapfill_method")
+        if l42["method"] == "nighttime" and method not in l41_methods:
+            return (f"The nighttime method needs the gap-filled NEE of Level 4.1 "
+                    f"method '{method}'. Run it in Level 4.1, or pick a method that ran.")
+        return None
+
     def _update_run_label(self, *_) -> None:
         # Reflects intent: L3.3 configured -> "3.3" even before an L3.2 step exists
         # (the run then surfaces the "needs an L3.2 test" requirement).
-        if self._level41_methods():
+        if self._level42_cfg():
+            deepest = "4.2"
+        elif self._level41_methods():
             deepest = "4.1"
         elif self.l33_enable.isChecked() and self._level33_kwargs():
             deepest = "3.3"
@@ -1433,13 +1668,19 @@ class FluxChainTab(DiiveTab):
                 "xgb_lr": self.xgb_lr,
                 "mds_ta_tol": self.mds_ta_tol, "mds_vpd_tol": self.mds_vpd_tol,
                 # After the drivers, which reorder these combos' items.
-                **{f"mds_{k}_qc": c for k, c in self._mds_qc.items()}}
+                **{f"mds_{k}_qc": c for k, c in self._mds_qc.items()},
+                "l42_enable": self.l42_enable, "l42_gapfill": self.l42_gapfill,
+                "l42_ref": self.l42_ref,
+                **{f"l42_{arg}": c for arg, c in self._l42_cols.items()}}
 
     def save_state(self) -> dict:
         from diive.gui.widgets.state_utils import save_controls
         controls = save_controls(self._fx_controls())
         controls["mds_mode"] = mode_value(self.mds_mode)  # the value, not the label
         controls["l33_method"] = self.l33_method.currentData()  # likewise
+        controls["mds_fill_long_gaps"] = self._mds_fill_user  # None = follow the mode
+        controls["l42_method"] = combo_value(self.l42_method)
+        controls["l42_mode"] = combo_value(self.l42_mode)
         return {"controls": controls,
                 "l2": {k: cb.isChecked() for k, cb in self.l2_checks.items()},
                 "l2_vm97": {k: cb.isChecked() for k, cb in self.l2_vm97_checks.items()},
@@ -1461,9 +1702,15 @@ class FluxChainTab(DiiveTab):
         # projects were filled with the plain mean: restore them to 'oneflux'.
         set_mode_value(self.mds_mode,
                        saved.get("mds_mode", "oneflux" if saved else None))
+        # Projects saved before the option follow the mode (the library default).
+        fill = saved.get("mds_fill_long_gaps")
+        self._mds_fill_user = None if fill is None else bool(fill)
+        self._sync_mds_fill()
         # Before the u* method choice the detection was the moving point bootstrap.
         set_ustar_method(self.l33_method,
                          saved.get("l33_method", "oneflux_mp" if saved else None))
+        set_combo_value(self.l42_method, saved.get("l42_method"))
+        set_combo_value(self.l42_mode, saved.get("l42_mode"))
         if str(saved.get("l33_mode", "")).startswith("Detect"):
             self.l33_mode.setCurrentIndex(1)  # older label "Detect (moving point, ...)"
         elif str(saved.get("l33_mode", "")).startswith("Constant"):
@@ -1500,6 +1747,7 @@ class FluxChainTab(DiiveTab):
         self._refresh_levels_info()
         self._sync_l33_mode()
         self._sync_l41_ref()
+        self._sync_l42()
         self._update_run_label()
 
     # --- data ---
@@ -1507,6 +1755,7 @@ class FluxChainTab(DiiveTab):
         self._df = df
         # New dataset: the chain output and the run progress no longer apply.
         self._data = None
+        self._l41_data = None
         self._reached = -1
         cols = [str(c) for c in df.columns]
         self.fluxcol.clear()
@@ -1541,6 +1790,11 @@ class FluxChainTab(DiiveTab):
             (self.mds_vpd, "VPD", None),
             (self.l33_swin, "SW_IN", "POT"),
             (self.l33_ta, "TA", None),
+            (self._l42_cols["ta"], "TA", None),
+            (self._l42_cols["sw_in"], "SW_IN", "POT"),
+            (self._l42_cols["ta_f"], "TA", None),
+            (self._l42_cols["sw_in_f"], "SW_IN", "POT"),
+            (self._l42_cols["vpd_f"], "VPD", None),
         ):
             combo.clear()
             combo.addItems(cols)
@@ -1690,8 +1944,9 @@ class FluxChainTab(DiiveTab):
     def _compute(self, df, init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
                  level32_steps: list[dict] | None = None,
                  level33_kwargs: dict | None = None,
-                 level41_cfg: dict | None = None):
-        """Init container, run L2 → 3.1 → (opt) 3.2 → (opt) 3.3 → (opt) 4.1."""
+                 level41_cfg: dict | None = None,
+                 level42_cfg: dict | None = None):
+        """Init container, run L2 → 3.1 → (opt) 3.2 → (opt) 3.3 → (opt) 4.1 → (opt) 4.2."""
         work = df.drop(columns=[c for c in _RESERVED if c in df.columns])
         data = init_flux_data(df=work, **init_kwargs)
         data = run_level2(data, **level2_settings)
@@ -1709,6 +1964,9 @@ class FluxChainTab(DiiveTab):
             data = self._run_level33(data, level33_kwargs)
         if level41_cfg:
             data = self._run_level41(data, level41_cfg)
+        if level42_cfg:
+            self._l41_data = data  # a later L4.1 re-run starts from here
+            data = self._run_level42(data, level42_cfg)
         return data
 
     @staticmethod
@@ -1746,7 +2004,7 @@ class FluxChainTab(DiiveTab):
             data = ml(data)
         if "mds" in methods:
             mds = cfg["mds"]
-            extra = {k: mds[k] for k in ("ta_tol", "vpd_tol", "mode",
+            extra = {k: mds[k] for k in ("ta_tol", "vpd_tol", "mode", "fill_long_gaps",
                                          "swin_qc", "ta_qc", "vpd_qc")
                      if k in mds}
             data = run_level41_mds(data, swin=mds["swin"], ta=mds["ta"], vpd=mds["vpd"],
@@ -1754,6 +2012,16 @@ class FluxChainTab(DiiveTab):
         if with_ref:
             data = run_level41_ustar_reference(data, verbose=False)
             data = ml(data)
+        return data
+
+    @staticmethod
+    def _run_level42(data, cfg: dict):
+        """Run the L4.2 partitioning, then the GPP / RECO REF of the same variant
+        with the same drivers when ``cfg['ustar_reference']`` is set."""
+        kwargs = {k: v for k, v in cfg.items() if k != "ustar_reference"}
+        data = run_level42_partitioning(data, **kwargs)
+        if cfg.get("ustar_reference"):
+            data = run_level42_ustar_reference(data, verbose=0, **kwargs)
         return data
 
     def _run(self) -> None:
@@ -1789,24 +2057,36 @@ class FluxChainTab(DiiveTab):
                 "Random Forest / XGBoost need at least one feature. Select "
                 "predictor columns in the Level 4.1 feature list.")
             return
+        l42 = self._level42_cfg()
+        if l42 and not l41:
+            self.summary.setPlainText(
+                "Level 4.2 (partitioning) requires Level 4.1 (gap-filling). Tick a "
+                "Level 4.1 method, or turn Level 4.2 off.")
+            return
+        problem = self._l42_problem(l42, l41["methods"]) if l42 else None
+        if problem:
+            self.summary.setPlainText(problem)
+            return
         if self._site_missing():
             return
-        deepest = "4.1" if l41 else ("3.3" if l33 else ("3.2" if steps else "3.1"))
+        deepest = "4.2" if l42 else (
+            "4.1" if l41 else ("3.3" if l33 else ("3.2" if steps else "3.1")))
         # Run-all rebuilds from scratch to `deepest`; any already-computed level
         # beyond it is cascaded away. Confirm before discarding that real work.
         if not self._confirm_discard(self._level_to_stage(deepest)):
             return
         self._set_running(True)
         self.summary.setPlainText(f"Running Level 2 → Level {deepest}…")
+        self._l41_data = None
         threading.Thread(
-            target=self._worker, args=(self._df, ik, l2, l31, steps, l33, l41),
+            target=self._worker, args=(self._df, ik, l2, l31, steps, l33, l41, l42),
             daemon=True).start()
 
     def _worker(self, df, init_kwargs, level2_settings, level31_kwargs, level32_steps,
-                level33_kwargs, level41_cfg=None) -> None:
+                level33_kwargs, level41_cfg=None, level42_cfg=None) -> None:
         try:
             data = self._compute(df, init_kwargs, level2_settings, level31_kwargs,
-                                  level32_steps, level33_kwargs, level41_cfg)
+                                  level32_steps, level33_kwargs, level41_cfg, level42_cfg)
         except Exception as err:
             self._sig.failed.emit(str(err))
             return
@@ -1828,8 +2108,22 @@ class FluxChainTab(DiiveTab):
             return  # user declined to discard downstream results
         self._set_running(True)
         self.summary.setPlainText(f"Running {_STAGES[idx][0]} — {_STAGES[idx][1]}…")
-        threading.Thread(target=self._level_worker, args=(plan, self._data, self._df),
+        threading.Thread(target=self._level_worker,
+                         args=(plan, self._level_base(idx), self._df),
                          daemon=True).start()
+
+    def _level_base(self, idx: int):
+        """The container a single-level run starts from.
+
+        The first L4.2 run on an L4.1 result keeps that result. Re-running
+        L4.1 after L4.2 starts from it, so the partitioning of the old
+        gap-filling is discarded as the confirm prompt says (the library keeps
+        L4.2 through an L4.1 re-run, L4.2 being additive)."""
+        if idx == 6 and self._reached == 5:
+            self._l41_data = self._data
+        if idx == 5 and self._reached >= 6 and self._l41_data is not None:
+            return self._l41_data
+        return self._data
 
     def _level_plan(self, idx: int) -> dict | None:
         """Collect + validate the kwargs for a single level; None blocks the run."""
@@ -1857,6 +2151,8 @@ class FluxChainTab(DiiveTab):
                 self.summary.setPlainText(self._l33_problem())
                 return None
             return {"idx": 4, "kind": "level33", "kwargs": l33}
+        if idx == 6:
+            return self._level42_plan()
         # idx == 5
         l41 = self._level41_cfg()
         if not l41 or self._ref_needs_mds(l41):
@@ -1874,6 +2170,25 @@ class FluxChainTab(DiiveTab):
                 "predictor columns in the Level 4.1 feature list.")
             return None
         return {"idx": 5, "kind": "level41", "cfg": l41}
+
+    def _level42_plan(self) -> dict | None:
+        """Validate a single L4.2 run on the current L4.1 output."""
+        l42 = self._level42_cfg()
+        if not l42:
+            self.summary.setPlainText("Tick 'Partition NEE into GPP and RECO' first.")
+            return None
+        ran = sorted(self._data.gapfilled_cols()) if self._data is not None else []
+        problem = self._l42_problem(l42, ran)
+        if problem:
+            self.summary.setPlainText(problem)
+            return None
+        if l42.get("ustar_reference") and (
+                self._data is None or self._data.levels.ustar_reference is None):
+            self.summary.setPlainText(
+                "The GPP / RECO REF needs the NEE REF. Run Level 4.1 again with "
+                "'Add REF (ONEFlux)' on in Level 3.3 and MDS ticked.")
+            return None
+        return {"idx": 6, "kind": "level42", "cfg": l42}
 
     def _ref_needs_mds(self, l41: dict | None) -> bool:
         """Refuse an L4.1 run without a method, or with REF on but no MDS (the
@@ -1906,8 +2221,10 @@ class FluxChainTab(DiiveTab):
                 data = run_level32(data, outlier_detector=sod)
             elif kind == "level33":
                 data = self._run_level33(base, plan["kwargs"])
-            else:  # level41
+            elif kind == "level41":
                 data = self._run_level41(base, plan["cfg"])
+            else:  # level42
+                data = self._run_level42(base, plan["cfg"])
         except Exception as err:
             self._sig.failed.emit(str(err))
             return
@@ -1918,6 +2235,8 @@ class FluxChainTab(DiiveTab):
     def _reached_from_data(data) -> int:
         """Deepest stage index materialised in a container (for run-all)."""
         ids = list(getattr(data, "level_ids", []) or [])
+        if data.levels.has_level42():
+            return 6
         if data.gapfilled_cols():
             return 5
         for lid, stage in (("L3.3", 4), ("L3.2", 3), ("L3.1", 2), ("L2", 1)):
@@ -1961,7 +2280,24 @@ class FluxChainTab(DiiveTab):
     def _update_report(self, idx: int, data) -> None:
         """Fill the QCF report panel with the screening report for this level."""
         qcf = self._level_qcf(idx, data)
-        ref = getattr(data.levels, "ustar_reference", None) if idx >= 5 else None
+        if idx >= 6:
+            # L4.2: the GPP / RECO REF of the shown variant, if it was selected.
+            variant = self._l42_shown_variant(data)
+            prec = data.levels.partitioning_reference.get(variant) if variant else None
+            if prec is None:
+                self.report.setPlainText("")
+                self.report_copy.setEnabled(False)
+                return
+            text = (self._ref42_text(prec) + "\n"
+                    + "\n\n".join(f"{prod}:\n{prec.results[prod].summary()}"
+                                  for prod in ("GPP", "RECO"))
+                    + "\n\nThe u* filter of diive keeps the first record after a low-u* "
+                    "period and ONEFlux removes it. The REF can therefore differ "
+                    "from ONEFlux's at some time resolutions.")
+            self.report.setPlainText(text)
+            self.report_copy.setEnabled(True)
+            return
+        ref = getattr(data.levels, "ustar_reference", None) if idx == 5 else None
         if ref is not None:
             # L4.1 with REF: the selection per time resolution instead of a QCF.
             text = (self._ref_text(ref) + "\n" + ref.result.summary() + "\n\n"
@@ -1987,6 +2323,9 @@ class FluxChainTab(DiiveTab):
 
     def _render_stage(self, idx: int, data) -> None:
         """Render the diagnostic for the stage that just completed."""
+        if idx >= 6 and data.levels.has_level42():
+            self._show_level42(data)
+            return
         if idx >= 5 and data.gapfilled_cols():
             self._show_level41(data)
             return
@@ -2124,6 +2463,72 @@ class FluxChainTab(DiiveTab):
                     wrap=True, transform=ax.transAxes)
         self.canvas.draw()
 
+    def _l42_shown_variant(self, data) -> str | None:
+        """The L4.2 variant to show: the selected one if it ran, else the first."""
+        variants = data.levels.level42_variants()
+        if not variants:
+            return None
+        selected = self._l42_variant()
+        return selected if selected in variants else next(iter(variants))
+
+    @staticmethod
+    def _ref42_text(prec) -> str:
+        """GPP / RECO REF as text: REF u* percentile per product and time resolution."""
+        lines = []
+        for prod in ("GPP", "RECO"):
+            res = prec.results[prod]
+            per = "  ".join(f"{agg} {p:g}" if p == p else f"{agg} none"
+                            for agg, p in res.percentile.items())
+            lines.append(f"{prec.columns[prod]}: REF u* percentile per time "
+                         f"resolution: {per}.")
+        return "\n".join(lines) + "\n"
+
+    def _show_level42(self, data) -> None:
+        """Render GPP and RECO of the shown variant: daily means and cumulative sums
+        of one u* scenario, plus the GPP / RECO REF when it was selected."""
+        variants = data.levels.level42_variants()
+        variant = self._l42_shown_variant(data)
+        scenarios = list(variants[variant])
+        nee_ref = getattr(data.levels, "ustar_reference", None)
+        first = nee_ref.scenario if nee_ref is not None and nee_ref.scenario in scenarios \
+            else scenarios[0]
+        tag = variant.upper()
+        prec = data.levels.partitioning_reference.get(variant)
+        others = [v.upper() for v in variants if v != variant]
+        self.summary.setPlainText(
+            f"Level 4.2 done: partitioning {tag}"
+            + (f" (also in the chain: {', '.join(others)})" if others else "") + ".\n"
+            + f"USTAR scenarios: {', '.join(scenarios)} (preview: {first}).\n"
+            + (self._ref42_text(prec) if prec is not None else "")
+            + "Use 'Copy Python' for the reproducible script.")
+        lines = [(f"GPP_{tag}_{first}", _C_GPP, "-"), (f"RECO_{tag}_{first}", _C_RECO, "-")]
+        if prec is not None:
+            lines += [(prec.columns["GPP"], _C_GPP, "--"), (prec.columns["RECO"], _C_RECO, "--")]
+        self.canvas.auto_layout = True  # may have been disabled by an L4.1 heatmap
+        ax_ts, ax_cum = self.canvas.new_axes(2, orientation="vertical", sharex=True)
+        try:
+            for col, color, ls in lines:
+                s = data.fpc_df.get(col)
+                if s is None:
+                    continue
+                d = s.resample("1D").mean()
+                ax_ts.plot(d.index, d.to_numpy(), color=color, ls=ls, lw=1.0,
+                           label=f"{col} (daily mean)")
+                c = s.fillna(0).cumsum()
+                ax_cum.plot(c.index, c.to_numpy(), color=color, ls=ls, lw=1.0,
+                            label=f"Σ {col}")
+            for ax in (ax_ts, ax_cum):
+                ax.axhline(0, color="#B0BEC5", lw=0.6, zorder=0)
+                ax.legend(frameon=False, fontsize=8)
+            ax_ts.set_ylabel("umol m-2 s-1")
+            ax_ts.set_title(f"L4.2 {tag}, {first}: daily means", fontsize=9)
+            ax_cum.set_ylabel("cumulative")
+            ax_cum.set_title("Cumulative sum", fontsize=9)
+        except Exception as err:
+            ax_ts.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
+                       wrap=True, transform=ax_ts.transAxes)
+        self.canvas.draw()
+
     def _on_failed(self, msg: str) -> None:
         self._set_running(False)
         self.summary.setPlainText(f"Failed:\n{msg}")
@@ -2182,7 +2587,10 @@ class FluxChainTab(DiiveTab):
     # --- pushing a level's results back into the dataset ---
     #: Stage index -> the idstr(s) keying that level's columns in added_columns.
     _LEVEL_IDSTRS = {1: ("L2",), 2: ("L3.1",), 3: ("L3.2",), 4: ("L3.3",),
-                     5: ("L4.1_mds", "L4.1_rf", "L4.1_xgb", "L4.1_ref")}
+                     5: ("L4.1_mds", "L4.1_rf", "L4.1_xgb", "L4.1_ref"),
+                     6: ("L4.2_nt_of", "L4.2_nt_rp", "L4.2_dt_rp", "L4.2_dt_of",
+                         "L4.2_ref_nt_of", "L4.2_ref_nt_rp", "L4.2_ref_dt_rp",
+                         "L4.2_ref_dt_of")}
 
     def _level_output_columns(self, idx: int, data) -> list[str]:
         """The fpc_df columns a level appended (flags / QCF / gap-filled)."""
@@ -2250,6 +2658,9 @@ class FluxChainTab(DiiveTab):
         ik, l2, l31 = self._init_kwargs(), self._level2_settings(), self._level31_kwargs()
         l33 = self._level33_kwargs()
         l41 = self._level41_cfg()
+        l42 = self._level42_cfg()
+        if l42 and l41 and l33 and self._steps:
+            return level42_to_code(ik, l2, l31, self._steps, l33, l41, l42, load_hint=hint)
         if l41 and l33 and self._steps:
             return level41_to_code(ik, l2, l31, self._steps, l33, l41, load_hint=hint)
         if l33 and self._steps:

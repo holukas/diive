@@ -1123,10 +1123,12 @@ ICOS products. All timestamps use the UTC offset from Project settings.
 ### Flux post-processing chain
 
 A guided workspace for the flux post-processing chain, covering **Input + Level 2 +
-Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling). Pick the flux column,
+Level 3.1 + Level 3.2 + Level 3.3 + Level 4.1** (gap-filling) **+ Level 4.2** (NEE
+partitioning). Pick the flux column,
 choose which Level-2 quality tests to run, set the Level-3.1 storage
 correction, optionally build a Level-3.2 outlier-detection chain, apply Level-3.3
-USTAR filtering, run gap-filling, then run the chain. The accepted (QCF-filtered)
+USTAR filtering, run gap-filling, optionally partition NEE into GPP and RECO, then
+run the chain. The accepted (QCF-filtered)
 flux of the deepest level shows as a heatmap. **Copy Python** puts the exact,
 reproducible diive script for what you did on the clipboard, so a point-and-click
 run stays scriptable.
@@ -1202,7 +1204,33 @@ Each driver also has an optional **QC flag** column (default **(none)**), as in 
 as similar conditions, as in ONEFlux's NEE gap-filling. The flag column must be in the
 loaded dataset. **Mode** chooses how the fill is averaged, as in the **MDS
 gap-filling** tab (default **diive**). Projects saved before this option load as
-**ONEFlux**, the plain mean they were filled with.
+**ONEFlux**, the plain mean they were filled with. **Fill long gaps** follows the
+mode until you change it: off for **ONEFlux**, on for the other modes. Off, runs of
+poorest-quality fills longer than 15 days are set missing again, except for 15 days
+next to measured data, as in the ONEFlux FLUXNET product. The REF selection and
+Level 4.2 still work on the filled gaps, as in ONEFlux.
+
+**Level 4.2: NEE partitioning** (optional) splits the NEE of each USTAR scenario
+into GPP and RECO. Tick **Partition NEE into GPP and RECO**, then pick the
+**Method** (nighttime or daytime) and the **Mode** (ONEFlux or REddyProc), as in the
+**NEE partitioning** tab. The page shows only the driver columns the chosen variant
+needs (measured and gap-filled TA, SW_IN and VPD, VPD in kPa). The nighttime method
+and daytime ONEFlux also read the gap-filled NEE of a Level 4.1 method (**Gap-filled
+NEE from**, default MDS), which must have run. Level 4.2 needs Level 4.1. With REF
+on, it partitions the main scenarios and the REF scenario. A second run with another
+method or mode adds its columns (`GPP_NT_OF_CUT_50`, `RECO_DT_RP_CUT_50`, ...) to the
+earlier ones. Running Level 4.1 again discards the Level 4.2 results. The plot shows
+daily means and cumulative sums of GPP and RECO for one scenario (the REF scenario
+when there is one).
+
+**Add GPP / RECO REF (ONEFlux)** selects the REF of GPP and RECO as ONEFlux does. It
+is available when the NEE REF is on: **Add REF (ONEFlux)** at Level 3.3 and MDS at
+Level 4.1. The run partitions the 40 REF versions and the scenario at percentile 50
+again with the same method, mode and drivers, so it takes about 41 times longer
+(daytime ONEFlux: minutes per year). It adds `GPP_<variant>_CUT_REF` and
+`RECO_<variant>_CUT_REF` (or `VUT_REF`). The status line shows the REF u\* percentile
+of each product per time resolution, the report panel the full selection.
+**Add to dataset** of Level 4.2 adds the partitioning and REF columns.
 
 > Needs eddy-covariance input with the raw EddyPro columns (FC, USTAR, the `*_TEST`
 > flags). The bundled CH-DAV example is a processed product and won't run the chain,

@@ -3837,6 +3837,155 @@ def test_flux_chain_tab_level33_reference(app, configured_site):
     assert tab2._level41_cfg()["ustar_reference"] is True
 
 
+def test_flux_chain_tab_level42_controls(app, configured_site):
+    # L4.2 partitioning: the driver rows follow method and mode, the config
+    # holds only what the variant needs, and Copy Python renders
+    # run_level42_partitioning. Run-all refuses the nighttime method without
+    # its L4.1 gap-filled NEE.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    assert tab._stage_statuses()[6] == ("off", "off")
+    assert tab._level42_cfg() is None
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    tab.l42_enable.setChecked(True)
+    assert tab._l42_box.isVisibleTo(tab._pages.widget(6))
+    assert "4.2" in tab.run_btn.text()
+    # Nighttime ONEFlux (default): measured TA / SW_IN, gap-filled TA, L4.1 NEE.
+    cfg = tab._level42_cfg()
+    assert cfg == {"method": "nighttime", "mode": "oneflux", "ta": "TA_T1_47_1_gfXG",
+                   "sw_in": "SW_IN_T1_47_1_gfXG", "ta_f": "TA_T1_47_1_gfXG",
+                   "gapfill_method": "mds"}
+    assert tab._stage_statuses()[6] == ("NT · ONEFlux", "set")
+    assert tab._l42_form.isRowVisible(tab.l42_gapfill)
+    assert not tab._l42_form.isRowVisible(tab._l42_cols["vpd_f"])
+    # Daytime REddyProc: gap-filled drivers only, no L4.1 NEE.
+    set_combo_value(tab.l42_method, "daytime")
+    set_combo_value(tab.l42_mode, "reddyproc")
+    cfg = tab._level42_cfg()
+    assert set(cfg) == {"method", "mode", "ta_f", "sw_in_f", "vpd_f"}
+    assert not tab._l42_form.isRowVisible(tab.l42_gapfill)
+    assert not tab._l42_form.isRowVisible(tab._l42_cols["ta"])
+    assert tab._l42_form.isRowVisible(tab._l42_cols["vpd_f"])
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "data = run_level42_partitioning(" in code
+    assert "method='daytime'" in code and "mode='reddyproc'" in code
+    assert "vpd_f='VPD_T1_47_1_gfXG'" in code
+    assert "run_level42_ustar_reference" not in code
+
+    # Without the NEE REF the GPP / RECO REF stays off, also when ticked.
+    assert not tab.l42_ref.isEnabled()
+    tab.l42_ref.setChecked(True)
+    assert "ustar_reference" not in tab._level42_cfg()
+    assert "Needs the NEE REF" in tab.l42_ref_note.text()
+
+    # Nighttime with the gap-filled NEE of a method that does not run.
+    set_combo_value(tab.l42_method, "nighttime")
+    set_combo_value(tab.l42_mode, "oneflux")
+    tab.l42_gapfill.setCurrentText("rf")
+    tab._run()
+    assert "needs the gap-filled NEE of Level 4.1 method 'rf'" in tab.summary.toPlainText()
+    assert not tab._running
+
+    # Saved state round trip (method / mode as values, drivers, REF tick).
+    set_combo_value(tab.l42_method, "daytime")
+    state = tab.save_state()
+    assert state["controls"]["l42_method"] == "daytime"
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2.l42_enable.isChecked() and tab2.l42_ref.isChecked()
+    assert tab2._level42_cfg() == tab._level42_cfg()
+
+
+def test_flux_chain_tab_level42_reference(app, configured_site):
+    # L4.2 with the GPP / RECO REF: the option enables with the NEE REF, the
+    # run adds GPP_DT_OF_CUT_REF / RECO_DT_OF_CUT_REF next to the partitioning
+    # columns (daytime ONEFlux: the nighttime method leaves one month
+    # unpartitioned), the REF percentiles per time resolution are shown, the columns
+    # reach the dataset and Copy Python renders run_level42_ustar_reference.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.flux.lowres.ustar_reference import ONEFLUX_REF_PERCENTILES
+    from diive.flux.postprocessingchain import ustar_scenario_labels
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    emitted = {}
+    tab.featuresCreated.connect(lambda d: emitted.update(df=d))
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    pcts = [50] + list(ONEFLUX_REF_PERCENTILES)
+    tab._ustar = list(zip([0.15] + [0.05 + 0.002 * p for p in ONEFLUX_REF_PERCENTILES],
+                          ustar_scenario_labels("CUT", pcts), strict=True))
+    tab.l42_enable.setChecked(True)
+    set_combo_value(tab.l42_method, "daytime")
+    tab.l42_ref.setChecked(True)
+    assert not tab.l42_ref.isEnabled()
+    tab.l33_ref.setChecked(True)
+    assert not tab.l42_ref.isEnabled()      # MDS not ticked yet
+    tab.l41_mds.setChecked(True)
+    assert tab.l42_ref.isEnabled()
+    assert "GPP_DT_OF_CUT_REF" in tab.l42_ref_note.text()
+    cfg = tab._level42_cfg()
+    assert cfg["ustar_reference"] is True
+    assert tab._stage_statuses()[6] == ("DT · ONEFlux + REF", "set")
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    order = [code.index(s) for s in ("data = run_level41_ustar_reference(data)",
+                                     "data = run_level42_partitioning(",
+                                     "data = run_level42_ustar_reference(")]
+    assert order == sorted(order)
+
+    def run(idx):
+        plan = tab._level_plan(idx)
+        assert plan is not None, tab.summary.toPlainText()
+        tab._level_worker(plan, tab._level_base(idx), tab._df)
+        QApplication.processEvents()
+        assert "Failed" not in tab.summary.toPlainText(), tab.summary.toPlainText()
+
+    for idx in range(6):            # through L4.1 with the NEE REF
+        run(idx)
+    assert tab._data.levels.ustar_reference is not None
+    l41_data = tab._data
+    run(6)
+    data = tab._data
+    assert tab._reached == 6 and tab.rail._cards[6]._reached
+    rec = data.levels.partitioning_reference["dt_of"]
+    assert rec.columns == {"GPP": "GPP_DT_OF_CUT_REF", "RECO": "RECO_DT_OF_CUT_REF"}
+    for col in rec.columns.values():
+        assert data.fpc_df[col].notna().sum() > 0
+    assert "GPP_DT_OF_CUT_50" in data.fpc_df.columns
+    text = tab.summary.toPlainText()
+    assert "Level 4.2 done: partitioning DT_OF" in text
+    p = rec.results["GPP"].percentile["HH"]
+    assert f"GPP_DT_OF_CUT_REF: REF u* percentile per time resolution: HH {p:g}" in text
+    assert "REF u* percentile (ONEFlux ure" in tab.report.toPlainText()
+    assert len(tab.canvas.fig.axes) == 2 and tab.canvas.fig.axes[0].lines
+    assert not [t for a in tab.canvas.fig.axes for t in a.texts
+                if "Cannot plot" in t.get_text()]
+
+    # The REF columns reach the dataset with the partitioning columns.
+    assert tab._level_add_btns[6].isEnabled()
+    tab._add_level(6)
+    QApplication.processEvents()
+    for col in ("GPP_DT_OF_CUT_REF", "RECO_DT_OF_CUT_REF", "GPP_DT_OF_CUT_50"):
+        assert col in emitted["df"].columns
+
+    # Re-running L4.1 starts from the container L4.2 started from.
+    base = tab._level_base(5)
+    assert base is l41_data and not base.levels.has_level42()
+
+
 def test_ustar_detection_tab(app):
     # Standalone USTAR detection tab: single seasonal detection (moving point)
     # + bootstrap over the years (UstarThresholdDetection), results into table + plot.
@@ -4516,6 +4665,55 @@ def test_flux_chain_tab_level41_mds_mode(app, monkeypatch, configured_site):
     tab3.restore_state(dict(state, controls={k: v for k, v in state["controls"].items()
                                              if k != "mds_mode"}))
     assert tab3.mds_mode.currentData() == "oneflux"
+
+
+def test_flux_chain_tab_level41_mds_fill_long_gaps(app, monkeypatch, configured_site):
+    # "Fill long gaps" follows the MDS mode (the library default None) until
+    # the user clicks it. Only a choice that differs from the mode default
+    # reaches run_level41_mds and the script. The choice round-trips.
+    import diive.gui.tabs.fluxchain as fc
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    assert tab.mds_fill.isChecked()                     # mode diive
+    tab.mds_mode.setCurrentText("ONEFlux (bit for bit)")
+    assert not tab.mds_fill.isChecked()                 # follows the mode
+    assert "fill_long_gaps" not in tab._level41_cfg()["mds"]
+    assert "fill_long_gaps" not in tab._code()
+
+    tab.mds_fill.click()                                # the user keeps them filled
+    assert tab.mds_fill.isChecked()
+    cfg = tab._level41_cfg()
+    assert cfg["mds"]["fill_long_gaps"] is True
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "fill_long_gaps=True," in code
+    seen = []
+    monkeypatch.setattr(fc, "run_level41_mds", lambda data, **kw: seen.append(kw) or data)
+    tab._run_level41("data", cfg)
+    assert seen[-1]["fill_long_gaps"] is True
+    tab.mds_mode.setCurrentText("REddyProc")            # the choice stays
+    assert tab.mds_fill.isChecked() and "fill_long_gaps" not in tab._level41_cfg()["mds"]
+    tab.mds_mode.setCurrentText("ONEFlux (bit for bit)")
+
+    state = tab.save_state()
+    assert state["controls"]["mds_fill_long_gaps"] is True
+    tab2 = FluxChainTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2.mds_fill.isChecked()
+    assert tab2._level41_cfg()["mds"]["fill_long_gaps"] is True
+    # A project saved before the option follows the mode.
+    tab3 = FluxChainTab(); tab3.widget(); tab3.on_data_loaded(df)
+    tab3.restore_state(dict(state, controls={k: v for k, v in state["controls"].items()
+                                             if k != "mds_fill_long_gaps"}))
+    assert tab3.mds_mode.currentData() == "oneflux" and not tab3.mds_fill.isChecked()
 
 
 def test_stepwise_method_params_run_on_detector(app):
@@ -7454,7 +7652,54 @@ def test_gapfilling_mds_tab_mode(app, example_year):
     assert tab3._method_kwargs()["mode"] == "diive"
 
 
-_PART_VARIANTS = (("nighttime", "oneflux", "NT_OF"), ("nighttime", "reddyproc", "NT_RP"),
+def test_gapfilling_mds_tab_fill_long_gaps(app, example_year):
+    # 'Fill long gaps' follows the mode (unchecked for ONEFlux, L397), reaches
+    # FluxMDS and Copy Python, and a saved choice survives the mode restore.
+    import numpy as np
+    from diive.gui.tabs.gapfilling_mds import MdsGapFillingTab
+    target = "NEE_CUT_REF_orig"
+    df = example_year.loc["2021-03":"2021-10", [target, "Rg_f", "Tair_f", "VPD_f"]].copy()
+    # A 60-day gap in flux and drivers: the middle is filled with the poorest quality.
+    df.loc["2021-06-01":"2021-07-30"] = np.nan
+    tab = MdsGapFillingTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    tab._set_target(target)
+    for key, col in (("swin", "Rg_f"), ("ta", "Tair_f"), ("vpd", "VPD_f")):
+        tab._combos[key].setCurrentText(col)
+
+    assert tab.fill_long_gaps.isChecked()  # diive mode
+    tab.mode.setCurrentText("ONEFlux (bit for bit)")
+    assert not tab.fill_long_gaps.isChecked()
+    assert tab._method_kwargs()["fill_long_gaps"] is False
+    assert "fill_long_gaps=False," in tab._python_code()
+
+    work = df.copy()
+    removed = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                   tab._method_kwargs())
+    mask = removed[3].long_gap_mask_
+    assert mask.any()
+    assert removed[2][mask].isna().all()
+    tab.fill_long_gaps.setChecked(True)
+    kept = tab._compute_payload(work, target, "Rg_f", "Tair_f", "VPD_f",
+                                tab._method_kwargs())
+    assert kept[2][mask].notna().all()
+    assert kept[2][~mask].equals(removed[2][~mask])
+
+    # ONEFlux with long gaps filled round-trips, older projects follow the mode.
+    state = tab.save_state()
+    assert state["controls"]["fill_long_gaps"] is True
+    tab2 = MdsGapFillingTab(); tab2.widget(); tab2.on_data_loaded(df)
+    tab2.restore_state(state)
+    assert tab2._method_kwargs()["mode"] == "oneflux"
+    assert tab2.fill_long_gaps.isChecked()
+    old = {k: v for k, v in state["controls"].items() if k != "fill_long_gaps"}
+    tab3 = MdsGapFillingTab(); tab3.widget(); tab3.on_data_loaded(df)
+    tab3.restore_state({"target": target, "controls": old})
+    assert not tab3.fill_long_gaps.isChecked()
+
+
+_PART_VARIANTS =(("nighttime", "oneflux", "NT_OF"), ("nighttime", "reddyproc", "NT_RP"),
                   ("daytime", "oneflux", "DT_OF"), ("daytime", "reddyproc", "DT_RP"))
 
 #: The example columns each partitioning input maps to.

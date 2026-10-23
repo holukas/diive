@@ -440,7 +440,21 @@ class MdsGapFillingTab(DiiveTab):
         f.addRow("Min samples for mean", self.avg_min_n_vals)
         self.mode = make_mode_combo()
         f.addRow("Mode", self.mode)
+        self.fill_long_gaps = QCheckBox("Fill long gaps")
+        self.fill_long_gaps.setToolTip(
+            "Checked: every gap MDS can fill stays filled.\n\n"
+            "Unchecked: in runs of poorest-quality fills longer than 15 days, the "
+            "fill is set missing again, except for 15 days next to the measured "
+            "data, as in ONEFlux's FLUXNET product.\n\n"
+            "Follows the mode: unchecked for ONEFlux, checked for diive and REddyProc.")
+        self.mode.currentIndexChanged.connect(self._sync_fill_long_gaps)
+        self._sync_fill_long_gaps()
+        f.addRow(self.fill_long_gaps)
         return box
+
+    def _sync_fill_long_gaps(self, *_) -> None:
+        # The library default (fill_long_gaps=None) per mode.
+        self.fill_long_gaps.setChecked(mode_value(self.mode) != "oneflux")
 
     def _build_results(self) -> QWidget:
         host = QWidget()
@@ -643,6 +657,7 @@ class MdsGapFillingTab(DiiveTab):
         from diive.gui.widgets.state_utils import save_controls
         controls = save_controls(self._controls())
         controls["mode"] = mode_value(self.mode)  # the value, not the label
+        controls["fill_long_gaps"] = self.fill_long_gaps.isChecked()
         return {"target": self._target, "controls": controls}
 
     def restore_state(self, state: dict) -> None:
@@ -658,6 +673,10 @@ class MdsGapFillingTab(DiiveTab):
         if mode is None and saved:
             mode = "diive" if saved.get("sym_mean") else "oneflux"
         set_mode_value(self.mode, mode)
+        # The mode change above resets the box to the mode's default, so the
+        # saved choice goes on after it. Older projects keep the mode's default.
+        if "fill_long_gaps" in saved:
+            self.fill_long_gaps.setChecked(bool(saved["fill_long_gaps"]))
         tgt = state.get("target")
         if tgt in self._all_cols:
             self._set_target(tgt)
@@ -671,6 +690,7 @@ class MdsGapFillingTab(DiiveTab):
             "vpd_tol": self.vpd_tol.value(),
             "avg_min_n_vals": self.avg_min_n_vals.value(),
             "mode": mode_value(self.mode),
+            "fill_long_gaps": self.fill_long_gaps.isChecked(),
             "vpd_in_kpa": self.vpd_in_kpa.isChecked(),
             # Only the QC flags that are set: unset keeps the run and script as before.
             **self._qc_names(),
