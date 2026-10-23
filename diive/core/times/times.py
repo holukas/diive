@@ -286,13 +286,22 @@ class TimestampSanitizer:
                 "(3) check that no duplicates consumed all rows."
             )
 
-        # Detect time resolution from data
-        freq_detector = DetectFrequency(index=self.data.index, verbose=self.verbose)
-        detected_freq = freq_detector.get()
-        self._freq_confidence = freq_detector.confidence
-        self._freq_detection_method = freq_detector.detection_method
-        self._freq_percent_matching = freq_detector.percent_matching
-        self._freq_alternatives = freq_detector.alternatives
+        # Detect time resolution from data. One record defines no interval, so
+        # a single record takes the expected frequency when there is one (L321:
+        # a one-record file stopped a whole multi-file read).
+        if len(self.data) == 1 and self.nominal_freq:
+            detected_freq = to_offset(pd.Timedelta(to_offset(self.nominal_freq))).freqstr
+            self._freq_confidence = None
+            self._freq_detection_method = "nominal_single_record"
+            self._freq_percent_matching = None
+            self._freq_alternatives = []
+        else:
+            freq_detector = DetectFrequency(index=self.data.index, verbose=self.verbose)
+            detected_freq = freq_detector.get()
+            self._freq_confidence = freq_detector.confidence
+            self._freq_detection_method = freq_detector.detection_method
+            self._freq_percent_matching = freq_detector.percent_matching
+            self._freq_alternatives = freq_detector.alternatives
 
         # If data had pre-existing freq, validate consistency
         if self.inferred_freq and not _same_step(detected_freq, self.inferred_freq):

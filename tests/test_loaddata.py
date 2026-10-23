@@ -261,6 +261,23 @@ class TestMultiDataFileReaderEmptyFiles(unittest.TestCase):
         self.assertEqual(data_df.index.name, 'TIMESTAMP_MIDDLE')
         self.assertEqual(data_df.index.freqstr, '30min')
 
+    def test_single_record_file(self):
+        """L321: a file with one record takes the filetype frequency, alone and
+        next to other files, instead of stopping the whole read."""
+        lines = self.EXAMPLE_FILE.read_text().splitlines(keepends=True)
+        one = self.tempdir / 'one_record.csv'
+        # Two header rows, then the first day's record after the example month.
+        one.write_text(''.join(lines[:2]) + lines[2].replace('2022-07-01 00:15:00',
+                                                             '2022-08-01 00:15:00'))
+        alone = MultiDataFileReader(filepaths=[one], filetype='DIIVE-CSV-30MIN').data_df
+        self.assertEqual(len(alone), 1)
+        self.assertEqual(alone.index[0], pd.Timestamp('2022-08-01 00:15:00'))
+        both = MultiDataFileReader(filepaths=[self.EXAMPLE_FILE, one],
+                                   filetype='DIIVE-CSV-30MIN').data_df
+        self.assertEqual(len(both), 1488 + 1)
+        self.assertEqual(both.index[-1], pd.Timestamp('2022-08-01 00:15:00'))
+        self.assertEqual(both.index.freqstr, '30min')
+
     def test_property_guards_test_their_own_frame(self):
         """Each property's emptiness guard reports on its own frame, not the other one"""
         reader = MultiDataFileReader(filepaths=[self.EXAMPLE_FILE], filetype='DIIVE-CSV-30MIN')
