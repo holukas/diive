@@ -401,6 +401,13 @@ class FluxConfig:
     REddyProc). See
     :class:`diive.gapfilling.mds.FluxMDS`."""
 
+    mds_fill_long_gaps: bool | None = None
+    """Keep long gaps filled (True) or set them missing as the FLUXNET product
+    of ONEFlux does (False). ``None`` (default) means False for
+    ``mds_mode='oneflux'`` and True otherwise. The REF selection and the
+    partitioning use the filled gaps. Their NEE, GPP and RECO output columns
+    lose them. See ``fill_long_gaps`` in :func:`run_level41_mds`."""
+
     mds_swin_qc: str | None = None
     """Optional QC flag column of ``mds_swin`` (0 = measured, above 0 =
     gap-filled, e.g. ``FLAG_..._ISFILLED`` or FLUXNET ``SW_IN_F_QC``; must be
@@ -771,6 +778,10 @@ class PartitioningReference:
             and percentiles across the versions per time resolution).
         instances: The partitioning instances of the 40 REF versions and of
             the USTAR50 scenario, by scenario label.
+        long_gaps: Per product and time resolution, the values set missing
+            as long gaps (True), as a DataFrame with the columns of the
+            tables in ``results``. Empty when MDS filled the long gaps
+            (``fill_long_gaps=True``). See ``run_level42_ustar_reference``.
     """
     variant: str
     label: str
@@ -778,6 +789,7 @@ class PartitioningReference:
     scenarios: dict
     results: dict
     instances: dict = field(repr=False)
+    long_gaps: dict = field(default_factory=dict, repr=False)
 
 
 @dataclass

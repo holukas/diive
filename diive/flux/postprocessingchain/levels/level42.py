@@ -35,6 +35,13 @@ L4.1 to have run. Daytime ONEFlux uses the L4.1 gap-filled NEE when it exists:
 ONEFlux reads one gap-filled value per year (the first record), for windows
 without measured nighttime NEE.
 
+When MDS removed long gaps (``run_level41_mds(fill_long_gaps=False)``, the
+default of ``mode='oneflux'``), the partitioning still gets the gap-filled
+NEE with the long gaps filled, as ONEFlux partitions before its FLUXNET
+product removes them. The GPP and RECO columns added to ``fpc_df`` then lose
+the long gaps of the MDS NEE of the same scenario, as in the FLUXNET product.
+The partitioning instances keep their full results.
+
 Part of the diive library: https://github.com/holukas/diive
 """
 
@@ -43,6 +50,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 
 from diive.core.utils.console import rule
@@ -83,6 +91,28 @@ def _require_full_df_cols(data: FluxLevelData, cols: dict[str, str]) -> None:
         )
 
 
+def _mds_long_gaps(data: FluxLevelData, scen: str | None) -> np.ndarray | None:
+    """Records the L4.1 MDS of scenario ``scen`` removed as long gaps, on the
+    ``fpc_df`` index, or None when it removed none (``fill_long_gaps=True``)
+    or MDS did not run for it."""
+    inst = data.levels.level41_mds.get(scen) if scen is not None else None
+    if inst is None or inst.fill_long_gaps or inst.long_gap_mask_ is None:
+        return None
+    return inst.long_gap_mask_.reindex(data.fpc_df.index, fill_value=False).to_numpy(bool)
+
+
+def _full_nee_f(data: FluxLevelData, gapfill_method: str, scen: str,
+                series: pd.Series) -> pd.Series:
+    """The L4.1 gap-filled NEE ``series`` of ``fpc_df``, with the long gaps
+    filled again if MDS removed them from it: ONEFlux partitions the full fill
+    and removes long gaps only in its FLUXNET product."""
+    if gapfill_method != 'mds' or _mds_long_gaps(data, scen) is None:
+        return series
+    full = data.levels.level41_mds[scen].get_gapfilled_target(full=True)
+    assert_aligned_index(series, full, context=f"long gaps of MDS scenario {scen!r}")
+    return pd.Series(full.to_numpy(), index=series.index, name=series.name)
+
+
 def _resolve_nee_f(data: FluxLevelData, gapfill_method: str,
                    scenarios: list[str]) -> dict[str, pd.Series]:
     """Return the L4.1 gap-filled NEE Series per USTAR scenario, or raise.
@@ -111,7 +141,8 @@ def _resolve_nee_f(data: FluxLevelData, gapfill_method: str,
                 f"{gapfill_method!r} (available scenarios: "
                 f"{sorted(gf[gapfill_method])})."
             )
-        out[scen] = data.fpc_df[gf[gapfill_method][scen]]
+        out[scen] = _full_nee_f(data, gapfill_method, scen,
+                                data.fpc_df[gf[gapfill_method][scen]])
     return out
 
 
@@ -130,7 +161,8 @@ def _available_nee_f(data: FluxLevelData, gapfill_method: str | None,
             f"got {gapfill_method!r}."
         )
     filled = data.gapfilled_cols().get(gapfill_method, {})
-    return {scen: data.fpc_df[filled[scen]] for scen in scenarios if scen in filled}
+    return {scen: _full_nee_f(data, gapfill_method, scen, data.fpc_df[filled[scen]])
+            for scen in scenarios if scen in filled}
 
 
 def _run_level42(
@@ -144,6 +176,7 @@ def _run_level42(
         needs_nee_f: bool,
         gapfill_method: str | None,
         scenarios=None,
+        mds_long_gaps: bool = True,
 ) -> FluxLevelData:
     """Internal: shared per-scenario partitioning loop for the four L4.2 variants.
 
@@ -155,6 +188,10 @@ def _run_level42(
     depend on each other (daytime ONEFlux shares removed days): it gets the
     measured NEE of all scenarios and returns ``{scen: instance}``, already
     run. Pass exactly one of the two.
+
+    With ``mds_long_gaps``, the GPP and RECO columns added to ``fpc_df`` are
+    NaN in the long gaps that the L4.1 MDS removed from the NEE of the same
+    scenario. The instances keep their full results.
     """
     # Require L3.3 *before* mutating state — same ordering guard as L4.1: if we
     # dropped columns first and then raised, a caller recovering from the
@@ -189,6 +226,13 @@ def _run_level42(
         res = instance.results
         assert_aligned_index(fpc_df, res,
                              context=f"{fn_label}[{scen!r}] merge into fpc_df")
+        # The FLUXNET product of ONEFlux removes GPP and RECO in the long gaps
+        # of the NEE they come from (site_data_product.py, finding L397).
+        removed = _mds_long_gaps(data, scen) if mds_long_gaps else None
+        if removed is not None and removed.any():
+            res = res.copy()
+            res.loc[removed, [c for c in res.columns
+                              if str(c).startswith(('GPP_', 'RECO_'))]] = np.nan
         # Each variant emits fixed result column names (RECO_NT_OF, ...); append
         # the USTAR scenario label so multiple scenarios coexist in fpc_df.
         res = res.add_suffix(f"_{scen}")
@@ -275,6 +319,7 @@ def run_level42_nighttime_oneflux(
         needs_nee_f=True,
         gapfill_method=gapfill_method,
         scenarios=scenarios,
+        mds_long_gaps=gapfill_method == 'mds',
     )
 
 
@@ -338,6 +383,7 @@ def run_level42_nighttime_reddyproc(
         needs_nee_f=True,
         gapfill_method=gapfill_method,
         scenarios=scenarios,
+        mds_long_gaps=gapfill_method == 'mds',
     )
 
 
@@ -498,6 +544,7 @@ def run_level42_daytime_oneflux(
         needs_nee_f=False,
         gapfill_method=None,
         scenarios=scenarios,
+        mds_long_gaps=gapfill_method in ('mds', None),
     )
 
 
@@ -635,6 +682,78 @@ def _series_on_index(series_middle: pd.Series, index: pd.DatetimeIndex) -> pd.Se
     return pd.Series(out, index=index)
 
 
+def _ure_long_gap_masks(data: FluxLevelData, labels: list[str], ref_scenario: str,
+                        lab50: str | None) -> dict[str, np.ndarray] | None:
+    """Half-hourly long-gap masks of the ``ure`` table columns, on the
+    ``fpc_df`` index, as the FLUXNET product of ONEFlux finds them, or None
+    when MDS filled the long gaps.
+
+    ONEFlux masks ``GPP_NT_CUT_REF`` with the QC of the NEE REF
+    (``NEE_CUT_REF_QC``), the USTAR50 version with the QC of the NEE USTAR50
+    version, each percentile across the versions with the QC ``nee_proc``
+    writes for that NEE percentile, and the mean with the union of the 7
+    percentile masks (``filter_long_gaps``, ``VARIABLES_DONOT_GAPFILL_LONG``).
+    The standard error is not masked.
+    """
+    from diive.flux.lowres.ustar_reference import URE_PERCENTILES, nee_percentile_qc
+    from diive.gapfilling.longgaps import oneflux_long_gap_mask
+
+    ref_mask = _mds_long_gaps(data, ref_scenario)
+    if ref_mask is None:
+        return None
+    index = data.fpc_df.index
+    none = np.zeros(len(index), dtype=bool)
+    u50 = _mds_long_gaps(data, lab50)
+    masks = {'REF': ref_mask, 'USTAR50': u50 if u50 is not None else none}
+    mds = data.levels.level41_mds
+    nee = pd.DataFrame({lab: mds[lab].get_gapfilled_target(full=True) for lab in labels})
+    qc = pd.DataFrame({lab: mds[lab].get_qc(full=True) for lab in labels})
+    pqc = nee_percentile_qc(nee, qc).reindex(index)
+    mean = none.copy()
+    for p in URE_PERCENTILES:
+        col = f'{p:02d}'
+        masks[col] = oneflux_long_gap_mask(pqc[col]).to_numpy(bool)
+        mean |= masks[col]
+    masks['MEAN'] = mean
+    return masks
+
+
+def _mask_ure_tables(result, masks: dict[str, np.ndarray], index: pd.DatetimeIndex):
+    """``result`` (:class:`PartitioningReferenceResult`) with the long gaps set
+    missing in its tables, and the masks per time resolution.
+
+    Half-hourly values are masked record by record. Daily, weekly, monthly
+    and yearly values are missing when their period holds a masked record
+    (``generate_agg_timestamp_mask``).
+    """
+    from dataclasses import replace as dc_replace
+
+    from diive.flux.lowres.ustar_detection import _record_step, _to_middle
+    from diive.flux.lowres.ustar_reference import oneflux_period_days
+    from diive.gapfilling.longgaps import oneflux_long_gap_periods
+
+    frame = pd.DataFrame({c: m.astype(float) for c, m in masks.items()}, index=index)
+    mid = _to_middle(frame)
+    step = _record_step(mid.index)
+    periods = oneflux_period_days(result.years)
+    tables, gaps = {}, {}
+    for agg, table in result.tables.items():
+        gap = pd.DataFrame(False, index=table.index, columns=table.columns)
+        for col in masks:
+            if agg == 'HH':
+                m = mid[col].reindex(table.index).fillna(0.0).to_numpy() > 0
+            else:
+                first, last = periods[agg]
+                if len(first) != len(table):
+                    raise RuntimeError(f"{agg}: {len(table)} values but {len(first)} periods.")
+                starts = mid.index[mid[col].to_numpy() > 0] - step / 2
+                m = oneflux_long_gap_periods(starts, first, last)
+            gap[col] = m
+        tables[agg] = table.mask(gap)
+        gaps[agg] = gap
+    return dc_replace(result, tables=tables), gaps
+
+
 def run_level42_ustar_reference(
         data: FluxLevelData,
         *,
@@ -703,6 +822,19 @@ def run_level42_ustar_reference(
     and 7 percentiles across the versions (``GPP_NT_CUT_MEAN``, ``_SE``,
     ``_05`` to ``_95`` in FLUXNET), are in
     ``data.levels.partitioning_reference[variant].results[product].tables``.
+
+    When MDS removed the long gaps (``run_level41_mds(fill_long_gaps=False)``,
+    the default of ``mode='oneflux'``), the partitioning and the selection
+    work on the gap-filled versions with their long gaps filled, as in
+    ONEFlux. The results are then cut as in the FLUXNET product of ONEFlux:
+    the REF is missing in the long gaps of the NEE REF scenario, the USTAR50
+    version in those of the USTAR50 scenario, each percentile across the
+    versions in those of the NEE percentile (from the QC ``nee_proc`` gives
+    it, see :func:`~diive.flux.lowres.ustar_reference.nee_percentile_qc`)
+    and the mean in those of any of the 7 percentiles. The standard error is
+    kept. Daily, weekly, monthly and yearly values are missing when their
+    period holds a removed record. The removed values are in the
+    ``long_gaps`` of the record.
 
     Without a scenario at percentile 50, the USTAR50 column is missing and
     the weekly values start week 52 at day 351, as ``ure`` would do without
@@ -784,12 +916,15 @@ def run_level42_ustar_reference(
                                         instances[lab].results[f'GPP_{tag}'], method)
                for lab in instances}
     percentiles = [scen.percentiles[lab] for lab in labels]
-    columns, scenarios, results = {}, {}, {}
+    gap_masks = _ure_long_gap_masks(data, labels, ref.scenario, lab50)
+    columns, scenarios, results, long_gaps = {}, {}, {}, {}
     for prod, pos in (('GPP', 1), ('RECO', 0)):
         values = pd.DataFrame({lab: cleaned[lab][pos] for lab in labels})
         res = select_partitioning_reference(
             values, percentiles, ust50=cleaned[lab50][pos] if lab50 else None,
             mask=ref.result.masked, threshold_type=scen.threshold_type)
+        if gap_masks is not None:
+            res, long_gaps[prod] = _mask_ure_tables(res, gap_masks, data.fpc_df.index)
         col = f'{prod}_{tag}_{ref.label}'
         if col in fpc_df.columns:
             raise RuntimeError(f"run_level42_ustar_reference: column {col!r} already exists "
@@ -804,7 +939,8 @@ def run_level42_ustar_reference(
             _console.print(res.summary())
 
     record = PartitioningReference(variant=variant, label=ref.label, columns=columns,
-                                   scenarios=scenarios, results=results, instances=instances)
+                                   scenarios=scenarios, results=results, instances=instances,
+                                   long_gaps=long_gaps)
     refs = {**data.levels.partitioning_reference, variant: record}
     final = replace(data, fpc_df=fpc_df,
                     levels=replace(data.levels, partitioning_reference=refs),

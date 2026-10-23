@@ -968,3 +968,88 @@ def select_partitioning_reference(values: pd.DataFrame, percentiles=ONEFLUX_REF_
         masked=pd.Series(masked, index=grid.index, name='REF_MASKED'),
         years=tuple(years),
     )
+
+
+# ============================================================ long gaps
+#
+# Since 2025 the FLUXNET product step of ONEFlux (``site_data_product.py``)
+# sets NEE, GPP and RECO missing in long gaps, found from the QC of each NEE
+# variable (finding L397, :func:`diive.gapfilling.longgaps.oneflux_long_gap_mask`).
+# For the statistics across the versions (``GPP_NT_CUT_05`` ... ``_95``,
+# ``_MEAN``) that QC is the one ``nee_proc`` writes for the percentiles of NEE
+# across the 40 versions (``NEE_CUT_05_QC`` ...).
+
+def nee_percentile_qc(nee: pd.DataFrame, qc: pd.DataFrame,
+                      percentiles=URE_PERCENTILES) -> pd.DataFrame:
+    """QC of the percentiles of NEE across the versions, as ``nee_proc`` writes it.
+
+    ``nee_proc`` reports the 7 percentiles of NEE across the 40 gap-filled
+    versions per record (``NEE_CUT_05`` to ``NEE_CUT_95``) and as their QC
+    the QC of the version that gives the value (``get_percentile_and_qc``,
+    dataset.c:1123-1200, called by ``process_nee_matrix``, dataset.c:1260-1284).
+    The valid values are sorted, and the percentile is the value at position
+    ``ROUND(p / 100 * n) - 1`` (in double, at least 0, at most ``n - 1``) of
+    the ``n`` valid values. ONEFlux finds the long gaps of
+    ``GPP_NT_CUT_16`` etc. from this QC.
+
+    ``nee_proc`` sorts with the C ``qsort`` on the value only, so the QC of
+    equal values from different versions depends on the C library. Here
+    equal values keep the order of the versions (a stable sort). Where no
+    version has a value, ``nee_proc`` leaves the QC unset, here it is NaN.
+
+    Args:
+        nee: Gap-filled NEE of the 40 versions (columns), NaN missing.
+        qc: QC of each value (0 measured, 1 to 3 MDS quality), same shape.
+        percentiles: Percentiles to report (default 5, 16, 25, 50, 75, 84, 95).
+
+    Returns:
+        DataFrame on the index of ``nee``, one column per percentile, named as
+        in :data:`URE_TABLE_COLUMNS` (``'05'``, ``'16'``, ...).
+    """
+    if qc.shape != nee.shape:
+        raise ValueError(f"qc must have the shape of nee {nee.shape}, got {qc.shape}.")
+    v = nee.to_numpy(float).copy()
+    q = qc.to_numpy(float)
+    invalid = np.isnan(v) | ((v > -10000.0) & (v <= -9999.0))  # IS_INVALID_VALUE
+    v[invalid] = np.nan  # sorted last
+    order = np.argsort(v, axis=1, kind='stable')
+    n_valid = (~invalid).sum(axis=1)
+    rows = np.arange(v.shape[0])
+    out = {}
+    for p in percentiles:
+        # ROUND (common.h:63) of (percentile / 100.0) * n_valid, float
+        # percentile promoted to double, then --index
+        idx = (float(np.float32(p)) / 100.0 * n_valid + 0.5).astype(np.int64) - 1
+        idx = np.clip(idx, 0, np.maximum(n_valid - 1, 0))
+        res = q[rows, order[rows, idx]]
+        res[n_valid == 0] = np.nan
+        out[f'{int(p):02d}'] = res
+    return pd.DataFrame(out, index=nee.index)
+
+
+def oneflux_period_days(years) -> dict:
+    """First and last day of each daily, weekly, monthly and yearly period of
+    the ONEFlux products, for whole calendar years.
+
+    Weeks run 7 days from 1 January, the 52nd week takes the rest of the year
+    (8 or 9 days), as ``timestamp_ww_get_by_row`` (common.c:2151-2177) writes
+    them. These are the periods ONEFlux checks for removed long gaps. The
+    ``ure`` weekly values of week 52 may start earlier (see
+    :func:`select_partitioning_reference`).
+
+    Returns:
+        ``{agg: (first_day, last_day)}`` for ``'DD'``, ``'WW'``, ``'MM'`` and
+        ``'YY'``, each a DatetimeIndex.
+    """
+    years = list(years)
+    first = pd.Timestamp(int(years[0]), 1, 1)
+    ndays = int(_year_lengths(years).sum())
+    out = {}
+    for agg, lengths in (('DD', np.ones(ndays, dtype=np.int64)),
+                         ('WW', _week_lengths(years)),
+                         ('MM', _month_lengths(years)),
+                         ('YY', _year_lengths(years))):
+        ends = np.cumsum(lengths)
+        out[agg] = (first + pd.to_timedelta(ends - lengths, unit='D'),
+                    first + pd.to_timedelta(ends - 1, unit='D'))
+    return out

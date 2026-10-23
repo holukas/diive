@@ -193,6 +193,29 @@ class TestFluxCodegen(unittest.TestCase):
         self.assertIn("mds_swin_qc='SW_IN_F_QC'", code)
         self.assertNotIn("mds_ta_qc", code)         # default None -> omitted
 
+    def test_mds_fill_long_gaps_to_code(self):
+        from diive.flux.postprocessingchain import chain_to_code, level41_to_code
+        kw = dict(init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+                  level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+                  level31_kwargs={},
+                  level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+                  level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]})
+        mds = {"swin": "SW_IN_F", "ta": "TA_F", "vpd": "VPD_F", "mode": "oneflux"}
+        code = level41_to_code(**kw, level41_cfg={
+            "methods": ["mds"], "mds": {**mds, "fill_long_gaps": True}})
+        compile(code, "<gen>", "exec")
+        self.assertIn("fill_long_gaps=True,", code)
+        code = level41_to_code(**kw, level41_cfg={
+            "methods": ["mds"], "mds": {**mds, "fill_long_gaps": None}})
+        self.assertNotIn("fill_long_gaps", code)    # None -> the mode's default
+        code = chain_to_code(
+            init_kwargs=kw["init_kwargs"],
+            config_kwargs=dict(fluxcol="FC", ustar_thresholds=[0.18], ustar_labels=["CUT_50"],
+                               mds_swin="SW_IN_F", mds_ta="TA_F", mds_vpd="VPD_F",
+                               mds_mode="oneflux", mds_fill_long_gaps=True))
+        compile(code, "<gen>", "exec")
+        self.assertIn("mds_fill_long_gaps=True", code)
+
     def test_level41_to_code_mds_only_omits_engineer(self):
         from diive.flux.postprocessingchain import level41_to_code
         code = level41_to_code(

@@ -13,6 +13,7 @@ from diive.core.ml.feature_engineer import FeatureEngineer
 from diive.core.ml.results import GapFillingResult
 from diive.core.ml.optimization import OptimizeParamsTS
 from diive.gapfilling.interpolate import linear_interpolation
+from diive.gapfilling.longgaps import oneflux_long_gap_mask
 from diive.gapfilling.mds import FluxMDS
 from diive.gapfilling.randomforest_ts import RandomForestTS, QuickFillRFTS, OptimizeParamsRFTS
 from diive.gapfilling.xgboost_ts import XGBoostTS
@@ -25,6 +26,7 @@ __all__ = [
     'GapFillingResult',
     'linear_interpolation',
     'FluxMDS',
+    'oneflux_long_gap_mask',
     'RandomForestTS',
     'QuickFillRFTS',
     'OptimizeParamsTS',

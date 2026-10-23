@@ -341,8 +341,9 @@ def _level41_block(level41_cfg: dict) -> list[str]:
          "reduce_features": True,           # optional, rf / xgb
          "rf_kwargs": {...}, "xgb_kwargs": {...},   # optional model kwargs
          "mds": {"swin": "SW_IN_...", "ta": "TA_...", "vpd": "VPD_...",
-                 # optional: "ta_tol", "vpd_tol", "mode", and the driver QC flag
-                 # columns "swin_qc", "ta_qc", "vpd_qc" (omitted when None)
+                 # optional: "ta_tol", "vpd_tol", "mode", "fill_long_gaps"
+                 # and the driver QC flag columns "swin_qc", "ta_qc",
+                 # "vpd_qc" (omitted when None)
                  },
          "ustar_reference": True}           # optional: REF after MDS, then rf / xgb
 
@@ -383,6 +384,8 @@ def _level41_block(level41_cfg: dict) -> list[str]:
         for k in ("ta_tol", "vpd_tol", "mode"):
             if k in mds:
                 body.append(f"    {k}={mds[k]!r},")
+        if mds.get("fill_long_gaps") is not None:
+            body.append(f"    fill_long_gaps={mds['fill_long_gaps']!r},")
         for k in ("swin_qc", "ta_qc", "vpd_qc"):
             if mds.get(k) is not None:
                 body.append(f"    {k}={mds[k]!r},")

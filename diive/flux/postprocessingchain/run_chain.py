@@ -140,7 +140,9 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     *Level-4.1 (gap-filling)* — runs only the methods whose
     ``config.gapfill_*`` flag is ``True``. MDS runs in ``config.mds_mode``
     (default ``'diive'``) with the optional driver QC columns
-    ``config.mds_*_qc``, and uses the :class:`FluxMDS` defaults for
+    ``config.mds_*_qc``. ``config.mds_fill_long_gaps`` keeps or removes the
+    long gaps (removed by default with ``mds_mode='oneflux'``, as in the
+    FLUXNET product of ONEFlux). MDS uses the :class:`FluxMDS` defaults for
     tolerances and ``avg_min_n_vals``. RF and
     XGBoost are built with a default ``FeatureEngineer`` that ships with
     the symmetric lag window ``[-2, 2]``, first- and second-order
@@ -566,6 +568,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             ta=config.mds_ta,
             vpd=config.mds_vpd,
             mode=config.mds_mode,
+            fill_long_gaps=config.mds_fill_long_gaps,
             swin_qc=config.mds_swin_qc,
             ta_qc=config.mds_ta_qc,
             vpd_qc=config.mds_vpd_qc,

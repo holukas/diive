@@ -41,6 +41,7 @@ from diive.core.plotting.plotfuncs import default_format, default_legend
 from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.plotting.styles.LightTheme import colorwheel_36_blackfirst, generate_plot_marker_list
 from diive.core.utils.console import console as _console, info, rule
+from diive.gapfilling.longgaps import oneflux_long_gap_mask
 from diive.gapfilling.scores import prediction_scores
 from diive.gapfilling.similarity import (
     METHOD_ALL, METHOD_SWIN, METHOD_MDC,
@@ -140,6 +141,7 @@ class _MdsGapFillingBase:
                  avg_min_n_vals: int = 2,
                  mode: str = 'diive',
                  fill_marginal_gaps: bool = True,
+                 fill_long_gaps: bool | None = None,
                  vpd_in_kpa: bool = True,
                  swin_qc: str = None,
                  ta_qc: str = None,
@@ -204,6 +206,15 @@ class _MdsGapFillingBase:
                 ``gf_mds`` gap-filling behaviour). If False, leave leading/
                 trailing gaps longer than 60 days unfilled (the ONEFlux
                 ``uncert_via_gapFill`` ``longestMarginalgap`` guard).
+            fill_long_gaps: if True, every gap MDS can fill stays filled. If
+                False, long gaps filled with the poorest quality are set
+                missing again, as ONEFlux does in its FLUXNET product since
+                2025: the gap-filled value and its flag are NaN in the
+                records of ``long_gap_mask_`` (see
+                :func:`diive.gapfilling.longgaps.oneflux_long_gap_mask`). The
+                default None means False for ``mode='oneflux'`` and True for
+                ``'diive'`` and ``'reddyproc'``. ``get_gapfilled_target(full=True)``
+                gives the series with the long gaps filled.
             vpd_in_kpa: if True (default), *vpd* is in kPa and *vpd_tol* applies
                 directly. If False, *vpd* is in hPa and the kPa *vpd_tol* is
                 converted to hPa (0.5 kPa -> 5 hPa, as in ONEFlux).
@@ -276,6 +287,11 @@ class _MdsGapFillingBase:
         self.avg_min_n_vals = avg_min_n_vals if avg_min_n_vals else 2
         self.mode = mode
         self.fill_marginal_gaps = fill_marginal_gaps
+        self.fill_long_gaps = (mode != 'oneflux') if fill_long_gaps is None else bool(fill_long_gaps)
+        #: Records in long gaps by the ONEFlux rule (True), after run(). Set
+        #: missing in the results when fill_long_gaps is False.
+        self.long_gap_mask_ = None
+        self._full = None
         self.vpd_in_kpa = vpd_in_kpa
         self.verbose = verbose
 
@@ -284,13 +300,48 @@ class _MdsGapFillingBase:
         self.target_gapfilled_flag = f"FLAG_{self.flux}{self.gfsuffix}_ISFILLED"
 
     # --- results access ------------------------------------------------------
-    def get_gapfilled_target(self):
-        """Gap-filled target time series."""
+    def get_gapfilled_target(self, full: bool = False):
+        """Gap-filled target time series.
+
+        Args:
+            full: if True, the series before the long gaps are removed
+                (``fill_long_gaps=False``). The same series when long gaps
+                are filled.
+        """
+        if full and self._full is not None:
+            return self._full[self.target_gapfilled].copy()
         return self.gapfilling_df_[self.target_gapfilled].copy()
 
-    def get_flag(self):
-        """Gap-filling flag: 0 = observed, else granular (method*1000+window)."""
+    def get_flag(self, full: bool = False):
+        """Gap-filling flag: 0 = observed, else granular (method*1000+window).
+
+        Args:
+            full: if True, the flag before the long gaps are removed, as in
+                :meth:`get_gapfilled_target`.
+        """
+        if full and self._full is not None:
+            return self._full[self.target_gapfilled_flag].copy()
         return self.gapfilling_df_[self.target_gapfilled_flag]
+
+    def get_qc(self, full: bool = False) -> pd.Series:
+        """QC of the gap-filled series as ONEFlux writes it (``NEE_..._QC``).
+
+        0 = measured, 1 to 3 = MDS quality class of the fill (1 best), NaN =
+        not filled. This is the QC ONEFlux uses to find long gaps
+        (``long_gap_mask_``) and to select the REF u* scenario.
+
+        Args:
+            full: if True, the QC before the long gaps are removed, as in
+                :meth:`get_gapfilled_target`. Else it is NaN where the
+                gap-filled value was removed.
+        """
+        if self._full is None:
+            raise Exception("Not available: call .run() first.")
+        qc = self._full['.QC'].copy()
+        if not full and not self.fill_long_gaps:
+            qc[self.long_gap_mask_.to_numpy()] = np.nan
+        qc.name = None
+        return qc
 
     @property
     def result(self) -> DataFrame:
@@ -408,6 +459,21 @@ class _MdsGapFillingBase:
         filled_gap = gap & np.isfinite(predictions)
         flag = np.where(filled_gap, res['flag'].astype(float), flag)
         df[self.target_gapfilled_flag] = flag
+
+        # ONEFlux QC (0 measured, else the 1-3 quality, as nee_proc writes
+        # it) and the long gaps ONEFlux removes from its FLUXNET product.
+        qc = np.where(measured, 0.0, np.where(filled_gap, res['quality'], np.nan))
+        self.long_gap_mask_ = oneflux_long_gap_mask(
+            pd.Series(qc, index=index), records_per_day=nperday).rename('LONG_GAP')
+        self._full = pd.DataFrame({self.target_gapfilled: df[self.target_gapfilled].to_numpy(),
+                                   self.target_gapfilled_flag: flag, '.QC': qc}, index=index)
+        if not self.fill_long_gaps:
+            removed = self.long_gap_mask_.to_numpy()
+            df.loc[removed, [self.target_gapfilled, self.target_gapfilled_flag]] = np.nan
+            if removed.any():
+                info(f"Removed {int(removed.sum())} gap-filled records in long gaps "
+                     f"(ONEFlux FLUXNET product rule, fill_long_gaps=False)",
+                     verbose=self.verbose)
 
         # Scores: predictions vs measured where both exist.
         score_mask = measured & np.isfinite(predictions)
@@ -566,7 +632,8 @@ class _MdsGapFillingBase:
             f"  TA tolerance           {self.ta_tol} deg C\n"
             f"  VPD tolerance          {self.vpd_tol} kPa\n"
             f"  Min samples for mean   {self.avg_min_n_vals}\n"
-            f"  Mode                   {self.mode}"
+            f"  Mode                   {self.mode}\n"
+            f"  Fill long gaps         {self.fill_long_gaps}"
         )
 
         rule("Data & Performance", min_level=2)
@@ -638,12 +705,21 @@ class FluxMDS(_MdsGapFillingBase):
     products), and ``mode='reddyproc'`` follows REddyProc's
     ``sMDSGapFill``. See ``mode`` in ``__init__``.
 
+    ``mode='oneflux'`` also removes long gaps by default, as the FLUXNET
+    product of ONEFlux does since 2025: in runs of poorest-quality fills
+    longer than 15 days, the fill is set missing again, except for 15 days
+    next to the measured data (``fill_long_gaps``, ``long_gap_mask_``,
+    :func:`diive.gapfilling.longgaps.oneflux_long_gap_mask`). ONEFlux's
+    ``gf_mds`` and ``nee_proc`` fill these gaps: pass ``fill_long_gaps=True``
+    to get their output.
+
     The time windows count records, so the data must be on a regular time
     grid. Data with missing timestamps (an index without a frequency) are put
     on the grid first, and the results are on that grid. See ``df`` in
     ``__init__``.
 
-    Measured agreement (``mode='oneflux'``): compared with ONEFlux's ``gf_mds`` tool, compiled from
+    Measured agreement (``mode='oneflux'``, ``fill_long_gaps=True``): compared
+    with ONEFlux's ``gf_mds`` tool, compiled from
     the ONEFlux 1.3.7 C source and run on the same input with the settings of
     ONEFlux's pipeline (VPD in hPa, ``vpd_in_kpa=False``). Filled values, SDs,
     sample counts, methods and windows are bitwise identical in every gap and

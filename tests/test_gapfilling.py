@@ -59,6 +59,7 @@ class TestGapFilling(unittest.TestCase):
             swin='Rg_f',
             vpd='VPD_f',
             mode='oneflux',  # the exact numbers below are ONEFlux's plain mean
+            fill_long_gaps=True,  # as gf_mds, which fills every gap
             # swin_tol=[20, 50],
             # ta_tol=2.5,
             # vpd_tol=0.5,  # kPa; 5 hPa is default for reference
@@ -273,7 +274,9 @@ class TestGapFilling(unittest.TestCase):
         df.iloc[short_gap, 0] = np.nan
         filled = {}
         for mode in ('oneflux', 'reddyproc'):
-            m = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode=mode, verbose=0)
+            # fill_long_gaps=True: gf_mds fills every gap
+            m = FluxMDS(df=df, flux='flux', swin='sw', ta='ta', vpd='vpd', mode=mode,
+                        fill_long_gaps=True, verbose=0)
             m.run()
             filled[mode] = m.get_gapfilled_target()
         self.assertEqual(int(filled['oneflux'].isna().sum()), 0)

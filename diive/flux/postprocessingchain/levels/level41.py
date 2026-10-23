@@ -136,6 +136,7 @@ def run_level41_mds(
         vpd_tol: float = 0.5,
         avg_min_n_vals: int = 2,
         mode: str = 'diive',
+        fill_long_gaps: bool | None = None,
         swin_qc: str | None = None,
         ta_qc: str | None = None,
         vpd_qc: str | None = None,
@@ -145,6 +146,15 @@ def run_level41_mds(
 
     Runs one MDS instance per USTAR scenario found in
     ``data.levels.filteredseries_level33_qcf``.
+
+    With ``fill_long_gaps=False`` (the default of ``mode='oneflux'``) the
+    gap-filled columns in ``fpc_df`` lose the long gaps, as in the FLUXNET
+    product of ONEFlux (see :class:`diive.gapfilling.mds.FluxMDS`). As in
+    ONEFlux, the later steps work on the filled gaps: the REF selection
+    (``run_level41_ustar_reference``) and the partitioning (Level 4.2) take
+    the gap-filled NEE with the long gaps filled from the MDS instances
+    (``get_gapfilled_target(full=True)``), and only their NEE, GPP and RECO
+    output columns lose the long gaps of the matching scenario.
 
     Args:
         data: FluxLevelData after ``run_level33_constant_ustar()``.
@@ -164,6 +174,10 @@ def run_level41_mds(
             daytime), ``'oneflux'`` (bit for bit as ONEFlux) or
             ``'reddyproc'`` (as REddyProc).
             See :class:`diive.gapfilling.mds.FluxMDS`.
+        fill_long_gaps: Keep the long gaps filled (True) or set them missing
+            as ONEFlux does in its FLUXNET product since 2025 (False). None
+            (default) means False for ``mode='oneflux'`` and True for the
+            other modes. See :class:`diive.gapfilling.mds.FluxMDS`.
         swin_qc, ta_qc, vpd_qc: Optional QC flag column of each driver
             (0 = measured, above 0 = gap-filled, e.g. ``FLAG_..._ISFILLED``
             or FLUXNET ``*_F_QC``), in ``data.full_df``. With gap-filled
@@ -236,7 +250,7 @@ def run_level41_mds(
             flux=ustar_flux.name,
             swin=swin, ta=ta, vpd=vpd,
             swin_tol=swin_tol, ta_tol=ta_tol, vpd_tol=vpd_tol,
-            avg_min_n_vals=avg_min_n_vals, mode=mode,
+            avg_min_n_vals=avg_min_n_vals, mode=mode, fill_long_gaps=fill_long_gaps,
             swin_qc=swin_qc, ta_qc=ta_qc, vpd_qc=vpd_qc,
         )
         instance.run()
@@ -518,6 +532,10 @@ def run_level41_ustar_reference(
     gap-filled NEE and its flag of the selected scenario, with the scenario
     label replaced by ``CUT_REF`` (or ``VUT_REF``), e.g.
     ``NEE_L3.1_L3.3_CUT_REF_QCF_gfMDS``. The other scenarios are not changed.
+    The selection uses the gap-filled versions with their long gaps filled,
+    as ONEFlux ``nee_proc`` does, also when MDS removed them from the output
+    (``fill_long_gaps=False``). The REF series then lacks the long gaps of the
+    selected scenario, as ``NEE_CUT_REF`` in the FLUXNET product.
     The REF of the daily, weekly, monthly and yearly values are in
     ``data.levels.ustar_reference.scenarios``.
 
@@ -541,8 +559,6 @@ def run_level41_ustar_reference(
         RuntimeError: If L3.3 did not add the REF scenarios, MDS has not
             gap-filled all of them, or ONEFlux finds no half-hourly REF.
     """
-    import numpy as np
-
     from diive.core.utils.console import console as _console
     from diive.flux.lowres.ustar_reference import (
         ONEFLUX_MEF_MAX_GAP, ONEFLUX_MEF_MIN_GAP, ONEFLUX_MEF_QC, REF_AGGREGATIONS,
@@ -570,14 +586,11 @@ def run_level41_ustar_reference(
     nee, qc = {}, {}
     for lab in labels:
         inst = data.levels.level41_mds[lab]
-        gdf = inst.gapfilling_df_
-        flag = gdf[inst.target_gapfilled_flag].to_numpy(dtype=float)
-        quality = gdf['.PREDICTIONS_QUALITY'].to_numpy(dtype=float)
         # nee_proc: QC 0 where the record is measured, else the MDS quality
-        # (dataset.c:5014); a record MDS could not fill has none.
-        qc[lab] = pd.Series(np.where(flag == 0, 0.0, np.where(np.isfinite(flag), quality, np.nan)),
-                            index=gdf.index)
-        nee[lab] = gdf[inst.target_gapfilled]
+        # (dataset.c:5014); a record MDS could not fill has none. nee_proc
+        # selects on the filled long gaps, the product removes them later.
+        qc[lab] = inst.get_qc(full=True)
+        nee[lab] = inst.get_gapfilled_target(full=True)
     percentiles = [scen.percentiles[lab] for lab in labels]
     result = select_ustar_reference(
         pd.DataFrame(nee), pd.DataFrame(qc), percentiles,

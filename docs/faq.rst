@@ -706,6 +706,38 @@ A: ONEFlux gap-fills NEE filtered at 40 u* percentiles (1.25 to 98.75) and
       the checks against ONEFlux this alone changed the REF at some time
       resolutions in every case, even with ``mode='oneflux'`` in MDS.
 
+**Q: Why are long gaps missing after MDS with mode='oneflux'?**
+
+A: Since 2025, ONEFlux sets long gap-filled periods back to missing in its
+   FLUXNET product. Where records filled with the poorest MDS quality (QC 3)
+   run for more than 15 days, the fill is removed except for about 15 days
+   next to the measured data. In the middle of the record this applies only
+   to runs longer than 35 days. ``FluxMDS(mode='oneflux')`` and
+   ``run_level41_mds(mode='oneflux')`` do the same by default. The other MDS
+   modes keep every fill. To keep the long gaps filled, pass
+   ``fill_long_gaps=True``:
+
+   .. code-block:: python
+
+      mds = dv.gapfilling.FluxMDS(df=df, flux='NEE', swin='SW_IN', ta='TA',
+                                  vpd='VPD', mode='oneflux', fill_long_gaps=True)
+
+   ``FluxConfig(mds_fill_long_gaps=True)`` does the same in ``run_chain``.
+   ``fill_long_gaps=False`` removes long gaps in the other modes too.
+   ``mds.long_gap_mask_`` shows the removed records, and
+   ``mds.get_gapfilled_target(full=True)`` gives the series with the long
+   gaps filled. ``dv.gapfilling.oneflux_long_gap_mask`` applies the rule to
+   any QC series.
+
+   In the chain, the REF selection and the NEE partitioning work on the
+   filled long gaps, as in ONEFlux. Only the output columns lose them: the
+   NEE, GPP and RECO of each u* scenario lose the long gaps of the MDS NEE of
+   that scenario, and the REF series those of the REF scenario. Daily,
+   weekly, monthly and yearly GPP and RECO REF values are missing when their
+   period holds a removed record. ONEFlux's gap-filling steps (``gf_mds``,
+   ``nee_proc``) fill every gap, so compare with them using
+   ``fill_long_gaps=True``.
+
 **Q: Why does diive give a different USTAR threshold than ONEFlux or REddyProc?**
 
 A: With the same input data it should not. The ONEFlux modes reproduce
