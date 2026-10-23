@@ -6,7 +6,7 @@ Features diive does not support yet, collected for future releases. Bugs go in
 
 ## Time series with monthly, weekly or yearly records
 
-**Status:** not supported (decided 2026-10-20, before v0.92.0). Records must be
+**Status:** not supported (decided 2026-10-20, before v0.92.0), parked for much later (2026-10-24). Records must be
 daily or finer.
 
 **What happens now:** loading such data fails (L320).

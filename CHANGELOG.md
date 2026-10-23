@@ -87,6 +87,8 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 - **Plots with infinite or missing values:** `Cumulative`, `ScatterXY`, `ShiftedDistributionPlot`,
   `HeatmapXYZ` and `TreeRingPlot` leave out infinite values and show a note when no finite value is
   left, instead of raising an error.
+- **Reading several files:** a file with a single record no longer stops the read. It takes the
+  time resolution of its filetype.
 - **GUI, 3D surface tabs:** adding a column in another tab no longer resets the selected variables.
 - **Daytime partitioning (REddyProc):** no longer stops with a division by zero when the E0
   smoothing starts on a flat likelihood, which happened on short records. It continues as
