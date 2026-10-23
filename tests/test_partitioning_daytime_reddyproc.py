@@ -194,6 +194,30 @@ class TestDaytimeReddyProcRNumerics(unittest.TestCase):
         np.testing.assert_allclose(se, [14.766005630249561, 71.11300590848488,
                                         90.99309941007544], rtol=1e-12)
 
+    def test_gp_smoother_zero_start_gradient(self):
+        # L400: every simplex start lands where the likelihood is flat, so the
+        # L-BFGS start gradient is zero. C takes the step as inf and stops with
+        # LBFGSERR_MAXIMUMSTEP, the port raised ZeroDivisionError. Input from a
+        # REF scenario of one month of the example data; reference values from
+        # mlegp(X, Z, nugget) and predict(se.fit = TRUE) in R.
+        DR = self.DR
+        x = np.array([769.0, 865.0, 961.0, 1057.0, 1153.0, 1249.0, 1345.0, 1441.0])
+        z = np.array([266.2794980237638, 332.1690751962034, 279.04110598417526,
+                      335.5278870463864, 332.16778422080125, 329.2196653395278,
+                      329.21979561325526, 365.46184038258576])
+        nug = np.array([2713.3130421196574, 2977.0069810259743, 3904.369923837817,
+                        2981.370229702037, 2977.0030536945187, 2789.067190281453,
+                        2789.0675262880222, 5437.251727536156])
+        beta, _mu, _sig2, _nscale = DR._mlegp_fit(x, z, nug)
+        self.assertEqual(beta, 69260.135747698165)
+        predict, nugget = DR._gp_smooth(x, z, nug)
+        np.testing.assert_allclose(nugget[[0, 7]], [716.7312990958194, 1436.2693996943228],
+                                   rtol=1e-12)
+        fit, se = predict(x[[0, 7]])
+        np.testing.assert_allclose(fit, [319.23660317323504, 319.236603173238], rtol=1e-12)
+        np.testing.assert_allclose(se, [5.2530302264574601e-06, 5.253030226457511e-06],
+                                   rtol=1e-9)
+
     def test_nighttime_e0_fit_matches_r_nls(self):
         # partGLEstimateTempSensInBoundsE0Only(REco, TK, prevE0, TRefFit)
         tc = np.array([-0.5, 0.3, 1.1, 2.4, 3.0, 3.9, 4.4, 5.8, 6.1, 7.3, 8.0, 8.8,

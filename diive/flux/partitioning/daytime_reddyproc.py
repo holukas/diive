@@ -1003,7 +1003,11 @@ def _lbfgs(x, evaluate, epsilon, max_iterations):
     x = list(x)
     fx, g = evaluate(x)
     d = [-a for a in g]
-    step = 1.0 / math.sqrt(_vecdot(d, d))
+    # vecrnorm(): C gives inf for a zero gradient (mlegp's liblbfgs has no
+    # "already minimized" check). The line search then clamps the step to
+    # max_step, tries the same point and stops with LBFGSERR_MAXIMUMSTEP (L400).
+    dd = _vecdot(d, d)
+    step = 1.0 / math.sqrt(dd) if dd > 0 else math.inf
     k, end = 1, 0
     lm_s, lm_y = [None] * m, [None] * m
     lm_ys, lm_alpha = [0.0] * m, [0.0] * m
