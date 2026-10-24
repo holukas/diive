@@ -30,6 +30,9 @@ Pitfalls learned the hard way:
 - **The `__main__` guard:** any script that opens the GUI needs it. The Seasonal trend tab
   computes in a spawned worker process, which re-imports the main module; without the guard
   the whole script runs a second time inside the worker.
+- **Segfault at the end:** the pass can end with a segmentation fault (exit 139) after it
+  printed the SLOWEST list, in `shutdown_process_pool` or `os._exit`. Seen on 2026-10-24 with
+  the code of before and after that day, so the results are complete. Not investigated.
 - **The splash offscreen:** `QSplashScreen.show()` blocks about 1 s on the offscreen platform,
   so offscreen "splash painted" times are about 1 s later than on a real screen.
 
@@ -37,8 +40,6 @@ Pitfalls learned the hard way:
 
 | Action | Freeze | Ready |
 |---|---|---|
-| Open Ridgeline plot tab | 8.2 s | 8.9 s |
-| Open Shifted distribution plot tab | 4.2 s | 4.6 s |
 | Load example data + first Overview render | 2.8 s | 3.7 s |
 | Data change with 62 tabs open (only the Overview renders) | 2.2 s | 2.2 s |
 | Overview: click a variable | 1.5–2.1 s | 1.5–2.1 s |
@@ -58,13 +59,6 @@ about 1.6 s.
 ---
 
 ## Open
-
-### [ ] P1. Ridgeline plot tab takes 8.2 s to open
-`diive/core/plotting/ridgeline.py`, `diive/gui/tabs/plotting.py`. The worst item by far, not
-yet looked at. Profile first; likely per-group density estimates or artists at full resolution.
-
-### [ ] P2. Shifted distribution plot tab takes 4.2 s to open
-`diive/core/plotting/` (`ShiftedDistributionPlot`). Not yet looked at. Profile first.
 
 ### [ ] P3. Opening Select variables freezes for 1.8 s
 `diive/gui/tabs/variable_selector.py`. Odd for a list picker: it opts into the full record
@@ -131,9 +125,30 @@ the Overview hero band rebuilds styled chips per click; the Events tab rebuilds 
 keystroke in its filter; `_on_events_changed` rebuilds every event flag on a visibility-only
 toggle.
 
+### [ ] P16. Opening a menu tab relayouts the tab that was visible
+Found with P1 (2026-10-24). Adding a tab with a close button changes the tab bar height for a
+moment, so the visible tab's canvas is resized by 2 px and back. That starts its relayout timer,
+and `PlotCanvas.draw()` of the new tab calls `flush_events()`, which fires it: the old tab runs
+`_solve_layout` (two `draw_without_rendering` passes) and a `draw_idle`. About 1.5 s behind the
+Overview (8 axes), about 0.85 s behind a Time series tab, and it lands on whichever tab opens.
+Likely part of every menu-tab open while a plot tab is visible. Code: the resize handler and
+`_relayout` in `diive/gui/widgets/mpl_canvas.py`, `_open_menu_tab` in `diive/gui/app.py`. Ideas:
+ignore a resize that returns to the frozen size before the timer fires, or skip the relayout of
+canvases that are no longer visible.
+
 ---
 
 ## Done
+
+### [x] D0. Ridgeline and Shifted distribution tabs (P1, P2)
+Both spent their time in scikit-learn's `KernelDensity.score_samples`, which sums every record at
+every grid point. The new `diive/core/plotting/kde.py` (`gaussian_kde_on_grid`) gives the same
+Gaussian density with a direct sum limited to 40 bandwidths or, when cheaper, a binned 17-term
+Taylor/Hermite series summed by FFT. Curves agree with scikit-learn to about 1e-12 of the peak
+(pixel-identical in 20 of 25 compared Ridgeline figures, one antialiasing level in 1-2 pixels in
+the others). `RidgeLinePlot` also computed each density twice (y-limit pass and drawing), now
+once. Timing pass 2026-10-24, old and new code back to back: Ridgeline open 10.0 s -> 0.37 s
+freeze, Shifted distribution 4.5 s -> 0.30 s.
 
 ### [x] D1. Overview click, render and pan
 An Overview click went from 9–12 s to about 1.5 s, the first render from about 9 s to 2.8 s,

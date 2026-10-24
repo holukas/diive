@@ -66,6 +66,10 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 - **USTAR detection in the chain (changes results):** `run_level33_ustar_detection` and `run_chain`
   detect thresholds as ONEFlux, with moving point and change point thresholds per year, instead of
   the moving point method on a 3-year block of data, which gave higher thresholds.
+- **Faster Ridgeline and Shifted distribution plots:** `RidgeLinePlot` and `ShiftedDistributionPlot`
+  compute their densities about 30 to 100 times faster, with the same curves. In the GUI, the
+  Ridgeline tab opens in 0.4 s instead of 10 s and the Shifted distribution tab in 0.3 s
+  instead of 4.5 s.
 - **Faster moving point method:** `UstarMovingPointDetection` runs about 6 times faster.
 - **Examples:** the USTAR examples show `UstarThresholdDetection` and compare its four modes.
 - **Dependencies:** numba is now a direct dependency (it came with shap before). Intel Macs get
