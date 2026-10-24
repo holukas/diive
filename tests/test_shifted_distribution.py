@@ -13,7 +13,9 @@ zone geometry when a +-3 SD breakpoint falls outside the evaluation grid, the
 five-entry contract on the zone label/colour lists, what a repeated `plot()` on
 one axes does, the sample (ddof=1) standard deviation behind the zones, and the
 accounting for records dropped as missing (public counts, unconditional warning,
-sample size on the figure, optional per-period report).
+sample size on the figure, optional per-period report). The density comes
+from a Hermite series instead of scikit-learn's tree, checked against the
+direct kernel sum.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -240,7 +242,10 @@ class TestOrdinaryComparisonUnchanged(unittest.TestCase):
             with self.subTest(period=name):
                 bw = 1.06 * data.std() * len(data) ** (-0.2)
                 kde = KernelDensity(kernel='gaussian', bandwidth=bw).fit(data.reshape(-1, 1))
-                np.testing.assert_array_equal(got, np.exp(kde.score_samples(x.reshape(-1, 1))))
+                expected = np.exp(kde.score_samples(x.reshape(-1, 1)))
+                # The fast Gauss transform agrees with scikit-learn's tree sum to
+                # about 1e-12 of the peak, not bit for bit.
+                np.testing.assert_allclose(got, expected, rtol=0, atol=1e-10 * expected.max())
 
     def test_breakpoints_are_the_reference_mean_plus_minus_one_and_three_sd(self):
         ref = self.series.loc[REF_PERIOD[0]:REF_PERIOD[1]].dropna().values
@@ -633,6 +638,52 @@ class TestMissingValueAccounting(unittest.TestCase):
                                     verbose=True)
         self.assertIn('Reference', cap.text)
         self.assertIn('Comparison', cap.text)
+
+
+class TestLongPeriodDensity(unittest.TestCase):
+    """The Hermite sum on long periods, against the direct sum and scikit-learn's tree."""
+
+    @staticmethod
+    def _direct(data: np.ndarray, x: np.ndarray, bw: float) -> np.ndarray:
+        """Sum every record's Gaussian kernel at every grid point."""
+        total = np.empty(x.size)
+        for start in range(0, x.size, 100):  # Grid rows in blocks, to bound the memory
+            z = (x[start:start + 100, None] - data[None, :]) / bw
+            total[start:start + 100] = np.exp(-0.5 * z * z).sum(axis=1)
+        return total / (data.size * bw * np.sqrt(2 * np.pi))
+
+    def _long_series(self, values: np.ndarray) -> pd.Series:
+        index = pd.date_range('2015-01-01', periods=values.size, freq='30min')
+        return pd.Series(values, index=index, name='VAR')
+
+    def test_the_density_matches_the_direct_sum_and_scikit_learn(self):
+        rng = np.random.default_rng(3)
+        n = 2 * 17520  # Two years of half-hourly records, one year per period
+        cases = {
+            'normal': rng.normal(10.0, 3.0, n),
+            'bimodal': np.where(rng.random(n) < 0.3, rng.normal(-8.0, 1.0, n), rng.normal(4.0, 5.0, n)),
+            'skewed, rounded': np.round(rng.gamma(1.2, 3.0, n), 1),
+            'one far outlier': np.r_[rng.normal(5.0, 8.0, n - 1), -9999.0],
+        }
+        for name, values in cases.items():
+            with self.subTest(case=name):
+                series = self._long_series(values)
+                sdp = ShiftedDistributionPlot(series, ('2015', '2015'), ('2016', '2016'))
+                for data, got in ((sdp._ref_data, sdp._ref_kde), (sdp._comp_data, sdp._comp_kde)):
+                    bw = 1.06 * data.std() * len(data) ** (-0.2)
+                    direct = self._direct(data, sdp._x, bw)
+                    tree = np.exp(KernelDensity(kernel='gaussian', bandwidth=bw)
+                                  .fit(data.reshape(-1, 1)).score_samples(sdp._x.reshape(-1, 1)))
+                    self.assertLess(np.abs(got - direct).max(), 1e-13 * direct.max())
+                    self.assertLess(np.abs(got - tree).max(), 1e-10 * direct.max())
+
+    def test_a_long_constant_period_is_still_a_unit_spike(self):
+        values = np.r_[np.full(17520, CONSTANT_VALUE), np.random.default_rng(4).normal(10.0, 3.0, 17520)]
+        sdp = ShiftedDistributionPlot(self._long_series(values), ('2015', '2015'), ('2016', '2016'))
+        peak, integral, fwhm = _spike_stats(sdp._x, sdp._ref_kde)
+        self.assertLess(abs(peak - CONSTANT_VALUE), sdp._x[1] - sdp._x[0])
+        self.assertAlmostEqual(integral, 1.0, places=6)
+        self.assertLess(fwhm, 0.02 * (sdp._x[-1] - sdp._x[0]))
 
 
 if __name__ == '__main__':

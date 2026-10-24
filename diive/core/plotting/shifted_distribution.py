@@ -15,10 +15,10 @@ import numpy as np
 from matplotlib.patches import Patch
 from matplotlib.transforms import blended_transform_factory
 from rich.table import Table
-from sklearn.neighbors import KernelDensity
 from pandas import Series
 
 import diive.core.plotting.plotfuncs as pf
+from diive.core.plotting.kde import gaussian_kde_on_grid
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.format import FormatStyle
 from diive.core.utils.console import console, info, warn
@@ -202,14 +202,11 @@ class ShiftedDistributionPlot:
         bw = 1.06 * data.std() * len(data) ** (-0.2)  # Silverman's rule
         if bw <= 0:
             # A constant period, or one holding a single record, has zero spread, so
-            # Silverman's rule gives a zero bandwidth that KernelDensity rejects. The
+            # Silverman's rule gives a zero bandwidth, which no kernel can use. The
             # distribution is real — a spike — so draw it as one, with a kernel narrow
             # against the plotted range, rather than refusing the whole plot.
             bw = (self._x[-1] - self._x[0]) / 200
-        kde = KernelDensity(kernel='gaussian', bandwidth=bw)
-        kde.fit(data.reshape(-1, 1))
-        log_dens = kde.score_samples(self._x.reshape(-1, 1))
-        return np.exp(log_dens)
+        return gaussian_kde_on_grid(data, self._x, bw)
 
     @staticmethod
     def _count_label(label: str, n_used: int, n_records: int) -> str:
