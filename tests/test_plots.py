@@ -1357,6 +1357,45 @@ class TestPlotClasses(unittest.TestCase):
         self.assertAlmostEqual(gridspec.hspace, -0.7)
         plt.close(fig)
 
+    def test_ridgeline_curves_match_scikit_learn(self):
+        # The Gaussian density comes from gaussian_kde_on_grid, not score_samples.
+        import numpy as np
+        from sklearn.neighbors import KernelDensity
+        from diive.core.plotting.ridgeline import RidgeLinePlot
+        series = self.series.dropna()
+        fig = plt.figure()
+        RidgeLinePlot(series).plot(fig=fig, how="monthly", ascending=True, showplot=False)
+        for month, ax in zip(range(1, 13), fig.axes):
+            x_d, got = ax.lines[0].get_data()
+            values = series[series.index.month == month].to_numpy()
+            want = np.exp(KernelDensity().fit(values[:, None]).score_samples(x_d[:, None]))
+            self.assertLess(np.abs(got - want).max(), 1e-10 * want.max())
+        plt.close(fig)
+
+    def test_gaussian_kde_on_grid_matches_the_direct_sum(self):
+        import numpy as np
+        from diive.core.plotting.kde import gaussian_kde_on_grid
+        rng = np.random.default_rng(7)
+        data = np.r_[rng.normal(0, 3, 3000), rng.gamma(1.5, 4, 2000), [250.0]]
+
+        def direct(x, bw):
+            u = (x[:, None] - data[None, :]) / bw
+            return np.exp(-0.5 * u * u).sum(axis=1) / (data.size * bw * np.sqrt(2 * np.pi))
+
+        grid = np.linspace(-15, 40, 1000)
+        cases = {
+            'binned, wide bandwidth': (grid, 2.0),
+            'binned, a few points per bandwidth': (grid, 0.08),
+            'direct, narrow bandwidth': (grid, 0.001),
+            'decreasing points': (grid[::-1], 1.0),
+            'all points equal': (np.full(50, 3.0), 1.0),
+        }
+        for name, (x, bw) in cases.items():
+            with self.subTest(case=name):
+                want = direct(x, bw)
+                got = gaussian_kde_on_grid(data, x, bw)
+                self.assertLess(np.abs(got - want).max(), 1e-12 * want.max())
+
     def test_shifted_distribution_labels_both_periods(self):
         from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot
         fig, ax = plt.subplots()

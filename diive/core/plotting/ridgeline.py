@@ -19,6 +19,7 @@ from matplotlib.pyplot import cm
 from sklearn.neighbors import KernelDensity
 
 import diive.core.plotting.plotfuncs as pf
+from diive.core.plotting.kde import gaussian_kde_on_grid
 from diive.core.plotting.styles import LightTheme as theme
 from diive.core.plotting.styles.LightTheme import adjust_color_lightness
 from diive.core.plotting.styles.format import FormatStyle
@@ -186,6 +187,21 @@ class RidgeLinePlot:
             y_index_colors[m] = next(self.colors)
         return y_index_colors
 
+    def _density(self, x1: np.ndarray, x_d: np.ndarray) -> np.ndarray:
+        """Kernel density of the values *x1*, evaluated at the points *x_d*.
+
+        The estimator is scikit-learn's ``KernelDensity`` with ``kd_kwargs``.
+        For the Gaussian kernel (the default) the fitted bandwidth goes to
+        :func:`~diive.core.plotting.kde.gaussian_kde_on_grid`, which gives the
+        same curve in a fraction of the time. Other kernels and metrics use
+        ``score_samples``.
+        """
+        self.kde = KernelDensity(**self.kd_kwargs) if self.kd_kwargs else KernelDensity()
+        self.kde.fit(x1[:, None])
+        if self.kde.kernel == "gaussian" and self.kde.metric == "euclidean":
+            return gaussian_kde_on_grid(x1, x_d, self.kde.bandwidth_)
+        return np.exp(self.kde.score_samples(x_d[:, None]))
+
     def _make_fig(self):
         # Draw into a caller-supplied figure (e.g. a GUI canvas) when given,
         # otherwise create a standalone one.
@@ -221,75 +237,38 @@ class RidgeLinePlot:
         # Create empty list for dynamic number of plots (rows)
         ax_objs = []
 
+        # Values of each group (e.g. each year), selected once
+        groups = {y_current: self.series[self.ys == y_current] for y_current in self.ys_unique}
+
         # Detect min and max of x across all required aggs (e.g. across all years),
         # to have the same scaling for the x-axis in all plots
         if not self.xlim:
             x_check = []
-            for y_current in self.ys_unique:
-                locs_current = self.ys == y_current
-                series = self.series[locs_current].copy()
-                # Check x
+            for series in groups.values():
                 x1 = np.array(series)
                 x_check.append(min(x1))
                 x_check.append(max(x1))
             self.xlim = [min(x_check), max(x_check)]
 
-        # Detect min and max of y across all required aggs (e.g. across all years),
-        # to have the same scaling for the y-axis in all plots
+        # One density per group, computed once and reused for the y-limits and the plot
+        x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
+        densities = {y_current: self._density(np.array(series), x_d)
+                     for y_current, series in groups.items()}
+
+        # Same y scaling in all plots: from zero to the highest density of all groups
         if not self.ylim:
-            y_currents = []  # List of y IDs, e.g. months or years
-            y_maxs = []  # List of y maxima
-            for y_current in self.ys_unique:
-                locs_current = self.ys == y_current
-                series = self.series[locs_current].copy()
-                x1 = np.array(series)
-                # Kernel density
-                if self.kd_kwargs:
-                    self.kde = KernelDensity(**self.kd_kwargs)
-                else:
-                    self.kde = KernelDensity()
-                # self.kde1 = KernelDensity(bandwidth=0.99, kernel='gaussian')
-                self.kde.fit(x1[:, None])
-                x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
-                logprob1 = self.kde.score_samples(x_d[:, None])
-                y = np.exp(logprob1)
-                # y_check.append(min(y))
-                y_maxs.append(max(y))
-                y_currents.append(y_current)
+            self.ylim = [0, max(max(y) for y in densities.values())]
 
-            # Maximum value for y (probability from KDE)
-            found_ymax = max(y_maxs)
-
-            # Set y-axis to found maximum, should always start at zero
-            self.ylim = [0, found_ymax]
-
-            # Index of ymax in list of maxima
-            index_of_max = y_maxs.index(max(y_maxs))
-
-            # TODO Use index to get y ID (e.g. week) where max was found
-            y_id = y_currents[index_of_max]
-
-
-        # n_uniques = len(self.ys_unique)
         i = 0
         for y_current in self.ys_unique:
             if self.verbose:
                 detail(f"Current y: {y_current}  Position in gridspec: {i + 1}", verbose=self.verbose)
             # Get data for current year or month or etc.
-            locs_current = self.ys == y_current
-            series = self.series[locs_current].copy()
+            series = groups[y_current]
             x1 = np.array(series)
             x1_mean = x1.mean()
             x1_percentile = series.quantile(self.shade_percentile)
-
-            # Kernel density
-            if self.kd_kwargs:
-                self.kde = KernelDensity(**self.kd_kwargs)
-            else:
-                self.kde = KernelDensity()
-            self.kde.fit(x1[:, None])
-            x_d = np.linspace(self.xlim[0], self.xlim[1], 1000)
-            logprob1 = self.kde.score_samples(x_d[:, None])
+            y = densities[y_current]
 
             # Create new axes object
             # ax_objs.insert(0, self.fig.add_subplot(gs[i:i + 1, 0:]))
@@ -298,7 +277,6 @@ class RidgeLinePlot:
             self.ax = ax_objs[-1]
 
             # Plot distribution
-            y = np.exp(logprob1)
             darker_color = adjust_color_lightness(self.assigned_colors[y_current], amount=0.4)
             self.ax.fill_between(x_d, y, alpha=1, color=self.assigned_colors[y_current])
             self.ax.plot(x_d, y, color=darker_color, lw=1, alpha=1)  # Outline darker than fill
@@ -314,9 +292,10 @@ class RidgeLinePlot:
             # Disable gridlines explicitly
             self.ax.grid(False)
 
-            # Remove axis borders, axis ticks, and labels
-            self.ax.set_yticklabels([])
+            # Remove axis borders, axis ticks, and labels. Ticks first: labels set
+            # on the default locator would build tick objects only to drop them.
             self.ax.set_yticks([])
+            self.ax.set_yticklabels([])
 
             # Show x labels only for last axis
             if i == len(self.ys_unique) - 1:
@@ -332,8 +311,8 @@ class RidgeLinePlot:
                 self.ax.set_xlabel(xlabel or "", fontsize=axlabel_fs, color=text_color,
                                    fontweight=self.style.axlabel_fontweight)
             else:
-                self.ax.set_xticklabels([])
                 self.ax.set_xticks([])
+                self.ax.set_xticklabels([])
 
             # Hide axis spines
             spines = ["top", "right", "left"]
