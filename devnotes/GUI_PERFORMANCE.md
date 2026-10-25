@@ -36,21 +36,26 @@ Pitfalls learned the hard way:
 - **The splash offscreen:** `QSplashScreen.show()` blocks about 1 s on the offscreen platform,
   so offscreen "splash painted" times are about 1 s later than on a real screen.
 
-## Current timings (2026-09-24, `329c2612`)
+## Current timings (2026-10-25, after the P3-P16 round)
+
+Measured while another session worked on the same machine, so the numbers are noisy. The pass
+opens the window directly, not through `run()`, so the background `scipy.stats` import and the
+flux pre-import (D8) do not show here.
 
 | Action | Freeze | Ready |
 |---|---|---|
-| Load example data + first Overview render | 2.8 s | 3.7 s |
-| Data change with 62 tabs open (only the Overview renders) | 2.2 s | 2.2 s |
-| Overview: click a variable | 1.5–2.1 s | 1.5–2.1 s |
-| Open Select variables | 1.8 s | 3.4 s |
-| Open Flux post-processing chain (first open, lazy imports) | 1.3 s | 1.3 s |
-| Theme change / open Appearance tab | 1.3 s | 1.7 / 2.3 s |
-| Open Driver explorer / Stepwise screening / Spectrogram | 0.9–1.0 s | 1.7–2.2 s |
-| Open Time series, Diel cycle, Cumulative, Cumulative year plot tabs | 0.7–0.8 s | 1.4–1.8 s |
-| Open Absolute limits filter / Gaps & coverage | 0.7–0.8 s | 0.7–0.8 s |
-| Open Seasonal trend (first run starts the worker process) | 0.4 s | 4.1 s |
-| About 35 other tabs (outlier, correction, flux, gap-filling, …) | under 0.2 s | under 0.3 s |
+| Load example data + first Overview render | 2.8 s | 2.9 s |
+| Data change with 60+ tabs open (only the Overview renders) | 1.7 s | 1.7 s |
+| Overview: click a variable | 0.8–1.7 s | 0.8–1.7 s |
+| Open Select variables (first menu tab, see P17) | 1.5 s | 1.5 s |
+| Open Flux post-processing chain (first open, no pre-import here) | 1.3 s | 1.3 s |
+| Open Gaps & coverage | 0.9 s | 1.0 s |
+| Open Stepwise screening | 0.7 s | 0.7 s |
+| Theme apply (no token change) / open Appearance | 0.6 s / 0.02 s | 0.7 s / 0.03 s |
+| Open Time series / Heatmap date/time | 0.55 s | 0.6 s |
+| Open Spectrogram, Cumulative year, Waterfall, Heatmap x/y/z | 0.4–0.5 s | 0.4–0.5 s |
+| Open Ridgeline / Scatter XY / Cumulative / Diel cycle | 0.17–0.35 s | 0.19–0.37 s |
+| Open Shifted distribution | 0.09 s | 0.10 s |
 
 Before this work (same data, measured more loosely): an Overview click took 9–12 s, a data
 change with 62 tabs open 39 s, a theme change 8–14 s, and each resize step of a window drag
@@ -60,85 +65,76 @@ about 1.6 s.
 
 ## Open
 
-### [ ] P3. Opening Select variables freezes for 1.8 s
-`diive/gui/tabs/variable_selector.py`. Odd for a list picker: it opts into the full record
-(`wants_full_data`) and may trigger a push or rebuild it doesn't need. Cause unknown.
+### [ ] P17. Offscreen only: the first menu tab grows the tab bar by 2 px
+Offscreen, adding the first closable tab makes the tab bar 2 px taller for good (Qt's default
+close button, then ours), so the Overview relayouts once (about 1 s, now when switching back to
+it). On the Windows platform the bar stays 52 px, so users do not see it. It still shows in the
+timing pass as "Open Select variables". Options: a `min-height` on the tab QSS in `theme.py`, or
+creating our close button in a `_StudioTabBar.tabInserted` override.
 
-### [ ] P4. A theme change still restyles the whole app (1.3 s); opening Appearance costs the same
-`diive/gui/theme.py` `ThemeManager.apply()` always calls `app.setStyleSheet`, which re-polishes
-every widget. The list width and heatmap colormap are not part of the stylesheet, so a change to
-either needs only the `changed` signal. Check why opening the Appearance tab triggers a restyle.
+### [ ] P18. Overview line render and layout
+Agg strokes the thinned time series at 2 columns per pixel: 330 ms for Rg_f, 144 ms for NEE per
+draw, on every select and pan step. Less would change pixels (1 column per pixel showed streaks
+in D1). Constrained layout is still about 165 ms per select, mostly tick and text extents.
 
-### [ ] P5. Overview: a variable click still takes 1.5–2.1 s; the first render 2.8 s
-`diive/gui/tabs/overview.py`. Remaining parts, measured by the agent that did the last round:
-constrained layout about 320 ms per click; `dv.sstats` for the stats band 60–110 ms;
-`diel_cycle` (`core/times/resampling.py`) builds `datetime.time` objects, about 56 ms per call
-(once per click and once per zoom settle); `loc='best'` of the diel and histogram legends about
-35 ms per pan step.
+### [ ] P19. Library costs behind the Overview and previews
+`dv.sstats` about 50 ms (nine separate `quantile` calls, about 30 `.loc` setitems; the Overview
+uses 10 of 30 metrics). `HistogramPlot` KDE about 47 ms plus 21 tick objects the Overview
+replaces. `HeatmapDateTime` `TimestampSanitizer` about 27 ms. `WaterfallPlot` 30-55 ms.
 
-### [ ] P6. Opening a project blocks for one Overview render (about 2.6 s)
-`diive/gui/app.py`. The file read runs on a worker; the render that follows does not. Tied to P5.
-
-### [ ] P7. `import diive` takes about 1.9 s before the splash can show
-`diive/__init__.py`. `diive.gui` sits inside the package, so this import always runs first.
-Largest costs: `sstats` pulling in `scipy.stats` (about 0.8 s) and the example-data module
-pulling in pandas (about 0.5 s).
-
-### [ ] P8. First open of the Flux post-processing chain tab costs 1.3 s
-Menu tabs are imported on first open (`registry.LazyTab`), so this tab pays for importing the
-flux chain modules then. The cost moved here from startup on purpose. Could be hidden by
-pre-importing in the background after startup.
-
-### [ ] P9. Plot tabs and preview heatmaps render at full resolution
-The Time series, Diel cycle, Cumulative and Cumulative year tabs freeze 0.7–0.8 s on open. The
-Overview's speed-ups are not used elsewhere yet: `HeatmapDateTime.plot(as_image=True)` is used
-only by the Overview, while the Heatmap plot tab and the previews in Combine variables, the
-derived-variable tabs, the flux chain and the gap-filling tabs still draw a `pcolormesh`;
-`decimate_line` (`core/plotting/plotfuncs.py`) is used only for the Overview time series.
-
-### [ ] P10. Colour-coded scatter in the GUI still takes about 1.2 s
-`diive/core/plotting/scatter.py` `_OccludedMarkerCollection`. At GUI size fewer markers are
-fully covered than in a small figure (52k of 175k are drawn), and drawing those takes about 1 s.
-
-### [ ] P11. Seasonal trend and Spectrogram redraws
-The Seasonal trend redraw costs 0.37–0.42 s (constrained layout and ticks on four date axes).
-The Spectrogram's `shading="gouraud"` mesh costs 0.4–0.8 s per draw; drawing only the rows up to
-max cycles/day would roughly halve it, but raising the limit would then need a rebuild.
-
-### [ ] P12. Driver explorer: 0.36 s left
-Mostly drawing the scatter markers; the legend search is now about 0.02 s.
-
-### [ ] P13. Hover repaints the whole canvas on every mouse move
-`diive/gui/widgets/hover.py`: it restores the full-figure background and blits `fig.bbox`, so Qt
-repaints the entire canvas per move. Blitting only the old and new annotation areas, and
-coalescing mouse moves, would cut that. Line lookups on lines that are not thinned still scan
-the full array per move.
-
-### [ ] P14. Variable lists are rebuilt row by row
-`diive/gui/widgets/variable_panel.py`: every metadata change removes and re-adds all rows
-(`takeItem`, quadratic), with no `setUniformItemSizes`; the delegate builds fonts and colours on
-every paint. Cheap at 37 columns, noticeable above a few hundred.
-
-### [ ] P15. Stylesheet churn and card rebuilds
-About 175 per-widget `setStyleSheet` calls; `SubTabs.add_page` restyles all buttons on every add;
-the Overview hero band rebuilds styled chips per click; the Events tab rebuilds every card on each
-keystroke in its filter; `_on_events_changed` rebuilds every event flag on a visibility-only
-toggle.
-
-### [ ] P16. Opening a menu tab relayouts the tab that was visible
-Found with P1 (2026-10-24). Adding a tab with a close button changes the tab bar height for a
-moment, so the visible tab's canvas is resized by 2 px and back. That starts its relayout timer,
-and `PlotCanvas.draw()` of the new tab calls `flush_events()`, which fires it: the old tab runs
-`_solve_layout` (two `draw_without_rendering` passes) and a `draw_idle`. About 1.5 s behind the
-Overview (8 axes), about 0.85 s behind a Time series tab, and it lands on whichever tab opens.
-Likely part of every menu-tab open while a plot tab is visible. Code: the resize handler and
-`_relayout` in `diive/gui/widgets/mpl_canvas.py`, `_open_menu_tab` in `diive/gui/app.py`. Ideas:
-ignore a resize that returns to the frozen size before the timer fires, or skip the relayout of
-canvases that are no longer visible.
+### [ ] P20. Smaller leftovers
+- Events filter: a keystroke that changes the matches moves cards between parents (about 120-180
+  ms at 100 events). `FlowLayout._do_layout` could skip hidden items (check its other users).
+- About 180 `setStyleSheet` calls remain. Repeated ones: `_apply_style` in plotting,
+  `_screening_base`, `combine_variables` (on theme change), the `_refresh_availability`
+  functions, `metadata_explorer`, `stepwise_cards._restyle`, `flux_pipeline_rail._restyle`.
+- Restored projects: each plot tab still renders once on the data push before its restored
+  render. Restoring hidden tabs lazily would need `_open_tabs_state` changes.
+- Spectrogram: the gouraud triangles in view still take about 0.22 s per draw.
+- Hover: about 2 ms per move is matplotlib drawing the tooltip text.
+- Spearman ranking in the Driver explorer: `spearmanr` itself dominates.
 
 ---
 
 ## Done
+
+### [x] D8. Round P3-P16 (2026-10-25)
+Seven agents on disjoint files, A/B measured back to back while other work ran.
+- **P16 canvas relayout** (`mpl_canvas.py`, `app.py`): a resize back to the size of the last
+  render and solve does nothing, the first resize after a render defers its solve to the next
+  render, a hidden canvas owes its relayout until shown, and `_open_menu_tab` shows the tab
+  before pushing data, so it renders once at its real size. Six plot-tab opens behind the
+  Overview 7.3 s -> 2.2 s, Appearance 1.0 s -> 0.04 s. P3 (Select variables) was this.
+- **P6/P8** (`app.py`): `scipy.stats` imported in the startup worker (first render 1.9 -> 1.3 s
+  through `run()`). After startup a daemon thread imports `diive.flux.postprocessingchain` and
+  `diive.flux.partitioning`; tab opens join it (flux chain first open 1.0 s -> 0.25 s). Every
+  session now loads the ML stack in the background. Event flags rebuild only when an event
+  changes, not on a visibility toggle.
+- **P7** (`diive/__init__.py`, `core/dfun/stats.py`): top-level utilities and `__version__`
+  resolve lazily, `scipy.stats` imports inside the functions that need it. `import diive`
+  1.0 s -> 0.02 s, the splash about 0.9 s sooner.
+- **P5** (`overview.py`, `resampling.diel_cycle`): tick memo per view (`_TicksPerView`), legend
+  'best' search only on changed inputs (`_PlacedLegend`), `fig.delaxes` before reset, the hero
+  band settles before the first render (one draw at startup instead of four), chips reused.
+  `diel_cycle` groups by integer time of day, bit-identical, 40 -> 14 ms. Pixel-identical.
+- **P4/P15** (`theme.py`, `settings.py`, `sub_tabs.py`, `events.py`): `app.setStyleSheet` only
+  when the text changes (theme apply without token change 1.7 s -> 0.01 s), swatches and
+  subtab pills restyle only on change, Events cards cached and reused.
+- **P13/P14** (`hover.py`, `variable_panel.py`, `variable_delegate.py`): hover blits only the
+  old and new tooltip boxes and skips moves on the same sample (line 11 -> 3.7 ms, heatmap
+  5.6 -> 1.0 ms per move). Lists reorder with one `sortItems` and uniform item sizes, the
+  delegate caches fonts and colours (filter at 3000 columns 2.9 s -> 54 ms).
+- **P9** (`plotting.py`, previews): hidden plot tabs render when shown (theme change with 5
+  hidden plot tabs 0.6 s -> 0.02 s), restored tabs no longer queue an extra render, the Time
+  series line is thinned at 4 columns per pixel and re-thinned on zoom, pan and resize,
+  heatmaps and previews draw `as_image=True` (MDS heatmaps 0.5 -> 0.25 s).
+- **P10/P11** (`scatter.py`, `spectrogram.py`, `seasonaltrend.py`): the colour-coded scatter
+  draws each opaque marker as one edge-free polygon (draw 560 -> 210 ms). This gives up D7's
+  pixel identity for that case: up to 9/255 levels in antialiased outlines, kept on purpose.
+  Spectrogram draws only the mesh in view (pixel-identical, 355 -> 245 ms), Seasonal trend
+  memoizes its date ticks per view (pixel-identical).
+- **P12** (`analysis/correlation.py`): `rank_drivers` scans plain arrays with the same
+  `np.corrcoef` / `spearmanr` calls, results identical, lag scans 1.5-3.7x faster.
 
 ### [x] D0. Ridgeline and Shifted distribution tabs (P1, P2)
 Both spent their time in scikit-learn's `KernelDensity.score_samples`, which sums every record at

@@ -70,6 +70,16 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   compute their densities about 30 to 100 times faster, with the same curves. In the GUI, the
   Ridgeline tab opens in 0.4 s instead of 10 s and the Shifted distribution tab in 0.3 s
   instead of 4.5 s.
+- **Faster `import diive`:** the package imports in about 0.02 s instead of 1 s. Top-level
+  functions and `scipy.stats` load on first use.
+- **Faster colour-coded scatter (changes results):** `ScatterXY` with colour-coded points draws
+  about 2.5 times faster. Marker outlines differ from plain matplotlib by at most 9 of 255
+  colour levels.
+- **Faster driver ranking and diel cycle:** `rank_drivers` scans lags up to 3.7 times faster
+  and `diel_cycle` runs about 3 times faster, with identical results.
+- **GUI, faster tabs:** tabs open once at their final size, hidden plot tabs render when shown,
+  and theme changes, hover, variable lists, the Overview, the Events tab, Seasonal trend and
+  Spectrogram need less time. The flux chain modules load in the background after startup.
 - **Faster moving point method:** `UstarMovingPointDetection` runs about 6 times faster.
 - **Examples:** the USTAR examples show `UstarThresholdDetection` and compare its four modes.
 - **Dependencies:** numba is now a direct dependency (it came with shap before). Intel Macs get
