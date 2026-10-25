@@ -77,9 +77,11 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 The screening is a Hampel filter on the double differences of the storage
                 term (13 days, 5.5 sigma, day and night together, one pass). It removes
                 isolated spikes only: a run of more than ``max_run`` (3) removed values in a
-                row is kept as measured, because it is a noisy period, not a spike. Each
-                removed run gets the mean of its measured values, so it keeps its sum, the
-                real concentration change across it, and the storage term stays balanced. Needs
+                row is kept as measured, because it is a noisy period, not a spike. Each run,
+                together with one record on either side, is replaced by the mean of its
+                measured values. The block keeps its sum, the real concentration change across
+                it, so the storage term stays balanced; a single spike is spread over three
+                records. Needs
                 ``gapfill_storage_term=True``, so that every measured flux keeps a storage
                 term. Default False.
             storage_screening: Settings that replace the defaults above, e.g.
@@ -92,8 +94,10 @@ class FluxStorageCorrectionSinglePointEddyPro:
             flux_corrected_col: Name of the corrected flux column.
             gapfilled_strgcol: Name of the gap-filled storage column (if enabled).
             flag_isgapfilled: Flag column (0=original, 1=gap-filled because missing,
-                2=removed by the screening and replaced by the mean of its run).
-            storage_outliers_: Timestamps of the storage values the screening removed.
+                2=replaced by the screening with the mean of its block).
+            storage_outliers_: Timestamps of the spikes the screening found.
+            storage_replaced_: Timestamps of the values it replaced: the spikes and one
+                record on either side.
         """
         self.df = df.copy()
         self.fluxcol = fluxcol
@@ -143,6 +147,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self._screening_max_run = screening.pop('max_run')
         self.storage_screening = screening
         self.storage_outliers_ = pd.DatetimeIndex([])
+        self.storage_replaced_ = pd.DatetimeIndex([])
 
         # Name of gapfilled storage column and its flag
         self.gapfilled_strgcol = None
@@ -279,8 +284,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
     def _screen_storage_term(self) -> None:
         """Find isolated spikes in the storage term with a Hampel filter.
 
-        ``_gapfill_storage_term`` replaces each run of them by its mean (flag 2). The
-        original storage column in the results keeps the measured values.
+        ``_gapfill_storage_term`` replaces each run of them, with one record on either side,
+        by its mean (flag 2). The original storage column in the results keeps the measured
+        values.
         """
         from diive.preprocessing.outlier_detection.hampel import Hampel
         strg = self._results[self.strgcol]
@@ -294,19 +300,21 @@ class FluxStorageCorrectionSinglePointEddyPro:
         run_len = flagged.groupby(run_id).transform('size')
         keep = flagged & (run_len <= self._screening_max_run)
         self.storage_outliers_ = strg.index[keep.to_numpy()]
-        info(f"Storage term {self.strgcol}: {len(self.storage_outliers_):,} spike(s) removed "
-             f"and filled ({100 * len(self.storage_outliers_) / max(strg.notna().sum(), 1):.2f} % "
-             f"of the measured storage values)")
+        info(f"Storage term {self.strgcol}: {len(self.storage_outliers_):,} spike(s) found "
+             f"({100 * len(self.storage_outliers_) / max(strg.notna().sum(), 1):.2f} % of the "
+             f"measured storage values)")
 
     def screening_summary(self, gain: float = 1.0) -> dict:
         """Numbers that show whether the screened and filled storage term still makes sense.
 
         On the records with a measured flux, compares the storage term without screening
-        (measured values, gaps filled) with the one used (removed values filled as well):
+        (measured values, gaps filled) with the one used (spikes replaced as well):
 
-        - ``removed``: number of storage values the screening removed at measured fluxes.
-        - ``removed_negative``: share of them below zero. Real storage spikes have both signs;
-          a large negative share in the morning hints at the real morning release being cut.
+        - ``spikes``: number of spikes the screening found at measured fluxes.
+        - ``replaced``: number of values replaced there (the spikes and their neighbours).
+        - ``spikes_negative``: share of the spikes below zero. Real storage spikes have both
+          signs; a large negative share in the morning hints at the real morning release being
+          cut.
         - ``sum_unscreened``, ``sum_used``: the sums of the two versions, times ``gain``
           (``12.011e-6 * 1800`` gives gC m-2 for a 30-min CO2 storage term in umol m-2 s-1).
           Over a year the storage term should sum to about zero. Their difference is the
@@ -317,13 +325,14 @@ class FluxStorageCorrectionSinglePointEddyPro:
         Needs ``screen_storage_term=True`` and a finished ``storage_correction()``.
         """
         d = self._screening_frame()
-        removed = d['removed']
+        spikes = d['spike']
         days = d.index.normalize()
         daily_unscreened = (d['unscreened'] * gain).groupby(days).sum(min_count=1)
         daily_used = (d['used'] * gain).groupby(days).sum(min_count=1)
         return {
-            'removed': int(removed.sum()),
-            'removed_negative': float((d.loc[removed, 'unscreened'] < 0).mean()) if removed.any() else float('nan'),
+            'spikes': int(spikes.sum()),
+            'replaced': int(d['replaced'].sum()),
+            'spikes_negative': float((d.loc[spikes, 'unscreened'] < 0).mean()) if spikes.any() else float('nan'),
             'sum_unscreened': float(d['unscreened'].sum() * gain),
             'sum_used': float(d['used'].sum() * gain),
             'daily_abs_median_unscreened': float(daily_unscreened.abs().median()),
@@ -331,16 +340,16 @@ class FluxStorageCorrectionSinglePointEddyPro:
         }
 
     def _screening_frame(self) -> DataFrame:
-        """Storage term at the records with a measured flux: unscreened, used, and removed."""
+        """Storage term at the records with a measured flux: unscreened, used, replaced, spikes."""
         if not self.screen_storage_term or self.gapfilled_strgcol is None:
             raise RuntimeError("Needs screen_storage_term=True and storage_correction() first.")
         r = self.results
         r = r[r[self.fluxcol].notna()]
-        removed = r[self.flag_isgapfilled] == 2
-        # Without screening the removed records would carry their measured value.
-        unscreened = r[self.gapfilled_strgcol].where(~removed, r[self.strgcol])
+        replaced = r[self.flag_isgapfilled] == 2
+        # Without screening the replaced records would carry their measured value.
+        unscreened = r[self.gapfilled_strgcol].where(~replaced, r[self.strgcol])
         return DataFrame({'unscreened': unscreened, 'used': r[self.gapfilled_strgcol],
-                          'removed': removed})
+                          'replaced': replaced, 'spike': r.index.isin(self.storage_outliers_)})
 
     def plot_screening(self, gain: float = 1.0, units: str = '', showplot: bool = True):
         """Check the screened and filled storage term in three panels.
@@ -348,8 +357,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
         1. Mean daily cycle of the storage term with and without screening. The real cycle is
            positive at night, when CO2 builds up, and negative in the morning, when it is released.
            If the screened line flattens the morning dip, the screening cut real signal.
-        2. Removed values by hour of the day, positive above and negative below zero. Real spikes
-           spread over the day with both signs.
+        2. Spikes by hour of the day, positive above and negative below zero. Real spikes spread
+           over the day with both signs.
         3. Cumulative sum of both versions over the record (times ``gain``). The storage term
            should sum to about zero over a year; the gap between the lines is the direct effect of
            the screening on the sum of the flux.
@@ -383,7 +392,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         cp.panel_label(ax_diel, "Mean daily cycle")
         ax_diel.legend(loc='lower right', frameon=False, fontsize=8.5)
 
-        removed = d.loc[d['removed'], 'unscreened']
+        removed = d.loc[d['spike'], 'unscreened']
         rh = removed.index.hour + removed.index.minute / 60
         bins = np.arange(0, 24.5, 1)
         pos = np.histogram(rh[removed.to_numpy() >= 0], bins=bins)[0]
@@ -394,9 +403,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
         ax_hour.set_xlim(0, 24)
         ax_hour.set_xticks(range(0, 25, 3))
         ax_hour.set_xlabel('hour of the day')
-        ax_hour.set_ylabel('removed values (negative below zero)')
+        ax_hour.set_ylabel('spikes (negative below zero)')
         cp.style_axes(ax_hour)
-        cp.panel_label(ax_hour, "Removed values by hour")
+        cp.panel_label(ax_hour, "Spikes by hour")
         ax_hour.legend(loc='upper right', frameon=False, fontsize=8.5)
 
         for col, color, label, width in (('unscreened', cp.KEPT, 'without screening', 2.6),
@@ -413,8 +422,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
         u = f" {units}" if units else ""
         cp.figure_title(
             fig, f"Storage term screening: {self.strgcol}",
-            f"{summary['removed']:,} values removed and filled at measured fluxes, "
-            f"{100 * summary['removed_negative']:.0f} % of them negative. Sum without screening "
+            f"{summary['spikes']:,} spikes at measured fluxes, {100 * summary['spikes_negative']:.0f} % "
+            f"negative; {summary['replaced']:,} values replaced by the mean of their block. "
+            f"Sum without screening "
             f"{summary['sum_unscreened']:,.1f}{u}, used {summary['sum_used']:,.1f}{u}. Median absolute "
             f"daily sum {summary['daily_abs_median_unscreened']:.2f} -> {summary['daily_abs_median_used']:.2f}{u}.")
         self._fig = fig
@@ -422,17 +432,23 @@ class FluxStorageCorrectionSinglePointEddyPro:
             plt.show()
         return fig
 
-    def _screened_run_means(self) -> pd.Series:
-        """For each value the screening removed, the mean of the measured values of its run.
+    def _screened_block_means(self) -> pd.Series:
+        """The replacement values: for each spike block, the mean of its measured values.
 
-        A run is a block of removed values in a row (at most ``max_run`` long). Replacing the
-        run by its mean keeps its sum and removes the spike shape: a concentration spike that
-        gives +X and then -X in the storage term becomes values near zero.
+        A block is a run of spikes plus one record on either side; blocks that touch merge. A
+        neighbour without a measured value is a gap and stays out (the rolling median fills it).
+        Replacing a block by its mean keeps its sum and removes the spike shape. A single spike
+        is spread over three records. A concentration spike puts +X and -X into the storage
+        term, next to each other or, with a central difference, one record apart; both lie in
+        one block, which then becomes values near zero.
         """
         strg = self.results[self.strgcol]
         flagged = pd.Series(strg.index.isin(self.storage_outliers_), index=strg.index)
-        run_id = (flagged != flagged.shift()).cumsum()
-        return strg.groupby(run_id).transform('mean')[flagged.to_numpy()]
+        block = (flagged | flagged.shift(1, fill_value=False) | flagged.shift(-1, fill_value=False))
+        block &= strg.notna()
+        block_id = (block != block.shift()).cumsum()
+        means = strg.where(block).groupby(block_id).transform('mean')
+        return means[block.to_numpy()]
 
     def _gapfill_storage_term(self) -> DataFrame:
         """Fill missing storage values using a rolling median.
@@ -450,15 +466,20 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self.flag_isgapfilled = f"FLAG_{self.gapfilled_strgcol}_ISFILLED"
 
         # Generate temporary subset where all flux values are available and check for missing
-        # storage. Each run of values removed by the screening gets the mean of its measured
-        # values (flag 2): the storage term is the change in concentration, so the sum over the
-        # run is the real concentration change across it, and keeping it keeps the balance.
+        # storage. Each spike block gets the mean of its measured values (flag 2): the storage
+        # term is the change in concentration, so the sum over the block is the real
+        # concentration change across it, and keeping it keeps the balance.
         strg_series = self.results[self.strgcol].copy()
-        strg_series[self.storage_outliers_] = self._screened_run_means()
+        replacement = self._screened_block_means()
+        self.storage_replaced_ = replacement.index
+        strg_series[self.storage_replaced_] = replacement
+        if len(self.storage_replaced_):
+            info(f"Storage term {self.strgcol}: {len(self.storage_replaced_):,} value(s) replaced by "
+                 f"the mean of their block (spikes and one record on either side)")
         gapfilled_df = pd.concat([self.results[self.fluxcol], self.results[self.strgcol]], axis=1)
         gapfilled_df[self.gapfilled_strgcol] = strg_series
         gapfilled_df[self.flag_isgapfilled] = 0
-        gapfilled_df.loc[gapfilled_df.index.isin(self.storage_outliers_), self.flag_isgapfilled] = 2
+        gapfilled_df.loc[gapfilled_df.index.isin(self.storage_replaced_), self.flag_isgapfilled] = 2
         gapfilled_df = gapfilled_df.dropna(subset=[self.fluxcol])
         n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
         prev_n_still_missing_strg = n_still_missing_strg
