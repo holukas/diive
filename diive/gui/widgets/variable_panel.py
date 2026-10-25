@@ -50,6 +50,22 @@ from diive.gui.widgets.variable_list import VariableList
 ORDER_ROLE = Qt.ItemDataRole.UserRole + 10
 
 
+class _VariableItem(QListWidgetItem):
+    """List row that sorts by its ``_rank``, the position `_reorder` assigns.
+
+    Lets the panel re-sequence all rows with one model sort instead of taking
+    every row out and adding it back. Removing a row is linear in the rows
+    after it and in the hidden rows (Qt tracks those as persistent indexes),
+    so the take-all loop was quadratic: about 0.5 s per filter keystroke at
+    3000 variables.
+    """
+
+    _rank = 0
+
+    def __lt__(self, other) -> bool:
+        return self._rank < getattr(other, "_rank", 0)
+
+
 def lock_panel_handle(splitter, handle_index: int = 1) -> None:
     """Disable the splitter handle next to the fixed-width ``VariablePanel``.
 
@@ -137,6 +153,9 @@ class VariablePanel(QWidget):
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self._delegate = VariableDelegate(self.list)
         self.list.setItemDelegate(self._delegate)
+        # Every row has the same height (the delegate's sizeHint), so the view
+        # can skip asking for each row's size when it lays out the list.
+        self.list.setUniformItemSizes(True)
         self.list.setMouseTracking(True)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.list.setWordWrap(False)
@@ -268,7 +287,7 @@ class VariablePanel(QWidget):
         return [self.list.item(i).data(NAME_ROLE) for i in range(self.list.count())]
 
     def _add_item(self, name: str, created: bool) -> None:
-        item = QListWidgetItem(name)
+        item = _VariableItem(name)
         item.setData(NAME_ROLE, name)
         item.setData(PANEL_ROLE, 0)
         item.setData(CREATED_ROLE, created)
@@ -278,10 +297,14 @@ class VariablePanel(QWidget):
 
     # --- highlight (panel order: 1 = primary, 2+ = additional) ---
     def set_panels(self, panels: list[str]) -> None:
+        # Only rows with a changed value are written: each setData is a model
+        # change signal.
         for i in range(self.list.count()):
             item = self.list.item(i)
             name = item.data(NAME_ROLE)
-            item.setData(PANEL_ROLE, panels.index(name) + 1 if name in panels else 0)
+            order = panels.index(name) + 1 if name in panels else 0
+            if item.data(PANEL_ROLE) != order:
+                item.setData(PANEL_ROLE, order)
         self.list.viewport().update()
 
     def clear_filter(self) -> None:
@@ -301,14 +324,18 @@ class VariablePanel(QWidget):
     # --- loading indicator ---
     def set_loading(self, name: str) -> None:
         """Mark `name` as loading (busy wash + bar); clears it from others."""
-        for i in range(self.list.count()):
-            item = self.list.item(i)
-            item.setData(LOADING_ROLE, item.data(NAME_ROLE) == name)
-        self.list.viewport().update()
+        self._set_loading_flags(name)
 
     def clear_loading(self) -> None:
+        self._set_loading_flags(None)
+
+    def _set_loading_flags(self, name) -> None:
+        """Flag `name` as loading and every other row as not (changed rows only)."""
         for i in range(self.list.count()):
-            self.list.item(i).setData(LOADING_ROLE, False)
+            item = self.list.item(i)
+            loading = item.data(NAME_ROLE) == name
+            if bool(item.data(LOADING_ROLE)) != loading:
+                item.setData(LOADING_ROLE, loading)
         self.list.viewport().update()
 
     def run_with_loading(self, name: str, fn) -> None:
@@ -381,18 +408,23 @@ class VariablePanel(QWidget):
     def _reorder(self, ordered: list, hidden: set) -> None:
         """Re-sequence the list to `ordered`, hiding items whose id() is in `hidden`.
 
-        Items are detached and re-added in the new order; each keeps its data
-        (name, pills, panel/loading state), so only position and the hidden flag
-        change. `ordered` must contain every current item exactly once (it holds
-        the references that keep the detached items alive).
+        Each item keeps its data (name, pills, panel/loading state), so only
+        position and the hidden flag change. `ordered` must contain every
+        current item exactly once. The rows are moved by one sort on the rank
+        each item gets here, and only when the order differs. Qt keeps the
+        hidden flag with the item through the sort, so only the flags that
+        change are written.
         """
         self.list.setUpdatesEnabled(False)
         try:
-            while self.list.count():
-                self.list.takeItem(0)
+            if any(self.list.item(i) is not it for i, it in enumerate(ordered)):
+                for rank, it in enumerate(ordered):
+                    it._rank = rank
+                self.list.sortItems(Qt.SortOrder.AscendingOrder)
             for it in ordered:
-                self.list.addItem(it)
-                it.setHidden(id(it) in hidden)
+                hide = id(it) in hidden
+                if it.isHidden() != hide:
+                    it.setHidden(hide)
         finally:
             self.list.setUpdatesEnabled(True)
         self.list.viewport().update()

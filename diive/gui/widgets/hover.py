@@ -15,12 +15,17 @@ the value under the cursor as the mouse moves over a plot:
   the grid and shows its two axis values and the cell value.
 
 It renders by **blitting** (cache the background once per draw, then redraw just
-the annotation), so it never triggers a full repaint per mouse move. This is
-pure presentation glue — no data/domain logic — so it lives in the GUI.
+the annotation), so it never triggers a full render per mouse move. A move
+restores and repaints only the areas of the previous and the new tooltip, not
+the whole canvas, and a move that lands on the same sample or cell as the last
+one changes nothing. This is pure presentation glue (no data or domain logic), so
+it lives in the GUI.
 
 Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
+
+import math
 
 import numpy as np
 from matplotlib.collections import PathCollection, QuadMesh
@@ -34,6 +39,7 @@ from matplotlib.dates import (
     num2date,
 )
 from matplotlib.image import AxesImage
+from matplotlib.transforms import Bbox
 
 #: Tooltip / marker ink (blue-grey 800), matching the GUI's neutral accents.
 _INK = "#37474F"
@@ -42,6 +48,11 @@ _INK = "#37474F"
 #: hover (beyond this the cursor is "in empty space" and other artists, e.g. a
 #: binned trend line, may answer instead).
 _SCATTER_PICK_RADIUS = 24.0
+
+#: Pixels added around the tooltip and marker extents before restoring and
+#: repainting them (antialiasing, the marker edge, and the integer rounding
+#: in `FigureCanvasQTAgg.blit`).
+_BLIT_PAD = 4.0
 
 
 class HoverAnnotator:
@@ -56,6 +67,9 @@ class HoverAnnotator:
         self._markers: dict = {}           # ax -> marker Line2D
         self._mesh_cache: dict = {}        # id(QuadMesh/AxesImage) -> (xb, yb, values)
         self._scatter_cache: dict = {}     # id(PathCollection) -> _ScatterPixels
+        self._line_cache: dict = {}        # id(Line2D) -> (line, src, x, y, ascending)
+        self._drawn = None                 # display Bbox of the drawn tooltip + marker
+        self._last_hit = None              # (ax, x, y, text, show_marker) last drawn
         self._visible = False
         self._enabled = True
 
@@ -72,8 +86,11 @@ class HoverAnnotator:
         self._markers.clear()
         self._mesh_cache.clear()
         self._scatter_cache.clear()
+        self._line_cache.clear()
         self._bg = self._canvas.copy_from_bbox(self.fig.bbox)
         self._bg_size = tuple(self.fig.bbox.size)
+        self._drawn = None
+        self._last_hit = None
         self._visible = False
 
     def _bg_matches(self) -> bool:
@@ -130,6 +147,9 @@ class HoverAnnotator:
             self._hide()
             return
         x, y, text, show_marker = hit
+        key = (ax, x, y, text, show_marker)
+        if self._visible and key == self._last_hit:
+            return  # same sample or cell as the tooltip already shown
         ann = self._annotation_for(ax)
         ann.xy = (x, y)
         ann.set_text(text)
@@ -141,10 +161,24 @@ class HoverAnnotator:
         else:
             marker.set_visible(False)
 
-        self._canvas.restore_region(self._bg)
+        old = self._drawn if self._visible else None
+        self._restore(old)
         ax.draw_artist(marker)
         ax.draw_artist(ann)
-        self._canvas.blit(self.fig.bbox)
+        new = self._extent(ann, marker if show_marker else None)
+        if old is None:
+            self._blit(new)
+        else:
+            # One repaint while the boxes are close (the usual small mouse
+            # step), two when a jump would make their union much larger.
+            union = Bbox.union([old, new])
+            if _area(union) <= _area(old) + _area(new):
+                self._blit(union)
+            else:
+                self._blit(old)
+                self._blit(new)
+        self._drawn = new
+        self._last_hit = key
         self._visible = True
 
     def _hide(self) -> None:
@@ -153,9 +187,52 @@ class HoverAnnotator:
         for marker in self._markers.values():
             marker.set_visible(False)
         if self._visible and self._bg_matches():
-            self._canvas.restore_region(self._bg)
-            self._canvas.blit(self.fig.bbox)
+            self._restore(self._drawn)
+            self._blit(self._drawn)
+        self._drawn = None
+        self._last_hit = None
         self._visible = False
+
+    # --- partial restore / repaint ---
+    def _extent(self, ann, marker):
+        """Display-space box covering the drawn tooltip and marker, padded."""
+        renderer = self._canvas.get_renderer()
+        # The rounded box reaches its pad (a fraction of the font size in
+        # pixels) beyond the text. Padding the text extent by that is much
+        # cheaper than the extent of the box's curved path.
+        patch = ann.get_bbox_patch()
+        box_pad = patch.get_mutation_scale() * getattr(patch.get_boxstyle(), "pad", 0.5)
+        boxes = [ann.get_window_extent(renderer).padded(box_pad)]
+        if marker is not None:
+            boxes.append(marker.get_window_extent(renderer))
+        return Bbox.union(boxes).padded(_BLIT_PAD)
+
+    def _restore(self, bbox) -> None:
+        """Put the cached background back inside `bbox` (display coordinates).
+
+        Restoring only the tooltip's area instead of the whole figure keeps a
+        move cheap on large canvases. The region's own extents are pixel
+        coordinates with the origin at the top left, so the display box (origin
+        at the bottom left) is flipped before it is passed on."""
+        if bbox is None:
+            return
+        rx0, ry0, rx1, ry1 = self._bg.get_extents()  # whole figure: (0, 0, W, H)
+        x0 = max(rx0, math.floor(bbox.x0))
+        x1 = min(rx1, math.ceil(bbox.x1))
+        top = max(ry0, math.floor(ry1 - bbox.y1))
+        bottom = min(ry1, math.ceil(ry1 - bbox.y0))
+        if x1 <= x0 or bottom <= top:
+            return
+        self._canvas.restore_region(self._bg, bbox=(x0, top, x1, bottom),
+                                    xy=(rx0, ry0))
+
+    def _blit(self, bbox) -> None:
+        """Repaint only `bbox` (display coordinates) of the canvas widget."""
+        if bbox is None:
+            return
+        clipped = Bbox.intersection(bbox, self.fig.bbox)
+        if clipped is not None and clipped.width > 0 and clipped.height > 0:
+            self._canvas.blit(clipped)
 
     # --- value lookup ---
     def _value_at(self, ax, event):
@@ -182,7 +259,7 @@ class HoverAnnotator:
             if hit is not None:
                 return hit
         lines = [ln for ln in ax.get_lines()
-                 if ln.get_visible() and np.asarray(ln.get_xdata()).size > 2]
+                 if ln.get_visible() and np.size(ln.get_xdata(orig=False)) > 2]
         if lines:
             return self._line_value(ax, lines, event)
         return None
@@ -246,28 +323,52 @@ class HoverAnnotator:
         self._scatter_cache[id(coll)] = (coll, result)
         return result
 
+    def _line_arrays(self, line):
+        """A line's x and y as floats, and whether x is finite and ascending.
+
+        Kept until the next draw (or until the line gets new data), so the
+        conversion and the ascending check run once, not per mouse move."""
+        full = getattr(line, "_diive_hover_xy", None)
+        if full is not None:
+            src = full  # a thinned line's full record, already as floats
+            x, y = full
+        else:
+            # orig=False returns the unit-converted floats matplotlib actually
+            # plots (e.g. date ordinals), matching event.xdata and transData.
+            x = line.get_xdata(orig=False)
+            y = line.get_ydata(orig=False)
+            src = (x, y)
+        cached = self._line_cache.get(id(line))
+        if (cached is not None and cached[0] is line
+                and cached[1][0] is src[0] and cached[1][1] is src[1]):
+            return cached[2:]
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
+        with np.errstate(invalid="ignore"):
+            ascending = bool(x.size and np.isfinite(x).all()
+                             and (x[1:] >= x[:-1]).all())
+        # Keep the line and its source arrays so a recycled id() or new data
+        # can't serve stale values.
+        self._line_cache[id(line)] = (line, src, x, y, ascending)
+        return x, y, ascending
+
     def _line_value(self, ax, lines, event):
         best = None  # (pixel_dist_sq, x, y)
         for line in lines:
-            full = getattr(line, "_diive_hover_xy", None)
-            if full is not None:
-                x, y = full  # a thinned line's full record, already as floats
-            else:
-                # orig=False returns the unit-converted floats matplotlib
-                # actually plots (e.g. date ordinals), matching event.xdata
-                # and transData.
-                x = np.asarray(line.get_xdata(orig=False), dtype=float)
-                y = np.asarray(line.get_ydata(orig=False), dtype=float)
+            x, y, ascending = self._line_arrays(line)
             if x.size == 0:
                 continue
-            # Nearest sample in x. argmin handles non-monotonic lines (e.g. the
-            # per-month diel cycle) that searchsorted, which assumes ascending x,
-            # would snap to the wrong point.
-            with np.errstate(invalid="ignore"):
-                dx = np.abs(x - event.xdata)
-            if not np.any(np.isfinite(dx)):
-                continue
-            idx = int(np.nanargmin(dx))
+            if ascending:
+                idx = _nearest_ascending(x, event.xdata)
+            else:
+                # Nearest sample in x. argmin handles non-monotonic lines
+                # (e.g. the per-month diel cycle) that searchsorted, which
+                # assumes ascending x, would snap to the wrong point.
+                with np.errstate(invalid="ignore"):
+                    dx = np.abs(x - event.xdata)
+                if not np.any(np.isfinite(dx)):
+                    continue
+                idx = int(np.nanargmin(dx))
             for i in (idx - 1, idx, idx + 1):
                 if not (0 <= i < x.size) or not np.isfinite(y[i]):
                     continue
@@ -393,6 +494,28 @@ class HoverAnnotator:
         spanning roughly 0-24, so a value in [0, 24] reads as a clock time."""
         lo, hi = sorted(axis.get_view_interval())
         return lo >= -1.0 and hi <= 25.0 and (hi - lo) >= 6.0
+
+
+def _area(bbox) -> float:
+    return bbox.width * bbox.height
+
+
+def _nearest_ascending(x: np.ndarray, value: float) -> int:
+    """Index of the sample nearest to `value` in finite, ascending `x`.
+
+    Gives the same index as ``nanargmin(abs(x - value))``, the first one on
+    ties, with two binary searches instead of a pass over the whole array."""
+    n = x.size
+    pos = int(np.searchsorted(x, value, side="left"))
+    if pos == 0:
+        k = 0
+    elif pos == n:
+        k = n - 1
+    else:
+        # Here x[pos - 1] < value <= x[pos]. The earlier sample wins a tie.
+        k = pos - 1 if value - x[pos - 1] <= x[pos] - value else pos
+    # With repeated x values the first of them is the nearest by index.
+    return int(np.searchsorted(x, x[k], side="left"))
 
 
 def _cell_index(bounds: np.ndarray, value: float):

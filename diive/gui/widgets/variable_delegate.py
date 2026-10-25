@@ -33,9 +33,22 @@ CREATED_ROLE = Qt.ItemDataRole.UserRole + 2
 #: True while the variable's plot is loading -> animated loading bar.
 LOADING_ROLE = Qt.ItemDataRole.UserRole + 3
 
+#: Parsed colours by their string value. Keyed on the string, so a theme edit
+#: (a new string) is picked up on the next paint without any invalidation.
+_COLORS: dict[str, QColor] = {}
+
+
+def _color(value: str) -> QColor:
+    """Colour for a colour string, parsed once (callers must not modify it)."""
+    color = _COLORS.get(value)
+    if color is None:
+        color = _COLORS[value] = QColor(value)
+    return color
+
+
 def _tok(name: str) -> QColor:
     """Live theme token as a QColor (re-read each call for live preview)."""
-    return QColor(theme.manager.tokens[name])
+    return _color(theme.manager.tokens[name])
 
 
 def _pill_for(name):
@@ -51,16 +64,37 @@ def _pill_for(name):
     if entry is None:
         return None
     label, bg, fg = entry
-    return label, QColor(bg), QColor(fg)
+    return label, _color(bg), _color(fg)
 
 
 def _new_pill():
     label, bg, fg = theme.manager.new_pill
-    return label, QColor(bg), QColor(fg)
+    return label, _color(bg), _color(fg)
 
 
 class VariableDelegate(QStyledItemDelegate):
     """Render a variable row: highlight + optional pill + loading indicator."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._font_src = None   # option.font the derived fonts were built from
+        self._fonts = None      # (small, small bold, normal, bold)
+
+    def _fonts_for(self, font: QFont):
+        """The row's derived fonts, rebuilt only when the view font changes
+        (every visible row repaints on hover and scroll)."""
+        if self._fonts is None or font != self._font_src:
+            small = QFont(font)
+            small.setPointSizeF(max(7.0, font.pointSizeF() - 1.0))
+            small_bold = QFont(small)
+            small_bold.setBold(True)
+            bold = QFont(font)
+            bold.setBold(True)
+            normal = QFont(font)
+            normal.setBold(False)
+            self._font_src = QFont(font)
+            self._fonts = (small, small_bold, normal, bold)
+        return self._fonts
 
     def sizeHint(self, option, index) -> QSize:
         # Width 1 so long names never force a horizontal scrollbar (which would
@@ -70,7 +104,7 @@ class VariableDelegate(QStyledItemDelegate):
         return QSize(1, max(s.height(), 26))
 
     @staticmethod
-    def _paint_metadata(painter, option, rect, name, anchor_right) -> int:
+    def _paint_metadata(painter, font, rect, name, anchor_right) -> int:
         """Draw a favorite ★ and a faint extra-tag count right of the name (left
         of the pill). Returns the horizontal space consumed so the name can be
         elided clear of it."""
@@ -83,8 +117,6 @@ class VariableDelegate(QStyledItemDelegate):
         if not fav and extra == 0:
             return 0
 
-        font = QFont(option.font)
-        font.setPointSizeF(max(7.0, option.font.pointSizeF() - 1.0))
         painter.setFont(font)
         fm = painter.fontMetrics()
         x = anchor_right
@@ -93,14 +125,14 @@ class VariableDelegate(QStyledItemDelegate):
             text = f"●{extra}"
             w = fm.horizontalAdvance(text)
             r = QRect(x - w, rect.center().y() - fm.height() // 2, w, fm.height())
-            painter.setPen(QColor("#90A4AE"))  # blue-grey 300 — quiet count
+            painter.setPen(_color("#90A4AE"))  # blue-grey 300 — quiet count
             painter.drawText(r, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, text)
             x -= w + 6
             used += w + 6
         if fav:
             w = fm.horizontalAdvance("★")
             r = QRect(x - w, rect.center().y() - fm.height() // 2, w, fm.height())
-            painter.setPen(QColor("#FFB300"))  # amber 600 — favorite star
+            painter.setPen(_color("#FFB300"))  # amber 600 — favorite star
             painter.drawText(r, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, "★")
             used += w + 4
         return used
@@ -111,6 +143,7 @@ class VariableDelegate(QStyledItemDelegate):
         painter.setRenderHint(painter.RenderHint.Antialiasing, True)
 
         rect: QRect = option.rect
+        small_font, pill_font, text_font, bold_font = self._fonts_for(option.font)
         name = index.data(NAME_ROLE) or index.data(Qt.ItemDataRole.DisplayRole) or ""
         order = index.data(PANEL_ROLE) or 0
 
@@ -151,9 +184,6 @@ class VariableDelegate(QStyledItemDelegate):
         ind_anchor = rect.right() - 8  # right edge for metadata indicators
         if pill is not None:
             pill_label, pill_color, pill_fg = pill
-            pill_font = QFont(option.font)
-            pill_font.setBold(True)
-            pill_font.setPointSizeF(max(7.0, option.font.pointSizeF() - 1.0))
             painter.setFont(pill_font)
             fm = painter.fontMetrics()
             tw = fm.horizontalAdvance(pill_label)
@@ -173,12 +203,10 @@ class VariableDelegate(QStyledItemDelegate):
         # Metadata indicators (left of the pill): a favorite star and a small
         # count of extra tags. Read live from the store so they track edits made
         # in other tabs (the panel repaints on the store's `changed` signal).
-        pill_w += self._paint_metadata(painter, option, rect, name, ind_anchor)
+        pill_w += self._paint_metadata(painter, small_font, rect, name, ind_anchor)
 
         # Variable name (numbered with its panel position when shown).
-        text_font = QFont(option.font)
-        text_font.setBold(bold)
-        painter.setFont(text_font)
+        painter.setFont(bold_font if bold else text_font)
         painter.setPen(fg)
         label = f"{order}  {name}" if order else str(name)
         text_rect = rect.adjusted(10, 0, -8 - pill_w, 0)
