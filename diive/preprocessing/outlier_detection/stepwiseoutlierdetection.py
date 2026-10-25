@@ -22,6 +22,7 @@ from diive.preprocessing.outlier_detection.incremental import zScoreIncrements
 from diive.preprocessing.outlier_detection.localsd import LocalSD
 from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
 from diive.preprocessing.outlier_detection.manualremoval import ManualRemoval
+from diive.preprocessing.outlier_detection.negativenight import NegativeNighttime
 from diive.preprocessing.outlier_detection.trim import TrimLow
 from diive.preprocessing.outlier_detection.zscore import zScore, zScoreRolling
 
@@ -324,6 +325,18 @@ class StepwiseOutlierDetection:
                        trim_daytime=trim_daytime, trim_nighttime=trim_nighttime,
                        lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
                        lower_limit=lower_limit, showplot=showplot, verbose=verbose)
+
+    def flag_outliers_negative_night_test(self, uncertainty: Series, z: float = 2.0,
+                                          level_window: int | str = '13D',
+                                          showplot: bool = False, verbose: bool = False):
+        """Flag nighttime values below -z times their random uncertainty. See ``NegativeNighttime``.
+
+        ``uncertainty`` is the random uncertainty of each record, in the units of the series
+        and on its index. Daytime records are never flagged.
+        """
+        self._run_test(NegativeNighttime, {}, idstr=self.idstr, uncertainty=uncertainty,
+                       lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset, z=z,
+                       level_window=level_window, showplot=showplot, verbose=verbose)
 
     def flag_outliers_hampel_test(self, window_length: int | str = 48 * 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,

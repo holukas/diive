@@ -1214,3 +1214,46 @@ class TestOffGridRecords(unittest.TestCase):
         pd.testing.assert_series_equal(z.series, s.iloc[1:], check_freq=False)
         self.assertEqual(int(z.overall_flag.notna().sum()), 1440)
         self.assertIn('1 records are not on the 30min time grid', cap.get())
+
+
+class TestNegativeNighttime(unittest.TestCase):
+    """Nighttime values below -z uncertainties are removed; nothing else is."""
+    COORDS = dict(lat=47.286417, lon=7.733750, utc_offset=1)
+
+    def _series(self):
+        from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+        index = pd.date_range('2022-06-01 00:15', periods=48 * 10, freq='30min', name='TIMESTAMP_MIDDLE')
+        _, _, is_day, is_night = create_daytime_nighttime_flags(index, **self.COORDS)
+        values = pd.Series(3.0, index=index, name='NEE')
+        night_ix, day_ix = index[is_night.to_numpy()], index[is_day.to_numpy()]
+        values[night_ix[10]] = -5.0   # 5 sigma below zero: removed
+        values[night_ix[20]] = -1.0   # within 2 sigma: kept
+        values[day_ix[5]] = -30.0     # daytime: never tested
+        return values, pd.Series(1.0, index=index), night_ix, day_ix
+
+    def test_only_nighttime_values_below_the_limit_are_removed(self):
+        from diive.preprocessing.outlier_detection import NegativeNighttime
+        values, sigma, night_ix, day_ix = self._series()
+        t = NegativeNighttime(series=values, uncertainty=sigma, z=2, **self.COORDS).run()
+        rejected = t.overall_flag[t.overall_flag == 2].index
+        self.assertEqual(list(rejected), [night_ix[10]])
+        self.assertEqual(t.overall_flag[night_ix[20]], 0)
+        self.assertEqual(t.overall_flag[day_ix[5]], 0)
+
+    def test_noise_alone_explains_almost_nothing_far_above_the_limit(self):
+        """With a level of 3 and sigma 1, noise reaches -2 sigma with probability Phi(-5)."""
+        from diive.preprocessing.outlier_detection import NegativeNighttime
+        values, sigma, night_ix, _ = self._series()
+        t = NegativeNighttime(series=values, uncertainty=sigma, z=2, **self.COORDS).run()
+        self.assertLess(t.expected_noise['records'], 0.01)
+        self.assertLessEqual(t.expected_noise['sum'], 0)
+
+    def test_stepwise_detector_adds_the_flag(self):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        values, sigma, night_ix, _ = self._series()
+        sod = StepwiseOutlierDetection(dfin=values.to_frame(), col='NEE', site_lat=self.COORDS['lat'],
+                                       site_lon=self.COORDS['lon'], utc_offset=1)
+        sod.flag_outliers_negative_night_test(uncertainty=sigma, z=2)
+        sod.addflag()
+        self.assertEqual(list(sod.flags.columns), ['FLAG_NEE_OUTLIER_NEGNIGHT_TEST'])
+        self.assertTrue(np.isnan(sod.series_hires_cleaned[night_ix[10]]))

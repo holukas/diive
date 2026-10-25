@@ -22,6 +22,7 @@ from diive.preprocessing.outlier_detection.lof import (
     LocalOutlierFactorDaytimeNighttime,
 )
 from diive.preprocessing.outlier_detection.manualremoval import ManualRemoval
+from diive.preprocessing.outlier_detection.negativenight import NegativeNighttime
 from diive.preprocessing.outlier_detection.stepwiseoutlierdetection import StepwiseOutlierDetection
 from diive.preprocessing.outlier_detection.trim import TrimLow
 from diive.preprocessing.outlier_detection.zscore import (
@@ -57,6 +58,7 @@ __all__ = [
     'ManualRemoval',
     'StepwiseOutlierDetection',
     'TrimLow',
+    'NegativeNighttime',
     'zScore',
     'zscore',
     'zScoreRolling',
