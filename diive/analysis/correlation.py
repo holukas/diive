@@ -75,21 +75,28 @@ def rank_drivers(
     else:
         features = [c for c in features if c != target and c in df.columns]
 
+    # Plain arrays instead of Series.corr: pandas aligns the two Series and then
+    # calls the same np.corrcoef / spearmanr, so the result is identical, but its
+    # per-call overhead dominated the scan (P12).
+    corr_func = (lambda a, b: np.corrcoef(a, b)[0, 1]) if method == 'pearson' \
+        else (lambda a, b: stats.spearmanr(a, b)[0])
+    y_arr = y.to_numpy(dtype=float, na_value=np.nan)
+    y_ok = ~np.isnan(y_arr)
     lags = range(-max_lag, max_lag + 1)
     rows = []
     for col in features:
-        x = pd.to_numeric(df[col], errors='coerce')
+        x = pd.to_numeric(df[col], errors='coerce').to_numpy(dtype=float, na_value=np.nan)
         best = None  # (abs_corr, corr, lag, n)
         for lag in lags:
-            xs = x.shift(lag) if lag else x
-            mask = y.notna() & xs.notna()
+            xs = _shift(x, lag)
+            mask = y_ok & ~np.isnan(xs)
             n = int(mask.sum())
             if n < min_records:
                 continue
             # A constant column over the overlap divides by a zero std inside
             # the correlation -> NaN (which we skip); silence that numpy warning.
             with np.errstate(invalid='ignore', divide='ignore'):
-                corr = y[mask].corr(xs[mask], method=method)
+                corr = corr_func(y_arr[mask], xs[mask])
             if pd.isna(corr):
                 continue
             abs_corr = abs(float(corr))
@@ -103,6 +110,18 @@ def rank_drivers(
     if not result.empty:
         result = result.sort_values('ABS_CORR', ascending=False).reset_index(drop=True)
     return result
+
+
+def _shift(x: np.ndarray, lag: int) -> np.ndarray:
+    """``Series.shift(lag)`` for a float array: move by ``lag`` records, fill with NaN."""
+    if lag == 0:
+        return x
+    out = np.full_like(x, np.nan)
+    if lag > 0:
+        out[lag:] = x[:-lag]
+    else:
+        out[:lag] = x[-lag:]
+    return out
 
 
 class DailyCorrelation:

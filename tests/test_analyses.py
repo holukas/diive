@@ -72,6 +72,28 @@ class TestAnalyses(unittest.TestCase):
         with self.assertRaises(ValueError):
             rank_drivers(df, target='NEE_CUT_REF_f', method='kendall')
 
+    def test_rank_drivers_equals_series_corr(self):
+        """P12: the array scan gives exactly what Series.corr gives at every lag."""
+        from diive.configs.exampledata import load_exampledata_parquet
+        from diive.analysis.correlation import rank_drivers
+        df = load_exampledata_parquet().loc['2021-06-01':'2021-06-30'].copy()
+        df.loc[df.index[100:400], 'Tair_f'] = float('nan')  # gaps that move with the lag
+        y = df['NEE_CUT_REF_f']
+        for method in ('pearson', 'spearman'):
+            res = rank_drivers(df, target='NEE_CUT_REF_f', method=method, max_lag=3,
+                               features=['Tair_f', 'VPD_f', 'Rg_f']).set_index('DRIVER')
+            for col in res.index:
+                best = max(((abs(c), c, lag, n) for lag in range(-3, 4)
+                            for xs in [df[col].shift(lag)]
+                            for mask in [y.notna() & xs.notna()]
+                            for n in [int(mask.sum())]
+                            for c in [y[mask].corr(xs[mask], method=method)]),
+                           key=lambda t: t[0])
+                with self.subTest(method=method, col=col):
+                    self.assertEqual(res.loc[col, 'CORR'], best[1])
+                    self.assertEqual(res.loc[col, 'BEST_LAG'], best[2])
+                    self.assertEqual(res.loc[col, 'N'], best[3])
+
     def test_spectrogram(self):
         from diive.configs.exampledata import load_exampledata_parquet
         from diive.analysis.harmonic import spectrogram
