@@ -184,9 +184,12 @@ class _HeatmapSlot(QFrame):
             style = dv.plotting.FormatStyle(
                 title_fontsize=_TITLE_FONTSIZE, axlabel_fontsize=_FONT_SIZE,
                 ticks_fontsize=_FONT_SIZE)
+            # Drawn as an image (as_image), the same picture as a mesh of one
+            # quad per cell, and at panel size faster to draw and pan.
             dv.plotting.HeatmapDateTime(series).plot(
                 ax=ax, fig=self.canvas.fig, cmap=cmap, format_style=style,
-                cb_digits_after_comma="auto", cb_labelsize=_FONT_SIZE)
+                cb_digits_after_comma="auto", cb_labelsize=_FONT_SIZE,
+                as_image=True)
             if highlight_zeros:
                 # Second heatmap of the zeros-only series over the first: same
                 # index -> same date x time grid, so the cells line up. Everything
@@ -197,7 +200,7 @@ class _HeatmapSlot(QFrame):
                     dv.plotting.HeatmapDateTime(zeros).plot(
                         ax=ax, fig=self.canvas.fig, format_style=style,
                         cmap=ListedColormap([highlight_zeros]), color_bad="none",
-                        show_colormap=False)
+                        show_colormap=False, as_image=True)
         except Exception as err:  # non-datetime index, all-NaN, ... — show why
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",

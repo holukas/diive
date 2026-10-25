@@ -31,7 +31,10 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+import weakref
+
+import numpy as np
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -46,6 +49,7 @@ from PySide6.QtWidgets import (
 )
 
 import diive as dv
+from diive.core.plotting.plotfuncs import decimate_line
 from diive.gui import theme
 from diive.gui.tabs.base import DiiveTab
 from diive.gui.widgets.flow_layout import FlowLayout
@@ -96,6 +100,40 @@ _DEFAULT_VAR = "NEE_CUT_REF_f"
 
 #: Maximum number of side-by-side panels (further Ctrl+clicks are ignored).
 _MAX_PANELS = 5
+
+#: A time-series line is drawn thinned (`decimate_line`) to this many columns
+#: per pixel of figure width. The line here is thicker than in the Overview
+#: (2.2 pt), and at two columns per pixel the dense stretches still showed thin
+#: light streaks. At four the thinned line differs from the full one about as
+#: much as matplotlib's own path simplification differs from an unsimplified
+#: line, and draws about a quarter faster (ten years of half-hourly NEE).
+_TS_COLUMNS_PER_PIXEL = 4
+
+
+class _ShowWatcher(QObject):
+    """Call a tab method soon after a widget is shown.
+
+    The call waits for the event loop: layout changes that showing the widget
+    sets off (a new tab grows the tab bar) are posted events, and only after
+    them does the widget have its final size. Holds the method weakly (like
+    `weak_slot`) and is parented to the widget, so it neither keeps the tab
+    alive nor outlives the widget.
+    """
+
+    def __init__(self, widget: QWidget, method) -> None:
+        super().__init__(widget)
+        self._method = weakref.WeakMethod(method)
+        widget.installEventFilter(self)
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.Type.Show:
+            QTimer.singleShot(0, self._call)
+        return False
+
+    def _call(self) -> None:
+        method = self._method()
+        if method is not None:
+            method()
 
 
 def _ranges_overlap(a, b) -> bool:
@@ -187,6 +225,10 @@ class PlottingTab(DiiveTab):
         self._panel_settings: dict[str, list] = {}
         self._active_panel: str | None = None
         self._last_axes: list = []  # main panel axes of the last render (for zoom-preserve)
+        # Time-series lines drawn thinned: (line, full x, full y) per line.
+        self._thinned: list = []
+        # A render asked for while the tab is hidden: None, or its preserve_view.
+        self._pending_render: bool | None = None
 
         root = QWidget()
         outer = QVBoxLayout(root)
@@ -280,6 +322,10 @@ class PlottingTab(DiiveTab):
         # canvas from re-flowing either (constrained layout / resize).
         if self._plot_type in (RIDGELINE, WINDROSE, TREERING, SHIFTEDDIST):
             self.canvas.auto_layout = False
+        # A wider canvas needs more columns for the thinned time series.
+        self.canvas.mpl_connect("resize_event", self._on_canvas_resize)
+        # A render asked for while the tab is hidden runs when it is shown.
+        self._show_watcher = _ShowWatcher(self.canvas, self._render_pending)
 
         splitter.addWidget(left)
         splitter.addWidget(middle)
@@ -548,7 +594,9 @@ class PlottingTab(DiiveTab):
             self.settings.set_xyz(*(sel + [None, None, None])[:3])
         else:
             for i, name in enumerate(sel):
-                self._on_selected(name, i > 0)  # replay clicks (first resets, rest add)
+                # Replay the clicks (first resets, rest add) without their
+                # queued renders: the render below draws the restored setup.
+                self._on_selected(name, i > 0, render=False)
         # Overlay the saved per-panel settings (the replay above seeded panels
         # from the shared snapshot); then restore the active panel + controls.
         for n, snap in (state.get("panel_settings") or {}).items():
@@ -562,7 +610,12 @@ class PlottingTab(DiiveTab):
         self._sync_pills()
         self._render()
 
-    def _on_selected(self, name: str, additive: bool) -> None:
+    def _on_selected(self, name: str, additive: bool, render: bool = True) -> None:
+        """Apply a click on `name` in the variable list.
+
+        ``render=False`` updates the selection only, for a caller that renders
+        once itself afterwards (`restore_state`).
+        """
         if not name:
             return
         if self._plot_type in _ROLE_DROPDOWN_TYPES:
@@ -579,7 +632,8 @@ class PlottingTab(DiiveTab):
                 self._xyz.append(name)
             else:
                 self._xyz = self._xyz[1:] + [name]
-            self.varpanel.run_with_loading(name, self._render)
+            if render:
+                self.varpanel.run_with_loading(name, self._render)
             return
         if self._plot_type in (RIDGELINE, HISTOGRAM, TREERING, SHIFTEDDIST,
                                WATERFALL):
@@ -590,7 +644,8 @@ class PlottingTab(DiiveTab):
             # single-variable.
             self._panels = [name]
             self._sync_panel_settings(active=name)
-            self.varpanel.run_with_loading(name, self._render)
+            if render:
+                self.varpanel.run_with_loading(name, self._render)
             return
         if additive:
             # Ctrl+click toggles a panel: remove if already shown, else append.
@@ -603,7 +658,8 @@ class PlottingTab(DiiveTab):
         else:
             self._panels = [name]
         self._sync_panel_settings(active=name)
-        self.varpanel.run_with_loading(name, self._render)
+        if render:
+            self.varpanel.run_with_loading(name, self._render)
 
     def _on_xyz_changed(self) -> None:
         """A scatter X/Y/Colour dropdown changed (pick or drag-drop): rebuild the
@@ -692,9 +748,22 @@ class PlottingTab(DiiveTab):
         rebuild — set by the "Update plot" button so tweaking a setting doesn't
         snap the view back to the full data range. Selection changes render with
         `preserve_view=False` so a newly picked variable shows in full.
+
+        While the tab is hidden in a shown window (e.g. a theme change re-renders
+        every open Time series tab), the render waits until the tab is shown. A
+        hidden canvas has a stale size, so the resize on showing would solve
+        the layout again and render a second time.
         """
         # A render applies the current settings -> nothing pending to update.
         self.update_btn.setEnabled(False)
+        if not self.canvas.isVisible() and self.canvas.window().isVisible():
+            # Keep the view only if every render asked for while hidden did.
+            pending = self._pending_render
+            self._pending_render = preserve_view if pending is None \
+                else (pending and preserve_view)
+            return
+        self._pending_render = None
+        self._thinned = []
         if self._plot_type == HEXBIN:
             self._render_hexbin()
             return
@@ -782,6 +851,7 @@ class PlottingTab(DiiveTab):
                 ax.tick_params(labelbottom=False)
 
         # Draw the full view and make it the toolbar's Home view.
+        self._thin_lines()
         self.canvas.draw()
         self.canvas.reset_history()
 
@@ -808,6 +878,49 @@ class PlottingTab(DiiveTab):
 
         self._last_axes = list(axes)
         self._mark_selected()
+
+    def _render_pending(self) -> None:
+        """Run the render that waited for the tab to be shown (see `_render`)."""
+        if self._pending_render is not None:
+            self._render(self._pending_render)
+
+    def _keep_thinned(self, ax, line, n_records: int) -> None:
+        """Draw a long time-series line thinned to the screen columns.
+
+        At canvas size most of a long record overlaps: 175k half-hourly records
+        cost about 0.3 s per draw. `decimate_line` keeps each column's first,
+        last, lowest and highest value, so the line looks the same and no spike
+        is lost (see `_TS_COLUMNS_PER_PIXEL`). The full record stays on the
+        line for the hover (``_diive_hover_xy``), and the line is thinned again
+        for every new
+        x-range (zoom, pan, Home) and canvas size. Lines with markers are drawn
+        in full, because a thinned line would drop markers.
+        """
+        x = np.asarray(line.get_xdata(orig=False), dtype=float)
+        y = np.asarray(line.get_ydata(orig=False), dtype=float)
+        # Thinning needs ascending x, which a sanitized time index has.
+        if x.size != n_records or x.size < 2 or not np.all(np.diff(x) > 0):
+            return
+        line._diive_hover_xy = (x, y)
+        self._thinned.append((line, x, y))
+        ax.callbacks.connect("xlim_changed", self._on_ts_xlim)
+
+    def _thin_lines(self, ax=None) -> None:
+        """Point the thinned lines (of `ax`, or all) at the samples their view needs."""
+        if not self._thinned:
+            return
+        n_columns = int(self.canvas.fig.bbox.width * _TS_COLUMNS_PER_PIXEL)
+        for line, x, y in self._thinned:
+            if line.axes is None or (ax is not None and line.axes is not ax):
+                continue
+            lo, hi = sorted(line.axes.get_xlim())
+            line.set_data(*decimate_line(x, y, lo, hi, n_columns))
+
+    def _on_ts_xlim(self, ax) -> None:
+        self._thin_lines(ax)
+
+    def _on_canvas_resize(self, _event) -> None:
+        self._thin_lines()
 
     def _apply_axes(self, axes) -> None:
         """Apply the GUI-only Axes settings (limits, log scale, invert, grid).
@@ -1247,6 +1360,10 @@ class PlottingTab(DiiveTab):
                     show_values_fontsize=opts["show_values_fontsize"],
                     cb_labelsize=opts["cb_labelsize"],
                     minticks=opts["minticks"], maxticks=opts["maxticks"],
+                    # One image instead of a quad per cell: the same picture.
+                    # On narrower panels (several heatmaps side by side) it
+                    # draws and pans about twice as fast as the mesh.
+                    as_image=True,
                 )
             elif self._plot_type == HEATMAP_YEARMONTH:
                 dv.plotting.HeatmapYearMonth(
@@ -1290,14 +1407,21 @@ class PlottingTab(DiiveTab):
                 fmt = dict(opts["_format"])
                 if fmt.get("title") is None:
                     fmt["title"] = name  # default the title to the variable name
-                dv.plotting.TimeSeries(
-                    series, drop_gaps=opts["drop_gaps"], color_series=color_series).plot(
+                n_lines = len(ax.lines)
+                ts = dv.plotting.TimeSeries(
+                    series, drop_gaps=opts["drop_gaps"], color_series=color_series)
+                ts.plot(
                     ax=ax, format_style=dv.plotting.FormatStyle(**fmt),
                     color=color,
                     linewidth=opts["linewidth"], alpha=opts["alpha"],
                     marker=opts["marker"], markersize=opts["markersize"],
                     cmap=opts["color_by_cmap"], color_label=cby,
                 )
+                # The plain line is the first line the plot adds (the colour-by
+                # path draws a LineCollection, so the record-length check in
+                # _keep_thinned skips a zero line added instead).
+                if not opts["marker"] and len(ax.lines) > n_lines:
+                    self._keep_thinned(ax, ax.lines[n_lines], len(ts.series))
             elif self._plot_type == DIELCYCLE:
                 ts_colors = theme.manager.ts_colors
                 # DielCycle auto-colors per month only when color is None; pass

@@ -112,7 +112,8 @@ class _HeatmapPanel(QFrame):
                 format_style=dv.plotting.FormatStyle(
                     title_fontsize=TITLE_FONTSIZE, axlabel_fontsize=FONT_SIZE,
                     ticks_fontsize=FONT_SIZE),
-                cb_digits_after_comma="auto", cb_labelsize=FONT_SIZE)
+                cb_digits_after_comma="auto", cb_labelsize=FONT_SIZE,
+                as_image=True)  # one image: faster than a mesh at panel size, same picture
         except Exception as err:  # non-datetime index, all-NaN, ...
             ax.clear()
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",

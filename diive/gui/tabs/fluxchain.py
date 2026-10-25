@@ -2366,7 +2366,8 @@ class FluxChainTab(DiiveTab):
             dv.plotting.HeatmapDateTime(series).plot(
                 ax=ax, fig=self.canvas.fig, cmap=theme.manager.heatmap_cmap,
                 format_style=dv.plotting.FormatStyle(title=f"{label}: {name}"),
-                cb_digits_after_comma="auto")
+                cb_digits_after_comma="auto",
+                as_image=True)  # one image: faster than a mesh at panel size, same picture
         except Exception as err:
             ax.text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
                     wrap=True, transform=ax.transAxes)

@@ -580,13 +580,19 @@ def test_plot_settings_live_render(window):
     assert tab.update_btn.isEnabled() is False  # cleared after applying
     # Flipping orientation must not leave the view on the old (hours) axis range:
     # the preserved zoom only re-applies when it overlaps the new data, so the
-    # date-axis mesh stays in view (previously it scrolled off -> empty plot).
-    import numpy as _np
+    # date-axis heatmap stays in view (previously it scrolled off -> empty plot).
+    # The heatmap is one image (as_image): after the flip its x extent spans the
+    # dates and its rows run along the time of day (48 half-hours, far fewer
+    # than the dates).
     hax = tab.canvas.fig.axes[0]
-    _qm = next(c for c in hax.collections if c.__class__.__name__ == "QuadMesh")
-    _cx = _np.asarray(_qm.get_coordinates())[..., 0]
+    _img = hax.get_images()[0]
+    _x0, _x1, _y0, _y1 = _img.get_extent()
+    assert (_y0, _y1) == (0.0, 24.0)  # hours on y
+    assert _x1 - _x0 > 24  # date numbers on x, not hours
+    _rows, _cols = _img.get_array().shape
+    assert _rows == 48 and _cols > _rows
     _xl = hax.get_xlim()
-    assert min(_xl) <= _cx.max() and _cx.min() <= max(_xl)  # data is in view
+    assert min(_xl) <= _x1 and _x0 <= max(_xl)  # data is in view
 
     # show_values on a short range, which is the only way it is usable: it writes one
     # text label per cell, so a year of half-hourly data means 17 520 artists. Measured
@@ -1887,7 +1893,8 @@ def test_combine_cmap_redraws_only_for_known_names(app):
     QApplication.processEvents()
 
     def cmap_name():
-        return tab.slot1.canvas.fig.axes[0].collections[0].cmap.name
+        # The heatmap is drawn as an image (as_image).
+        return tab.slot1.canvas.fig.axes[0].get_images()[0].cmap.name
 
     tab.cmap_combo.setCurrentText("vir")  # half-typed: wait for a pause
     assert cmap_name() != "vir" and tab._cmap_debounce.pending()
@@ -8237,7 +8244,7 @@ def test_combine_variables_tab_reports_records_lost_to_one_sided_gaps(app):
 
 def test_combine_variables_tab_marks_exact_zeros(app):
     # "Mark zeros" is offered only for the difference (where zero means the two
-    # variables agree) and overlays a second mesh painting those cells. The
+    # variables agree) and overlays a second heatmap image painting those cells. The
     # comparison is exact float equality, so the count is always stated — a
     # highlight that paints nothing must not read as "no cells matched".
     import numpy as np
@@ -8265,18 +8272,25 @@ def test_combine_variables_tab_marks_exact_zeros(app):
     QApplication.processEvents()
     assert tab.zero_check.isVisible() and tab.zero_color_btn.isVisible()
 
-    n_meshes = len(tab.slot3.canvas.fig.axes[0].collections)
+    n_images = len(tab.slot3.canvas.fig.axes[0].get_images())
     tab.zero_check.setChecked(True)
     QApplication.processEvents()
-    # The overlay is a second mesh in the picked colour, on top of the heatmap.
-    assert len(tab.slot3.canvas.fig.axes[0].collections) == n_meshes + 1
-    assert tab.slot3.canvas.fig.axes[0].collections[-1].cmap(0.0)[:3] == (0.0, 0.0, 0.0)
+    # The overlay is a second image in the picked colour, on top of the heatmap,
+    # with a value exactly where the difference is zero and nothing elsewhere.
+    images = tab.slot3.canvas.fig.axes[0].get_images()
+    assert len(images) == n_images + 1
+    overlay = images[-1]
+    assert overlay.cmap(0.0)[:3] == (0.0, 0.0, 0.0)
+    base = np.ma.asarray(images[0].get_array()).filled(np.nan)
+    marked = ~np.ma.getmaskarray(np.ma.masked_invalid(overlay.get_array()))
+    assert marked.sum() == 100
+    assert np.array_equal(marked, base == 0)
     assert "100 record(s) exactly zero" in tab.status.text()
 
     # No exact zeros: no overlay, and the status says so rather than staying mute.
     tab._assign(2, "OFF")
     QApplication.processEvents()
-    assert len(tab.slot3.canvas.fig.axes[0].collections) == n_meshes
+    assert len(tab.slot3.canvas.fig.axes[0].get_images()) == n_images
     assert "No record is exactly zero" in tab.status.text()
 
     tab.zero_check.setChecked(False)
@@ -8309,12 +8323,17 @@ def test_preview_heatmaps_follow_the_app_wide_colormap(app):
         tab.on_data_loaded(df)
         tab._assign(1, "A")
         QApplication.processEvents()
-        assert tab.slot1.canvas.fig.axes[0].collections[0].cmap.name == "cividis"
+        # The heatmap is drawn as an image (as_image), a mesh when the grid is
+        # not even: check whichever artist holds the colours.
+        def _grid(ax):
+            return (ax.get_images() or ax.collections)[0]
+
+        assert _grid(tab.slot1.canvas.fig.axes[0]).cmap.name == "cividis"
 
         # The per-tab dropdown overrides it for that tab only.
         tab.cmap_combo.setCurrentText("magma")
         QApplication.processEvents()
-        assert tab.slot1.canvas.fig.axes[0].collections[0].cmap.name == "magma"
+        assert _grid(tab.slot1.canvas.fig.axes[0]).cmap.name == "magma"
         assert theme.manager.heatmap_cmap == "cividis"
     finally:
         theme.manager.heatmap_cmap = saved

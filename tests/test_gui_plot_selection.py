@@ -318,7 +318,8 @@ def test_heatmap_keeps_variable_and_settings_on_data_push(window):
     assert tab._panel_settings == {"GPP_DT_CUT_84": snap}
     assert tab.settings.cmap.currentText() == "viridis"
     assert _axes_replaced(tab.canvas, prev_axes)
-    assert tab.canvas.fig.axes[0].collections[0].get_cmap().name == "viridis"
+    # The heatmap is drawn as an image (as_image).
+    assert tab.canvas.fig.axes[0].get_images()[0].get_cmap().name == "viridis"
 
 
 @pytest.mark.parametrize("label", [
