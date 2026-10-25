@@ -175,6 +175,111 @@ class StepwiseOutlierDetection:
         """Show *current* cleaned high-resolution data"""
         self._showplot(self._series_hires_cleaned, interactive)
 
+    def showplot_overview(self, title: str = None, showplot: bool = True):
+        """Overview of every record the accepted tests removed, coloured by the test.
+
+        Call it after the last ``addflag()``. Four panels: the input series with the
+        kept records in grey and each test's removals in its own colour, the
+        distribution of kept and removed records beside it on the same y-axis, the
+        share of records removed in each month, and the share removed at each hour
+        of the day. A record counts for the first accepted test that removed it,
+        since every test runs on what the earlier ones kept.
+
+        Args:
+            title: Figure title. Defaults to ``"Outlier removal: <variable>"``.
+            showplot: Call ``fig.show()`` after drawing.
+
+        Returns:
+            The matplotlib figure.
+        """
+        import matplotlib.pyplot as plt
+
+        import diive.core.plotting.styles.chainplots as cp
+        from diive.core.base.flagbase import _marginal_histogram, _percent, _test_name
+        from diive.core.plotting.plotfuncs import nice_date_ticks
+
+        series = self._series_hires_orig
+        flags = self.flags
+        tests = [c for c in flags.columns if (flags[c] == 2).any()]
+        removed_by = pd.Series(None, index=series.index, dtype=object)
+        for c in tests:
+            removed_by[removed_by.isna() & (flags[c] == 2)] = c
+        valid = series.notna()
+        kept = series[valid & removed_by.isna()]
+        n_valid, n_removed = int(valid.sum()), int((valid & removed_by.notna()).sum())
+
+        # A test run twice (two Hampel filters) gets numbered labels, in run order.
+        names = [_test_name(c) for c in tests]
+        labels = {c: (f"{n} {names[:i + 1].count(n)}" if names.count(n) > 1 else n)
+                  for i, (c, n) in enumerate(zip(tests, names))}
+        colors = {c: cp.TEST_COLORS[i % len(cp.TEST_COLORS)] for i, c in enumerate(tests)}
+
+        fig = plt.figure(facecolor='white', figsize=(15, 9.5), layout='constrained')
+        gs = fig.add_gridspec(2, 2, width_ratios=[4.2, 1.3], height_ratios=[3, 1.7])
+        ax_ts = fig.add_subplot(gs[0, 0])
+        ax_hist = fig.add_subplot(gs[0, 1], sharey=ax_ts)
+        ax_month = fig.add_subplot(gs[1, 0], sharex=ax_ts)
+        ax_hour = fig.add_subplot(gs[1, 1])
+
+        # Time series: kept records quiet, removals in their test's colour on top.
+        s = kept.dropna()
+        ax_ts.plot(s.index, s.to_numpy(), color=cp.KEPT, alpha=.7,
+                   label=f"kept ({len(s):,}, {_percent(len(s), n_valid)})", **cp.POINTS)
+        layers = [(kept, cp.KEPT, 'kept')]
+        for c in tests:
+            r = series[valid & (removed_by == c)].dropna()
+            ax_ts.plot(r.index, r.to_numpy(), color=colors[c], zorder=3,
+                       label=f"{labels[c]} ({len(r):,}, {_percent(len(r), n_valid)})",
+                       **{**cp.POINTS, 'markersize': 4.5})
+            layers.append((r, colors[c], labels[c]))
+        _marginal_histogram(ax_hist, layers)
+        cp.zscore_axis(ax_hist, series)
+        cp.style_axes(ax_ts)
+        ax_ts.set_ylabel(series.name)
+        cp.panel_label(ax_ts, "All records")
+        ax_ts.legend(loc='lower right', bbox_to_anchor=(1, 1), frameon=False, markerscale=3,
+                     fontsize=9, ncol=min(len(tests) + 1, 4), borderaxespad=0.2)
+        ax_ts.tick_params(axis='x', labelbottom=False)
+
+        # Share removed per month, stacked by test.
+        months = series.index.to_period('M')
+        n_month = valid.groupby(months).sum()
+        bottom = np.zeros(len(n_month))
+        x = n_month.index.to_timestamp() + pd.Timedelta(days=14)
+        for c in tests:
+            share = ((valid & (removed_by == c)).groupby(months).sum() / n_month * 100).fillna(0)
+            ax_month.bar(x, share.to_numpy(), bottom=bottom, width=24, color=colors[c],
+                         edgecolor='white', linewidth=0.4)
+            bottom += share.to_numpy()
+        ax_month.set_ylabel('% removed')
+        cp.style_axes(ax_month)
+        cp.panel_label(ax_month, "Share of records removed, per month")
+        nice_date_ticks(ax=ax_month)
+
+        # Share removed per hour of the day, stacked by test.
+        hours = series.index.hour
+        n_hour = valid.groupby(hours).sum()
+        bottom = np.zeros(len(n_hour))
+        for c in tests:
+            share = ((valid & (removed_by == c)).groupby(hours).sum() / n_hour * 100).fillna(0)
+            ax_hour.bar(n_hour.index, share.to_numpy(), bottom=bottom, width=0.85,
+                        color=colors[c], edgecolor='white', linewidth=0.4)
+            bottom += share.to_numpy()
+        ax_hour.set_xticks([0, 6, 12, 18, 23])
+        ax_hour.set_xlabel('hour of day')
+        ax_hour.set_ylabel('% removed')
+        cp.style_axes(ax_hour)
+        cp.panel_label(ax_hour, "per hour of day")
+
+        cp.figure_title(
+            fig, title or f"Outlier removal: {series.name}",
+            f"{n_removed:,} of {n_valid:,} records removed ({_percent(n_removed, n_valid)}) by "
+            f"{len(tests)} test{'s' if len(tests) != 1 else ''}. Each test's removals have their "
+            f"own colour; a record counts for the first test that removed it.")
+        if showplot:
+            fig.show()
+        return fig
+
     def flag_missingvals_test(self, verbose: bool = False):
         """Flag missing records in the data (flag 2 where the value is missing)."""
         # Lazy import: a top-level import would create a circular import via the

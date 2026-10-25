@@ -28,6 +28,9 @@ NIGHT = indigo(500)
 #: one hue from light to dark, so the order reads off the colour.
 SCENARIO_COLORS = [blue(300), blue(600), indigo(900), bluegray(500), amber(700)]
 
+#: One colour per outlier test in overview plots, in the order the tests ran.
+TEST_COLORS = [red(600), '#FB8C00', '#8E24AA', blue(600), '#00897B', '#6D4C41', '#D81B60']
+
 #: One colour per meteo driver, for features derived from it (time terms use KEPT).
 DRIVER_COLORS = [amber(700), '#26A69A', indigo(400), red(400), blue(400), '#8D6E63']
 

@@ -53,6 +53,8 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   option.
 - **Annual sums in the flux chain:** `report_annual_sums` reports the annual sum of every gap-filled
   flux per method and USTAR scenario, with the share of measured records and incomplete years marked.
+- **Outlier overview plot:** `StepwiseOutlierDetection.showplot_overview()` shows every record the
+  accepted tests removed, coloured by test, with the share removed per month and per hour of day.
 
 ### Changed
 

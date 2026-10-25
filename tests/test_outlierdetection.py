@@ -916,6 +916,26 @@ class TestStepwiseOutlierDetection(unittest.TestCase):
         sod.flag_outliers_zscore_test(thres_zscore=100, separate_day_night=True, repeat=False)
         self.assertGreater(n_default, int((sod.last_flag == 2).sum()))
 
+    def test_overview_counts_each_removal_once(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        sod = self._sod()
+        sod.flag_outliers_abslim_test(minval=0, maxval=50)  # removes the spike at record 20
+        sod.addflag()
+        sod.flag_outliers_abslim_test(minval=0, maxval=12)  # removes the high tail of the rest
+        sod.addflag()
+        n_second = int((sod.flags.iloc[:, 1] == 2).sum())
+        fig = sod.showplot_overview(showplot=False)
+        try:
+            labels = fig.axes[0].get_legend_handles_labels()[1]
+            # The spike counts for the first test only, the second test for what it removed.
+            self.assertEqual(labels[1], "Absolute limits 1 (1, 0.2 %)")
+            self.assertTrue(labels[2].startswith(f"Absolute limits 2 ({n_second:,},"))
+            self.assertTrue(labels[0].startswith(f"kept ({500 - 1 - n_second:,},"))
+        finally:
+            plt.close(fig)
+
 
 class TestTimeSpanWindows(unittest.TestCase):
     """A rolling window given as a time span must flag exactly what the
