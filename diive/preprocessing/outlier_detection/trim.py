@@ -187,8 +187,7 @@ class TrimLow(FlagBase):
             else:
                 mode = "all data"
 
-            title = (f"TrimLow filter {mode}: {self.series.name}, "
-                     f"n_outliers = {self.series[self.overall_flag == 2].count()}")
+            title = f"Lower limit, {mode}: {self.series.name}"
 
             # Only the both-modes case has a meaningful day/night separation to
             # visualize; the single-mode case gets one default before/after plot.

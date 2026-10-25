@@ -273,18 +273,16 @@ class Hampel(FlagBase):
                  verbose=self.verbose)
 
         if self.showplot:
-            # Default plot for outlier tests, showing rejected values
-            self.defaultplot(n_iterations=n_iterations)
-            mode = "daytime/nighttime" if self.separate_day_night else "global"
-            title = (f"Hampel filter {mode}: {self.series.name}, "
-                     f"n_iterations = {n_iterations}, "
-                     f"n_outliers = {self.series[self.overall_flag == 2].count()}")
-
+            # One figure per test. The daytime/nighttime figure already holds the
+            # default plot's panels (all records, cleaned, with histograms) in its
+            # first row, so drawing both repeated them, as Local SD and Trim avoid.
             if self.separate_day_night:
-                self.plot_outlier_daytime_nighttime(series=self.series,
-                                                    flag_daytime=self.flag_daytime,
-                                                    flag_quality=self.overall_flag,
-                                                    title=title)
+                self.plot_outlier_daytime_nighttime(
+                    series=self.series, flag_daytime=self.flag_daytime, flag_quality=self.overall_flag,
+                    title=f"Hampel filter, day and night separately: {self.series.name}",
+                    n_iterations=n_iterations)
+            else:
+                self.defaultplot(n_iterations=n_iterations)
 
     @staticmethod
     def _input_segments(series: Series) -> Series:

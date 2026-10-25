@@ -6,18 +6,15 @@ Base class for quality flags and outlier detectors.
 
 Part of the diive library: https://github.com/holukas/diive
 """
-import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame, DatetimeIndex
 from pandas import Series
 
-import diive.core.plotting.styles.LightTheme as theme
+import diive.core.plotting.styles.chainplots as cp
 from diive.core.funcs.funcs import validate_id_string
-from diive.core.plotting.histogram import HistogramPlot
-from diive.core.plotting.styles.format import FormatStyle
-from diive.core.plotting.plotfuncs import default_format, default_legend, nice_date_ticks
+from diive.core.plotting.plotfuncs import nice_date_ticks
 from diive.core.times.times import DetectFrequency, continuous_timestamp_freq
 
 
@@ -34,20 +31,52 @@ def sum_flag_value(df: DataFrame, value: int) -> Series:
     return df[df == value].sum(axis=1)
 
 
-def _outlier_histogram(series: Series, ax) -> None:
-    """Histogram panel of the outlier plots."""
-    # `n_bins=None` bins each panel over its own range, so bin i is not the same
-    # interval in two histograms. That is deliberate here: sharing one grid
-    # (pass explicit edges as `n_bins`) is the only way to compare them bar for
-    # bar, but the shared grid would have to be the raw series' grid, and that is
-    # set by the very outliers this plot exists to remove -- on a spiked July
-    # record the cleaned panel collapses to 1 occupied bin of 10 (3 of 30, 5 of
-    # 50). Each panel resolving its own distribution is worth more than bar-for-bar
-    # comparability. Every panel tick-labels its bin edges, so the scales are read
-    # off the axes, not assumed equal.
-    HistogramPlot(series=series, method='n_bins', n_bins=None).plot(
-        ax=ax, highlight_peak=True, show_zscores=True, show_info=False, show_title=False,
-        show_zscore_values=False, format_style=FormatStyle(show_grid=False))
+def _draw_points(ax, series: Series, color: str, label: str, **kwargs) -> None:
+    """Time series as small rasterised points (a year of half-hours is 17,520 of them)."""
+    s = series.dropna()
+    ax.plot(s.index, s.to_numpy(), color=color, label=label, **{**cp.POINTS, **kwargs})
+
+
+def _marginal_histogram(ax, layers: list) -> None:
+    """Horizontal stacked histogram beside a time series panel, sharing its y-axis.
+
+    `layers` is a list of ``(series, colour, label)``. All layers share one set of bins over
+    their joint range, so a rejected record sits in the same bin as it would among the kept
+    ones. The count axis is logarithmic: the few records in the tails are what an outlier
+    test is about, and on a linear axis they disappear next to the central peak.
+    """
+    data = [(s.dropna().to_numpy(dtype=float), c, lbl) for s, c, lbl in layers]
+    data = [d for d in data if d[0].size]
+    if not data:
+        return
+    edges = np.histogram_bin_edges(np.concatenate([d[0] for d in data]), bins=40)
+    ax.hist([d[0] for d in data], bins=edges, orientation='horizontal', stacked=True,
+            color=[d[1] for d in data], label=[d[2] for d in data], histtype='barstacked',
+            rwidth=1.0, edgecolor='white', linewidth=0.3)
+    ax.set_xscale('log')
+    ax.set_xlabel('records')
+    cp.style_axes(ax, grid_axis='x')
+    ax.tick_params(axis='y', labelleft=False)
+
+
+#: Plain names for the tests behind the flag names, for the figure titles.
+_TEST_NAMES = {
+    'ABSLIM': 'Absolute limits', 'TRIMLOW': 'Lower limit', 'MANUALREMOVAL': 'Manual removal',
+    'HAMPEL': 'Hampel filter', 'LOCALSD': 'Local standard deviation', 'ZSCORE': 'z-score',
+    'LOF': 'Local outlier factor', 'INCRZ': 'Increments z-score', 'USTAR': 'USTAR filter',
+}
+
+
+def _test_name(flagname: str) -> str:
+    """'Absolute limits' for 'FLAG_..._OUTLIER_ABSLIM_TEST', else the tag the flag name ends in."""
+    # A rerun of a test adds a number (..._HAMPEL_2_TEST), which is not part of its name.
+    parts = [p for p in str(flagname).removesuffix('_TEST').split('_') if not p.isdigit()]
+    tag = parts[-1] if parts else str(flagname)
+    return _TEST_NAMES.get(tag, tag.replace('_', ' ').capitalize())
+
+
+def _percent(part: int, whole: int) -> str:
+    return f"{100 * part / whole:.1f} %" if whole else "-"
 
 
 class FlagBase:
@@ -249,138 +278,118 @@ class FlagBase:
         return iteration_df, n_outliers
 
     def defaultplot(self, n_iterations: int = 1, showplot: bool = True, title: str = None):
-        """Basic plot that shows time series with and without outliers.
+        """Time series before and after the test, each with its distribution beside it.
 
-        If ``title`` is given it overrides the auto-generated figure title.
+        The upper row shows every record with the rejected ones in red, the lower row the
+        records the test kept, on their own y-range. The histogram beside each panel shares
+        its y-axis and has a z-score axis on the right. If ``title`` is given it replaces the
+        default title.
         """
         ok = self.overall_flag == 0
         rejected = self.overall_flag == 2
-        n_outliers = rejected.sum()
+        kept, rej = self.series[ok], self.series[rejected]
+        n_tested = int(self.series.notna().sum())
 
-        fig = plt.figure(facecolor='white', figsize=(16, 7))
-        gs = gridspec.GridSpec(2, 2)  # rows, cols
-        ax_series = fig.add_subplot(gs[0, 0])
-        ax_series_hist = fig.add_subplot(gs[0, 1])
-        ax_ok = fig.add_subplot(gs[1, 0], sharex=ax_series)
-        ax_ok_hist = fig.add_subplot(gs[1, 1])
+        fig = plt.figure(facecolor='white', figsize=(14, 7.5), layout='constrained')
+        gs = fig.add_gridspec(2, 2, width_ratios=[5, 1])
+        ax_all = fig.add_subplot(gs[0, 0])
+        ax_all_hist = fig.add_subplot(gs[0, 1], sharey=ax_all)
+        ax_kept = fig.add_subplot(gs[1, 0], sharex=ax_all)
+        ax_kept_hist = fig.add_subplot(gs[1, 1], sharey=ax_kept)
 
-        ax_series.plot(self.series.index, self.series,
-                       label=f"{self.series.name}", color="#607D8B", linestyle='none', markeredgewidth=1,
-                       marker='o', alpha=.5, markersize=6, markeredgecolor="#607D8B", fillstyle='none')
-        ax_series.plot(self.series[rejected].index, self.series[rejected],
-                       label="outlier (rejected)", color="#F44336", alpha=1, linestyle='none',
-                       markersize=12, markeredgecolor='none', marker='X')
-        _outlier_histogram(self.series, ax=ax_series_hist)
+        _draw_points(ax_all, kept, cp.KEPT, f"kept ({kept.count():,})")
+        _draw_points(ax_all, rej, cp.REJECTED, f"rejected ({rej.count():,})", markersize=4)
+        _marginal_histogram(ax_all_hist, [(kept, cp.KEPT, 'kept'), (rej, cp.REJECTED, 'rejected')])
+        cp.zscore_axis(ax_all_hist, self.series)
+        if kept.dropna().empty:
+            cp.note(ax_kept, f"{self.series.name}: no data")
+        else:
+            _draw_points(ax_kept, kept, cp.CLEANED, f"kept ({kept.count():,})")
+            _marginal_histogram(ax_kept_hist, [(kept, cp.CLEANED, 'kept')])
+            cp.zscore_axis(ax_kept_hist, kept)
 
-        ax_ok.plot(self.series[ok].index, self.series[ok],
-                   label="filtered series", alpha=.5, linestyle='none', markeredgewidth=1,
-                   marker='o', markersize=6, markeredgecolor="#607D8B", fillstyle='none')
-        _outlier_histogram(self.series[ok], ax=ax_ok_hist)
+        for ax in (ax_all, ax_kept):
+            cp.style_axes(ax)
+            ax.set_ylabel(self.series.name)
+        cp.panel_label(ax_all, "All records")
+        cp.panel_label(ax_kept, "After the test")
+        if ax_all.get_legend_handles_labels()[0]:
+            ax_all.legend(loc='lower right', bbox_to_anchor=(1, 1), frameon=False, markerscale=3,
+                          fontsize=9, ncol=2, borderaxespad=0.2)
+        ax_all.tick_params(axis='x', labelbottom=False)
+        nice_date_ticks(ax=ax_kept)
 
-        default_format(ax=ax_series)
-        default_format(ax=ax_ok)
-        default_legend(ax=ax_series)
-        default_legend(ax=ax_ok)
-        plt.setp(ax_series.get_xticklabels(), visible=False)
-        plottitle = title if title is not None else (
-            f"{self.series.name} filtered by {self.overall_flag.name}, "
-            f"n_iterations = {n_iterations}, "
-            f"n_outliers = {n_outliers}")
-        nice_date_ticks(ax=ax_series)
-        nice_date_ticks(ax=ax_ok)
-        fig.suptitle(plottitle, fontsize=theme.FIGHEADER_FONTSIZE)
-        fig.tight_layout()
+        cp.figure_title(
+            fig, title if title is not None else f"{_test_name(self.overall_flag.name)}: {self.series.name}",
+            f"{rej.count():,} of {n_tested:,} records rejected ({_percent(rej.count(), n_tested)}), "
+            f"{n_iterations} iteration{'s' if n_iterations != 1 else ''}")
         if showplot:
             fig.show()
 
         self._fig = fig
 
     def plot_outlier_daytime_nighttime(self, series: Series, flag_daytime: Series,
-                                       flag_quality: Series, title: str = None):
-        """Plot outlier and non-outlier time series for daytime and nighttime data."""
-        # Collect in dataframe for outlier daytime/nighttime plot
-        frame = {
-            'UNFILTERED': series,
-            'UNFILTERED_DT': series[flag_daytime == 1],
-            'UNFILTERED_NT': series[flag_daytime == 0],
-            'CLEANED': series[flag_quality == 0],
-            'CLEANED_DT': series[(flag_quality == 0) & (flag_daytime == 1)],
-            'CLEANED_NT': series[(flag_quality == 0) & (flag_daytime == 0)],
-            'OUTLIER': series[flag_quality == 2],
-            'OUTLIER_DT': series[(flag_quality == 2) & (flag_daytime == 1)],
-            'OUTLIER_NT': series[(flag_quality == 2) & (flag_daytime == 0)],
-        }
-        df = pd.DataFrame(frame)
-        # The panels draw markers only, so each column is drawn without its NaN
-        # rows: the same markers, fewer vertices to transform.
-        marks = {col: df[col].dropna() for col in df.columns}
+                                       flag_quality: Series, title: str = None,
+                                       n_iterations: int = None):
+        """Every record with the rejected ones in red, then the kept daytime and nighttime records.
 
-        fig = plt.figure(facecolor='white', figsize=(24, 12))
-        gs = gridspec.GridSpec(3, 4)  # rows, cols
+        Three rows, each a time series with its distribution beside it on a shared y-axis and
+        a z-score axis on the right. The top row colours the kept records by day (amber) and
+        night (indigo); the two rows below show what the test kept in each period, on their
+        own y-range.
+        """
+        day, night = flag_daytime == 1, flag_daytime == 0
+        kept, rejected = flag_quality == 0, flag_quality == 2
+        valid = series.notna()
+        n_rej = int((rejected & valid).sum())
+        n_day, n_night = int((day & valid).sum()), int((night & valid).sum())
+        n_rej_day, n_rej_night = int((rejected & day & valid).sum()), int((rejected & night & valid).sum())
 
-        if title:
-            fig.suptitle(title, fontsize=24, fontweight='bold')
+        fig = plt.figure(facecolor='white', figsize=(14, 10), layout='constrained')
+        gs = fig.add_gridspec(3, 2, width_ratios=[5, 1])
+        ax_all = fig.add_subplot(gs[0, 0])
+        ax_all_hist = fig.add_subplot(gs[0, 1], sharey=ax_all)
+        ax_day = fig.add_subplot(gs[1, 0], sharex=ax_all)
+        ax_day_hist = fig.add_subplot(gs[1, 1], sharey=ax_day)
+        ax_night = fig.add_subplot(gs[2, 0], sharex=ax_all)
+        ax_night_hist = fig.add_subplot(gs[2, 1], sharey=ax_night)
 
-        ax_series = fig.add_subplot(gs[0, 0])
-        ax_series.xaxis.axis_date()
-        ax_series_hist = fig.add_subplot(gs[0, 1])
-        ax_cleaned = fig.add_subplot(gs[0, 2], sharex=ax_series)
-        ax_cleaned.xaxis.axis_date()
-        ax_cleaned_hist = fig.add_subplot(gs[0, 3])
+        kept_day, kept_night = series[kept & day], series[kept & night]
+        rej_all = series[rejected]
+        _draw_points(ax_all, kept_day, cp.DAY, f"kept, daytime ({kept_day.count():,})", alpha=.45)
+        _draw_points(ax_all, kept_night, cp.NIGHT, f"kept, nighttime ({kept_night.count():,})", alpha=.45)
+        _draw_points(ax_all, rej_all, cp.REJECTED, f"rejected ({rej_all.count():,})", markersize=4)
+        _marginal_histogram(ax_all_hist, [(series[kept], cp.KEPT, 'kept'),
+                                          (rej_all, cp.REJECTED, 'rejected')])
+        cp.zscore_axis(ax_all_hist, series)
 
-        ax_series_dt = fig.add_subplot(gs[1, 0])
-        ax_series_dt.xaxis.axis_date()
-        ax_series_dt_hist = fig.add_subplot(gs[1, 1])
-        ax_cleaned_dt = fig.add_subplot(gs[1, 2], sharex=ax_series)
-        ax_cleaned_dt.xaxis.axis_date()
-        ax_cleaned_dt_hist = fig.add_subplot(gs[1, 3])
+        for ax, ax_hist, s, color, label in (
+                (ax_day, ax_day_hist, kept_day, cp.DAY, "Daytime, after the test"),
+                (ax_night, ax_night_hist, kept_night, cp.NIGHT, "Nighttime, after the test")):
+            if s.dropna().empty:
+                cp.note(ax, "no data")
+            else:
+                _draw_points(ax, s, color, None)
+                _marginal_histogram(ax_hist, [(s, color, 'kept')])
+                cp.zscore_axis(ax_hist, s)
+            cp.panel_label(ax, label)
 
-        ax_series_nt = fig.add_subplot(gs[2, 0], sharex=ax_series)
-        ax_series_nt.xaxis.axis_date()
-        ax_series_nt_hist = fig.add_subplot(gs[2, 1])
-        ax_cleaned_nt = fig.add_subplot(gs[2, 2], sharex=ax_series)
-        ax_cleaned_nt.xaxis.axis_date()
-        ax_cleaned_nt_hist = fig.add_subplot(gs[2, 3])
+        for ax in (ax_all, ax_day, ax_night):
+            cp.style_axes(ax)
+            ax.set_ylabel(series.name)
+        cp.panel_label(ax_all, "All records")
+        ax_all.legend(loc='lower right', bbox_to_anchor=(1, 1), frameon=False, markerscale=3,
+                      fontsize=9, ncol=3, borderaxespad=0.2)
+        for ax in (ax_all, ax_day):
+            ax.tick_params(axis='x', labelbottom=False)
+        nice_date_ticks(ax=ax_night)
 
-        axes_series = [ax_series, ax_cleaned, ax_series_dt, ax_cleaned_dt, ax_series_nt, ax_cleaned_nt]
-        axes_hist = [ax_series_hist, ax_cleaned_hist, ax_series_dt_hist,
-                     ax_cleaned_dt_hist, ax_series_nt_hist, ax_cleaned_nt_hist]
-        series_kwargs = dict(marker='o', mec='black', markeredgewidth=1, alpha=.2, fillstyle='none', linestyle='none')
-
-        # Column 0
-        ax_series.plot(marks['CLEANED'].index, marks['CLEANED'], label=f"OK ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_series.plot(marks['OUTLIER'].index, marks['OUTLIER'], marker='X', ms=10, mec='none', linestyle='none',
-                       alpha=.9, color='red', label=f"outlier ({df['OUTLIER'].count()} values)")
-        ax_series_dt.plot(marks['UNFILTERED_DT'].index, marks['UNFILTERED_DT'], label=f"series ({df['UNFILTERED_DT'].count()} values)",
-                          **series_kwargs)
-        ax_series_dt.plot(marks['OUTLIER_DT'].index, marks['OUTLIER_DT'], marker='X', ms=10, mec='none', linestyle='none',
-                          alpha=.9, color='red', label=f"outlier ({df['OUTLIER_DT'].count()} values)")
-        ax_series_nt.plot(marks['UNFILTERED_NT'].index, marks['UNFILTERED_NT'], label=f"series ({df['UNFILTERED_NT'].count()} values)",
-                          **series_kwargs)
-        ax_series_nt.plot(marks['OUTLIER_NT'].index, marks['OUTLIER_NT'], marker='X', ms=10, mec='none', linestyle='none',
-                          alpha=.9, color='red', label=f"outlier ({df['OUTLIER_NT'].count()} values)")
-
-        # Column 1
-        _outlier_histogram(df['UNFILTERED'], ax=ax_series_hist)
-        _outlier_histogram(df['UNFILTERED_DT'], ax=ax_series_dt_hist)
-        _outlier_histogram(df['UNFILTERED_NT'], ax=ax_series_nt_hist)
-
-        # Column 2
-        ax_cleaned.plot(marks['CLEANED'].index, marks['CLEANED'], label=f"cleaned ({df['CLEANED'].count()} values)", **series_kwargs)
-        ax_cleaned_dt.plot(marks['CLEANED_DT'].index, marks['CLEANED_DT'], label=f"cleaned daytime ({df['CLEANED_DT'].count()} values)",
-                           **series_kwargs)
-        ax_cleaned_nt.plot(marks['CLEANED_NT'].index, marks['CLEANED_NT'], label=f"cleaned nighttime ({df['CLEANED_NT'].count()} values)",
-                           **series_kwargs)
-
-        # Column 3
-        _outlier_histogram(df['CLEANED'], ax=ax_cleaned_hist)
-        _outlier_histogram(df['CLEANED_DT'], ax=ax_cleaned_dt_hist)
-        _outlier_histogram(df['CLEANED_NT'], ax=ax_cleaned_nt_hist)
-
-        for a in axes_series:
-            default_format(ax=a, ax_ylabel_txt="value")
-            default_legend(ax=a, ncol=1, loc=2)
-            nice_date_ticks(ax=a)
-
-        fig.tight_layout()
+        subtitle = (f"{n_rej:,} records rejected: {n_rej_day:,} of {n_day:,} daytime "
+                    f"({_percent(n_rej_day, n_day)}) and {n_rej_night:,} of {n_night:,} nighttime "
+                    f"({_percent(n_rej_night, n_night)})")
+        if n_iterations is not None:
+            subtitle += f", {n_iterations} iteration{'s' if n_iterations != 1 else ''}"
+        cp.figure_title(fig, title or f"{series.name}: outlier test, day and night separately", subtitle)
         fig.show()
+        # A detector that draws only this figure still answers `.fig` with what it showed.
+        self._fig = fig

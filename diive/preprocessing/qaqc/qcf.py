@@ -738,33 +738,49 @@ class FlagQCF:
             flags: Frame to draw instead of ``flags``, with the same index and
                 columns, e.g. a copy prepared for display. Default ``flags``.
         """
+        from matplotlib.colors import ListedColormap
+        import diive.core.plotting.styles.chainplots as cp
+
         flags = self.flags if flags is None else flags
-        fig = plt.figure(facecolor='white', figsize=figsize)
-        gs = gridspec.GridSpec(1, 4)  # rows, cols
-        gs.update(wspace=0.4, hspace=0, left=0.03, right=0.97, top=0.9, bottom=0.1)
+        fig = plt.figure(facecolor='white', figsize=figsize, layout='constrained')
+        gs = fig.add_gridspec(1, 4)
         ax_before = fig.add_subplot(gs[0, 0])
         ax_after = fig.add_subplot(gs[0, 1], sharey=ax_before)
         ax_flagsum = fig.add_subplot(gs[0, 2], sharey=ax_before)
         ax_flag = fig.add_subplot(gs[0, 3], sharey=ax_before)
 
-        # Heatmaps
-        vmin = -maxabsval if maxabsval else None
-        vmax = maxabsval if maxabsval else None
-        HeatmapDateTime(series=flags[self.series_name]).plot(ax=ax_before, vmin=vmin, vmax=vmax,
-                                                             cb_digits_after_comma=0)
-        HeatmapDateTime(series=flags[self.filteredseriescol]).plot(ax=ax_after, vmin=vmin, vmax=vmax,
-                                                                   cb_digits_after_comma=0)
-        HeatmapDateTime(series=flags[self.sumflagscol]).plot(ax=ax_flagsum,
-                                                             cb_digits_after_comma=0)
-        HeatmapDateTime(series=flags[self.flagqcfcol]).plot(ax=ax_flag,
-                                                            cb_digits_after_comma=0)
-        plt.setp(ax_after.get_yticklabels(), visible=False)
-        plt.setp(ax_flagsum.get_yticklabels(), visible=False)
-        plt.setp(ax_flag.get_yticklabels(), visible=False)
-        ax_after.axes.get_yaxis().get_label().set_visible(False)
-        ax_flagsum.axes.get_yaxis().get_label().set_visible(False)
-        ax_flag.axes.get_yaxis().get_label().set_visible(False)
+        # The flux crosses zero, so its two panels share one colour scale centred on zero.
+        # Without a given limit the 99th percentile of |values| sets it: one extreme
+        # half-hour would otherwise flatten everything else.
+        limit = maxabsval or cp.symmetric_limit(flags[self.series_name])
+        vmin, vmax = (-limit, limit) if limit else (None, None)
+        common = dict(color_bad=cp.NAN_COLOR, cb_labelsize=8)
+        HeatmapDateTime(series=flags[self.series_name]).plot(
+            ax=ax_before, vmin=vmin, vmax=vmax, cmap='RdBu_r', cb_extend='both',
+            cb_digits_after_comma='auto', format_style=cp.heatmap_style("Before the tests"), **common)
+        HeatmapDateTime(series=flags[self.filteredseriescol]).plot(
+            ax=ax_after, vmin=vmin, vmax=vmax, cmap='RdBu_r', cb_extend='both',
+            cb_digits_after_comma='auto', format_style=cp.heatmap_style("After the tests"), **common)
+        HeatmapDateTime(series=flags[self.sumflagscol]).plot(
+            ax=ax_flagsum, cmap='YlOrRd', cb_digits_after_comma=0,
+            format_style=cp.heatmap_style("Sum of the test flags"), **common)
+        cp.integer_colorbar(fig.axes[-1])
+        HeatmapDateTime(series=flags[self.flagqcfcol]).plot(
+            ax=ax_flag, vmin=-0.5, vmax=2.5, cmap=ListedColormap(cp.QCF_COLORS),
+            cb_digits_after_comma=0, format_style=cp.heatmap_style("Overall flag (QCF)"), **common)
+        cp.integer_colorbar(fig.axes[-1], labels={0: '0 passed', 1: '1 warning', 2: '2 rejected'})
+        for ax in (ax_after, ax_flagsum, ax_flag):
+            plt.setp(ax.get_yticklabels(), visible=False)
+            ax.yaxis.get_label().set_visible(False)
 
+        qcf = flags[self.flagqcfcol]
+        n = int(qcf.notna().sum())
+        counts = {code: int((qcf == code).sum()) for code in (0, 1, 2)}
+        pct = {code: f"{100 * c / n:.1f} %" if n else "-" for code, c in counts.items()}
+        cp.figure_title(
+            fig, f"Quality flags: {self.series_name}",
+            f"QCF 0 (passed): {counts[0]:,} ({pct[0]})   QCF 1 (warning): {counts[1]:,} ({pct[1]})   "
+            f"QCF 2 (rejected): {counts[2]:,} ({pct[2]})   grey: no record")
         fig.show()
 
     def showplot_qcf_timeseries(self, figsize=(16, 20), flags: DataFrame = None):

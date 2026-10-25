@@ -51,6 +51,16 @@ def _gaussian_kde(vals: np.ndarray, xvals: np.ndarray) -> np.ndarray:
     return density / (vals.size * h * np.sqrt(2.0 * np.pi))
 
 
+def _zscore_tick_step(span: int, max_ticks: int = 9) -> int:
+    """Smallest step of 1, 2, 5, 10, 20, 50, ... that puts at most `max_ticks` ticks on `span`."""
+    magnitude = 1
+    while True:
+        for step in (1, 2, 5):
+            if span / (step * magnitude) <= max_ticks:
+                return step * magnitude
+        magnitude *= 10
+
+
 class HistogramPlot:
     """Histogram plot with optional z-score overlay and peak highlighting.
 
@@ -277,7 +287,14 @@ class HistogramPlot:
             self.axx.xaxis.set_label_position('top')
             axx_zscores = []
             axx_ticks_pos = []
-            for z in range(int(math.floor(zscores.min())), int(math.ceil(zscores.max()))):
+            zmin, zmax = int(math.floor(zscores.min())), int(math.ceil(zscores.max()))
+            # A series with outliers can span 40 z-scores; one tick per integer then prints
+            # the labels on top of each other. Ticks on multiples of a 1-2-5 step keep at most
+            # about nine, and leave a span of up to nine at every integer as before.
+            step = _zscore_tick_step(zmax - zmin)
+            for z in range(zmin, zmax):
+                if z % step:
+                    continue
                 val = val_from_zscore(series=self.s, zscore=z)
                 self.axx.axvline(val, ls=':', color='#AB47BC', alpha=.9)
                 # self.ax.axvline(val, ls=':', color='#AB47BC', alpha=.9)

@@ -231,6 +231,35 @@ class TestHistogramDegenerateInput(unittest.TestCase):
         finally:
             plt.close(fig)
 
+    def test_zscore_ticks_stay_readable_on_a_wide_span(self):
+        """Outliers stretch the z-range; one tick per integer then overlaps."""
+        rng = np.random.default_rng(3)
+        values = rng.normal(0, 1, 2000)
+        values[:4] = [60, -40, 45, -30]  # z from about -13 to +26
+        hist, fig, ax = self._plot(values, show_zscore_values=False)
+        try:
+            zaxis = next(a for a in fig.axes if a is not ax)
+            labels = [int(t.get_text()) for t in zaxis.get_xticklabels()]
+            self.assertLessEqual(len(labels), 10, msg=f"too many z-score ticks: {labels}")
+            self.assertIn(0, labels)
+            step = labels[1] - labels[0]
+            self.assertGreater(step, 1)
+            self.assertTrue(all(z % step == 0 for z in labels), msg=f"uneven ticks: {labels}")
+            # One dotted marker line per labelled tick, not per integer.
+            self.assertEqual(len(zaxis.lines), len(labels))
+        finally:
+            plt.close(fig)
+
+    def test_zscore_ticks_keep_every_integer_on_a_narrow_span(self):
+        rng = np.random.default_rng(7)
+        hist, fig, ax = self._plot(rng.normal(10, 2, 400), show_zscore_values=False)
+        try:
+            zaxis = next(a for a in fig.axes if a is not ax)
+            labels = [int(t.get_text()) for t in zaxis.get_xticklabels()]
+            self.assertEqual(labels, list(range(labels[0], labels[-1] + 1)))
+        finally:
+            plt.close(fig)
+
 
 class TestHistogramFromOutlierDetector(unittest.TestCase):
     """The detectors' own diagnostic plot is how an empty series is reached.
@@ -263,6 +292,26 @@ class TestHistogramFromOutlierDetector(unittest.TestCase):
                              msg=f"expected exactly one empty-panel message, got {messages}")
         finally:
             plt.close(fig)
+
+    def test_hampel_day_night_draws_one_figure(self):
+        """The day/night figure holds the default plot's panels; drawing both repeated them."""
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+
+        rng = np.random.default_rng(5)
+        index = pd.date_range('2020-06-01', periods=48 * 20, freq='30min')
+        series = pd.Series(rng.normal(0, 1, len(index)), index=index, name='X')
+        series.iloc[::97] = 25.0
+        plt.close('all')
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='FigureCanvasAgg is non-interactive')
+            detector = Hampel(series, lat=47.48, lon=8.36, utc_offset=1, window_length=48 * 5,
+                              separate_day_night=True, showplot=True)
+            detector.calc(repeat=False)
+        try:
+            self.assertEqual(len(plt.get_fignums()), 1)
+            self.assertIs(detector.fig, plt.figure(plt.get_fignums()[0]))
+        finally:
+            plt.close('all')
 
 
 def _spiked_series(n: int = 500) -> pd.Series:
