@@ -55,6 +55,19 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   flux per method and USTAR scenario, with the share of measured records and incomplete years marked.
 - **Outlier overview plot:** `StepwiseOutlierDetection.showplot_overview()` shows every record the
   accepted tests removed, coloured by test, with the share removed per month and per hour of day.
+- **Quality class plots in the flux chain:** `plot_quality_heatmaps` and `plot_quality_timeseries`
+  show the highest-quality records (QCF 0), the records used for gap-filling, the rejected ones and
+  the gap-filled result, the time series by day and night.
+- **Negative nighttime values:** `report_nighttime_negatives` and `plot_nighttime_negatives` compare
+  nighttime NEE with its random uncertainty, to show which negative values are within the noise
+  and which lie clearly below zero.
+- **Negative nighttime test:** `NegativeNighttime` and
+  `StepwiseOutlierDetection.flag_outliers_negative_night_test()` remove nighttime values below
+  `-z` times their random uncertainty, and estimate how many of them noise alone would explain.
+  Daytime values are never tested.
+- **Nighttime uncertainty for the chain:** `nighttime_uncertainty` gives EddyPro's random
+  uncertainty, the PAS20 (ONEFlux) random uncertainty and the larger of the two for each record,
+  and compares what each would remove.
 
 ### Changed
 
