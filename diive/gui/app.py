@@ -11,9 +11,12 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import copy
+import threading
 import time
+import weakref
 from datetime import datetime
 from functools import partial
+from importlib import import_module
 from pathlib import Path
 
 import pandas as pd
@@ -61,6 +64,13 @@ from diive.gui.widgets.worker import WorkerRunner, shutdown_process_pool
 
 #: Source name of the bundled example dataset (also its title-bar label).
 _EXAMPLE_SOURCE = "example data (CH-DAV)"
+
+#: Library modules imported on a background thread once the window is up
+#: (`MainWindow.start_preimport`). Menu tabs import their modules on first open,
+#: and these (the flux chain and with it scikit-learn, shap and the gap-filling
+#: and outlier modules most menu tabs share) froze that first open for about
+#: 1 s (P8). Library modules only: Qt objects must not be made off the GUI thread.
+_PREIMPORT_MODULES = ("diive.flux.postprocessingchain", "diive.flux.partitioning")
 
 #: Old menu labels still found in saved projects, mapped to the current label.
 _RENAMED_MENU_LABELS = {"Flux processing chain": "Flux post-processing chain"}
@@ -153,6 +163,10 @@ def _read_startup_data(last_project):
     Returns ``("project", DiiveProject)`` or ``("example", DataFrame)``. File
     reading only, so it runs off the GUI thread while the splash spins.
     """
+    # The Overview's first render needs scipy.stats (for the stats band), and
+    # `import diive` no longer loads it. Importing it here, while the splash
+    # spins, takes it out of the render that freezes the window (P6, P7).
+    import scipy.stats  # noqa: F401
     if last_project:
         from diive.core.io.project import load_project
         try:
@@ -160,6 +174,15 @@ def _read_startup_data(last_project):
         except Exception:
             pass  # an unreadable last project falls back to the example
     return "example", diive.load_exampledata_parquet()
+
+
+def _preimport(modules) -> None:
+    """Import `modules` (worker thread side, see `_PREIMPORT_MODULES`)."""
+    for name in modules:
+        try:
+            import_module(name)
+        except Exception:  # noqa: BLE001
+            pass  # the tab that needs it imports it again and reports the error
 
 
 def _export_data(data, path: Path, ts_name: str, is_csv: bool) -> None:
@@ -280,6 +303,9 @@ class MainWindow(QMainWindow):
         # EVENT_* columns this session created from the event list, so reconciling
         # never drops an EVENT_-named column that arrived as plain data.
         self._event_columns: set = set()
+        # What `_sync_event_columns` last matched: the events' (name, start,
+        # end) and a weak reference to the full frame it checked.
+        self._events_synced: tuple | None = None
         # Per-variable user metadata (tags/notes) is persisted namespaced by
         # dataset, so the same column name in two datasets keeps separate tags.
         self._dataset_key: str | None = None
@@ -300,6 +326,7 @@ class MainWindow(QMainWindow):
         self._io_then: tuple | None = None
         self._io_actions: list = []
         self._startup_done = None  # `run()`'s callback for the deferred first load
+        self._preimport_thread: threading.Thread | None = None
         # Unsaved changes since the last open/load or project save (L324). Set by
         # `_mark_modified`, cleared by `_mark_clean`. Notes saved in the Metadata
         # explorer emit no signal, so the user tags/notes are also compared with
@@ -903,6 +930,7 @@ class MainWindow(QMainWindow):
             index = self._next_menu_index(label)
             title = f"{label} {index}"
 
+        self._wait_for_preimport()
         tab = MENU_TAB_CLASSES[label]()
         tab._menu_label = label
         tab._menu_index = index
@@ -922,14 +950,41 @@ class MainWindow(QMainWindow):
             tab.subsetSelected.connect(self._apply_var_subset)
         if hasattr(tab, "variablesRenamed"):
             tab.variablesRenamed.connect(self._rename_variables)
+        # Show the tab before it gets the data: a hidden page has no real size
+        # yet, so a render on the push ran at a default size and the resize at
+        # show solved the layout and rendered the figure again (P16).
+        self._tabwidget.setCurrentWidget(tab.widget())
         if self._data is not None:
             tab.on_data_loaded(self._data_for(tab), self._created)  # up to date on open
         # Seed the variable picker with the subset currently in effect, so a
         # freshly opened picker reflects what's actually shown.
         if hasattr(tab, "set_active_subset") and self._var_subset:
             tab.set_active_subset(self._var_subset)
-        self._tabwidget.setCurrentWidget(tab.widget())
         self._mark_modified()  # a project reopens the same tabs
+
+    def start_preimport(self) -> None:
+        """Import the heavy library modules of the menu tabs in the background.
+
+        Called by `run()` once the window shows its data, so neither startup
+        nor `import diive` pays for them. While it runs, the GUI thread still
+        gets the GIL every few ms (longest stall measured: about 0.1 s)."""
+        if self._preimport_thread is None:
+            self._preimport_thread = threading.Thread(
+                target=_preimport, args=(_PREIMPORT_MODULES,),
+                name="diive-preimport", daemon=True)
+            self._preimport_thread.start()
+
+    def _wait_for_preimport(self) -> None:
+        """Block until the background import is done.
+
+        A menu tab imports its module on the GUI thread. Doing that while the
+        background thread imports the same modules would wait on their import
+        locks anyway, and two threads importing modules that import each other
+        can fail with a deadlock error. So a tab opened early waits for the
+        rest of the background import, which it would otherwise do itself."""
+        thread = self._preimport_thread
+        if thread is not None and thread.is_alive():
+            thread.join()
 
     def _next_menu_index(self, label: str) -> int:
         """Smallest unused 1-based index among open tabs of this menu label."""
@@ -1331,6 +1386,14 @@ class MainWindow(QMainWindow):
         """
         if self._full_data is None:
             return False
+        # The flags depend only on each event's name, start and end. With those
+        # and the frame unchanged since the last sync (writers rebind the frame,
+        # never mutate it), the columns still match: a visibility toggle skips
+        # rebuilding and comparing every flag.
+        key = tuple((ev.name, ev.start, ev.end) for ev in events.manager.events)
+        if (self._events_synced is not None and self._events_synced[0] == key
+                and self._events_synced[1]() is self._full_data):
+            return False
         desired = {}
         for ev in events.manager.events:
             flag = diive.events.event_to_flag(
@@ -1375,6 +1438,7 @@ class MainWindow(QMainWindow):
             metadata_store.manager.notify()
         if changed:
             self._apply_range()
+        self._events_synced = (key, weakref.ref(self._full_data))
         return changed
 
     def _delete_variable(self, name: str) -> None:
@@ -2064,6 +2128,7 @@ class MainWindow(QMainWindow):
         # Let a running save finish (and its outcome register) before the
         # window and, at app exit, the worker's daemon thread go away.
         self._wait_for_io()
+        self._wait_for_preimport()  # no interpreter exit in the middle of an import
         if not self._confirm_discard("closing"):
             event.ignore()
             return
@@ -2161,6 +2226,7 @@ def run(app: QApplication | None = None, splash=None) -> int:
         # miss the icon set before show(), so Windows sometimes shows a blank /
         # default taskbar icon. Re-applying once the handle is live fixes it.
         window.setWindowIcon(icon)
+        window.start_preimport()
 
     QTimer.singleShot(0, _start_load)
     return app.exec()
