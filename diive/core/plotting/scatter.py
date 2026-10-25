@@ -11,6 +11,7 @@ from typing import Literal
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib import path as mpath
 from matplotlib import transforms
 from matplotlib.backends.backend_agg import RendererAgg
 from matplotlib.collections import PathCollection
@@ -73,6 +74,11 @@ _CIRCLE = MarkerStyle('o').get_path().transformed(MarkerStyle('o').get_transform
 #: cost more stencil passes; 3 is where that stops paying off.
 _SUBPIXEL_BINS = 3
 
+#: Smallest edge width, in pixels, at which an opaque circle with an edge in
+#: its face colour is drawn as a wider polygon without the edge (see
+#: `_OccludedMarkerCollection`).
+_OUTLINE_MIN_LINEWIDTH = 1.3
+
 
 def _cell_stencils(core_radius: float, reach: float, k: int, bins: int) -> dict:
     """Pixel stencils of a circle whose centre lies somewhere in a sub-pixel bin.
@@ -96,7 +102,8 @@ def _cell_stencils(core_radius: float, reach: float, k: int, bins: int) -> dict:
 
 
 def _hidden_markers(xy: np.ndarray, opaque: np.ndarray, radius: float,
-                    linewidth: float, clip: tuple) -> np.ndarray:
+                    linewidth: float, clip: tuple,
+                    inradius: float = None) -> np.ndarray:
     """Flag the circle markers that leave no trace in an Agg raster.
 
     Agg draws a collection point by point, in order, and a pixel that lies
@@ -116,6 +123,9 @@ def _hidden_markers(xy: np.ndarray, opaque: np.ndarray, radius: float,
         radius: Circle radius in pixels.
         linewidth: Edge width in pixels.
         clip: ``(x0, y0, x1, y1)``, the display area the renderer paints.
+        inradius: For a marker that is already a polygon (no curves to
+            flatten), the distance from its centre to its nearest side, in
+            pixels. ``radius`` is then the distance to its farthest corner.
 
     Returns:
         A boolean array, True for each marker that can be left out.
@@ -126,6 +136,9 @@ def _hidden_markers(xy: np.ndarray, opaque: np.ndarray, radius: float,
     # paints only the pixels the outline touches, which lie within
     # radius + linewidth / 2 apart from the stroke's joins at the chord ends.
     core_radius = radius - 0.6 - 1e-3 * radius
+    if inradius is not None:
+        # No chords to dip inside: only the rounding is left.
+        core_radius = inradius - 0.2 - 1e-3 * radius
     reach = radius + linewidth / 2 + 0.5 + 0.1 * linewidth
     k = int(np.ceil(reach)) + 1
 
@@ -230,35 +243,59 @@ class _OccludedMarkerCollection(PathCollection):
     own, which for 175,000 points takes seconds. In a dense scatter most of
     those markers end up fully covered by markers drawn after them. Under Agg
     this class works out which ones (see `_hidden_markers`) and draws only
-    the rest, in their original order, through the same per-point path. The
-    image is the same pixel for pixel, with no snapping.
+    the rest, in their original order, through the same per-point path, with
+    no snapping.
+
+    When every marker is opaque and its edge has the face colour (the
+    ``ax.scatter`` default with ``c=``), the edge only widens the marker by
+    half the line width. Such markers are drawn as one filled polygon each:
+    the polygon Agg flattens the circle into, enlarged by that half width,
+    without the stroke. That costs less than half as much per marker and lets
+    more markers count as covered. The image then differs from the stroked
+    one only in the antialiasing of the marker outlines, by up to about 9 of
+    255 levels at screen resolution and line width. Otherwise the image is
+    the same pixel for pixel.
 
     Outside ``draw`` the collection is exactly what ``ax.scatter`` returned:
-    the array, offsets, colours, norm and colormap cover every point. Other
-    renderers (PDF, SVG, PS), and any setting the test does not cover
-    (per-point sizes, alpha or line widths, dashed edges, hatches, a clip
-    path, other marker shapes), draw every point as before.
+    the array, offsets, colours, paths, line widths, norm and colormap cover
+    every point. Other renderers (PDF, SVG, PS), and any setting the test
+    does not cover (per-point sizes, alpha or line widths, dashed edges,
+    hatches, a clip path, other marker shapes), draw every point as before.
     """
 
     def draw(self, renderer):
-        # _hidden settles the colours when it gets that far, so the colours
+        # _plan settles the colours when it gets that far, so the colours
         # saved below are the full set.
-        hidden = self._hidden(renderer) if self.get_visible() else None
-        if hidden is None or not hidden.any():
+        plan = self._plan(renderer) if self.get_visible() else None
+        if plan is None:
+            super().draw(renderer)
+            return
+        hidden, outline = plan
+        if not hidden.any() and outline is None:
             super().draw(renderer)
             return
         keep = ~hidden
         saved = (self._A, self._offsets, self._mapped_colors,
-                 self._facecolors, self._edgecolors)
+                 self._facecolors, self._edgecolors, self._paths,
+                 self._linewidths)
         self._A, self._offsets = self._A[keep], self._offsets[keep]
+        if outline is not None:
+            self._paths, self._linewidths = [outline], np.zeros(1)
         try:
             super().draw(renderer)
         finally:
             (self._A, self._offsets, self._mapped_colors,
-             self._facecolors, self._edgecolors) = saved
+             self._facecolors, self._edgecolors, self._paths,
+             self._linewidths) = saved
 
-    def _hidden(self, renderer):
-        """The markers this draw can leave out, or None to draw them all."""
+    def _plan(self, renderer):
+        """How this draw can be thinned, or None to draw every marker.
+
+        Returns:
+            ``(hidden, outline)``: True in ``hidden`` for each marker that can
+            be left out, and the edge-free marker path that paints what the
+            stroked circle paints, or None to keep the edges.
+        """
         if not isinstance(renderer, RendererAgg):
             return None
         n = len(self._offsets)
@@ -284,19 +321,42 @@ class _OccludedMarkerCollection(PathCollection):
                 or not np.array_equal(paths[0].codes, _CIRCLE.codes)):
             return None
         m = (transforms.Affine2D(self.get_transforms()[0]) + transform).get_matrix()
-        if m[0, 1] or m[1, 0] or abs(m[0, 0]) != abs(m[1, 1]):
+        if m[0, 1] or m[1, 0] or abs(m[0, 0]) != abs(m[1, 1]) or not m[0, 0]:
             return None
         clip = [0.0, 0.0, float(renderer.width), float(renderer.height)]
         if self.get_clip_on() and self.get_clip_box() is not None:
             bx0, by0, bx1, by1 = self.get_clip_box().extents
             clip = [max(clip[0], bx0), max(clip[1], by0),
                     min(clip[2], bx1), min(clip[3], by1)]
-        return _hidden_markers(
-            np.asarray(offset_trf.transform(offsets), dtype=float),
-            self._facecolors[:, 3] == 1.0,
-            radius=0.5 * abs(m[0, 0]),
-            linewidth=renderer.points_to_pixels(self._linewidths[0]),
-            clip=tuple(clip))
+        xy = np.asarray(offset_trf.transform(offsets), dtype=float)
+        opaque = self._facecolors[:, 3] == 1.0
+        scale = abs(m[0, 0])
+        linewidth = renderer.points_to_pixels(self._linewidths[0])
+        # An edge in the face colour over an opaque face paints the face
+        # widened by half the line width (round joins, the default, keep the
+        # widened outline smooth). An edge narrower than about 1.3 px leaves
+        # the pixels on the circle's rim partly covered by both face and edge,
+        # which one fill does not reproduce (up to 36 of 255 levels).
+        if not (self._edge_is_mapped and linewidth >= _OUTLINE_MIN_LINEWIDTH
+                and opaque.all() and self.get_joinstyle() in (None, 'round')):
+            return _hidden_markers(xy, opaque, radius=0.5 * scale,
+                                   linewidth=linewidth, clip=tuple(clip)), None
+        # The chords Agg flattens the circle into at this size, enlarged so
+        # that each corner moves out by half the line width, as the stroke's
+        # outer edge does.
+        polygon = _CIRCLE.transformed(
+            transforms.Affine2D().scale(scale)).to_polygons(closed_only=False)[0]
+        polygon *= 1 + linewidth / scale
+        corner = np.hypot(polygon[:, 0], polygon[:, 1]).max()
+        a, b = polygon, np.roll(polygon, -1, axis=0)
+        side = np.hypot(*(b - a).T)
+        long = side > 1e-9  # the closing vertex repeats the first one
+        inradius = (np.abs(a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0])[long]
+                    / side[long]).min()
+        outline = mpath.Path(polygon / scale)
+        hidden = _hidden_markers(xy, opaque, radius=corner, linewidth=0.0,
+                                 clip=tuple(clip), inradius=inradius)
+        return hidden, outline
 
 
 class ScatterXY:
@@ -344,7 +404,9 @@ class ScatterXY:
             sits on the nearest pixel centre, up to half a pixel from its
             exact position. With ``z`` it is a `PathCollection` subclass that,
             in raster output, leaves out the markers that opaque markers drawn
-            after them cover completely; the image is unchanged.
+            after them cover completely. Opaque markers with an edge in the
+            face colour (the default) are then drawn as one filled shape
+            each, which changes only the antialiasing of their outlines.
 
         See Also:
             examples/visualization/plot_scatter_xy_basic.py — Scatter plot variations with 2D and 3D coloring

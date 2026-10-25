@@ -226,11 +226,21 @@ class TestPlots(unittest.TestCase):
 
     def test_scatter_coloured_image_matches_drawing_every_marker(self):
         # Leaving the hidden markers out must not change one pixel, whatever
-        # the size, opacity, colour limits, view, dpi or later restyling.
+        # the size, opacity, colour limits, view, dpi or later restyling. Opaque
+        # markers with an edge in the face colour (1 pt at 100 dpi and more)
+        # are drawn as an edge-free polygon, which differs from the stroked
+        # circle only in the antialiasing of the outlines.
         import io
         import numpy as np
         import matplotlib as mpl
+        from unittest import mock
         from matplotlib.collections import PathCollection
+        from diive.core.plotting import scatter as scmod
+        hidden_markers = scmod._hidden_markers
+
+        def hide_nothing(xy, *args, **kwargs):
+            hidden_markers(xy, *args, **kwargs)
+            return np.zeros(len(xy), dtype=bool)
 
         def zoom(ax, coll):
             ax.set_xlim(5, 12)
@@ -248,38 +258,88 @@ class TestPlots(unittest.TestCase):
         def no_edges(ax, coll):
             coll.set_linewidth(0)
 
+        def thin_edges(ax, coll):
+            coll.set_linewidth(0.5)
+
+        # The last item: whether the edge-free polygon is drawn.
         cases = [
-            ({}, {}, None, None),
-            ({}, dict(markersize=200), None, None),
-            ({}, dict(markersize=8), None, None),
-            ({}, dict(alpha=0.5), None, None),
+            ({}, {}, None, None, True),
+            ({}, dict(markersize=200), None, None, True),
+            ({}, dict(markersize=8), None, None, True),
+            ({}, dict(alpha=0.5), None, None, False),
             ({}, dict(vmin=-2, vmax=2, cmap=mpl.colormaps["RdYlBu"].with_extremes(
-                under="k", over="m")), None, None),
-            ({}, {}, zoom, None),
-            ({}, {}, restyle, None),
-            ({}, {}, edges, None),
-            ({}, {}, no_edges, None),
-            ({}, {}, None, 150),
-            (dict(figsize=(4.37, 3.13), dpi=137), {}, None, None),
+                under="k", over="m")), None, None, True),
+            ({}, {}, zoom, None, True),
+            ({}, {}, restyle, None, True),
+            ({}, {}, edges, None, False),
+            ({}, {}, no_edges, None, False),
+            ({}, {}, thin_edges, None, False),
+            ({}, {}, None, 150, True),
+            ({}, {}, None, 72, False),
+            (dict(figsize=(4.37, 3.13), dpi=137), {}, None, None, True),
         ]
-        for fig_kw, plot_kw, change, savedpi in cases:
+        for fig_kw, plot_kw, change, savedpi, outline in cases:
             images = []
-            for plain in (False, True):
+            for mode in ("fast", "every marker", "plain"):
                 fig, ax = self._coloured_scatter(**fig_kw, **plot_kw)
                 coll = ax.collections[0]
-                if plain:
+                if mode == "plain":
                     coll.__class__ = PathCollection
                 if change:
                     change(ax, coll)
-                if savedpi:
-                    buf = io.BytesIO()
-                    fig.savefig(buf, format="rgba", dpi=savedpi)
-                    images.append(np.frombuffer(buf.getvalue(), np.uint8))
-                else:
-                    fig.canvas.draw()
-                    images.append(np.asarray(fig.canvas.buffer_rgba()).copy())
+                with mock.patch.object(
+                        scmod, "_hidden_markers",
+                        hide_nothing if mode == "every marker" else hidden_markers):
+                    if savedpi:
+                        buf = io.BytesIO()
+                        fig.savefig(buf, format="rgba", dpi=savedpi)
+                        images.append(np.frombuffer(buf.getvalue(), np.uint8))
+                    else:
+                        fig.canvas.draw()
+                        images.append(np.asarray(fig.canvas.buffer_rgba()).copy())
             with self.subTest(fig=fig_kw, plot=plot_kw, change=change, savedpi=savedpi):
-                np.testing.assert_array_equal(images[0], images[1])
+                fast, every, plain = images
+                np.testing.assert_array_equal(fast, every)
+                if outline:
+                    diff = np.abs(fast.astype(int) - plain.astype(int))
+                    self.assertGreater(diff.max(), 0)
+                    self.assertLessEqual(diff.max(), 12)
+                else:
+                    np.testing.assert_array_equal(fast, plain)
+
+    def test_scatter_coloured_draws_edge_free_polygons(self):
+        # The renderer gets one closed polygon without curves and no edge.
+        # Outside the draw the collection keeps its circle and line width.
+        import numpy as np
+        from matplotlib.path import Path
+        fig, ax = self._coloured_scatter(2_000)
+        coll = ax.collections[0]
+        paths_before = coll.get_paths()
+        lw_before = coll.get_linewidths().copy()
+        sent = []
+        renderer = fig.canvas.get_renderer()
+        draw_collection = renderer.draw_path_collection
+
+        def record(gc, master, paths, transforms, offsets, offset_trans,
+                   facecolors, edgecolors, linewidths, *args):
+            sent.append((list(paths), np.array(linewidths)))
+            return draw_collection(gc, master, paths, transforms, offsets,
+                                   offset_trans, facecolors, edgecolors,
+                                   linewidths, *args)
+
+        renderer.draw_path_collection = record
+        fig.canvas.draw()
+        paths, linewidths = sent[0]
+        self.assertEqual(len(paths), 1)
+        codes = paths[0].codes
+        self.assertTrue(codes is None or not np.isin(codes, [Path.CURVE3, Path.CURVE4]).any())
+        np.testing.assert_array_equal(linewidths, [0])
+        # Each corner sits half the line width outside the circle.
+        scale = np.sqrt(coll.get_sizes()[0])
+        corner = np.hypot(*paths[0].vertices.T).max() * scale
+        self.assertAlmostEqual(corner, 0.5 * scale + 0.5 * lw_before[0], delta=0.05)
+        self.assertIs(coll.get_paths(), paths_before)
+        np.testing.assert_array_equal(coll.get_linewidths(), lw_before)
 
     def test_scatter_coloured_vector_output_keeps_every_marker(self):
         # Only the Agg raster is thinned; an SVG gets every marker.

@@ -21,6 +21,8 @@ Part of the diive library: https://github.com/holukas/diive
 """
 from __future__ import annotations
 
+import matplotlib.dates as mdates
+import numpy as np
 import pandas as pd
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -52,6 +54,27 @@ _C_OBSERVED = "#455A64"  # blue-grey 700
 _C_TREND = "#E53935"     # red 600
 _C_SEASONAL = "#43A047"  # green 600
 _C_RESIDUAL = "#90A4AE"  # blue-grey 300
+
+
+class _ViewMemoDateLocator(mdates.AutoDateLocator):
+    """An `AutoDateLocator` that reuses its ticks while the view stays put.
+
+    The four decomposition panels share one x-axis locator, and every layout
+    pass and draw asks it again for each panel (about 120 times per render).
+    Each answer builds a date rule and walks it, so this was about a quarter
+    of a render. The ticks depend only on the view limits, so the last answer is
+    kept, together with the tick frequency the formatter reads.
+    """
+
+    def __call__(self):
+        view = tuple(self.axis.get_view_interval())
+        memo = getattr(self, "_view_memo", None)
+        if memo is not None and memo[0] == view:
+            self._freq = memo[2]
+            return memo[1].copy()
+        locs = np.asarray(super().__call__())
+        self._view_memo = (view, locs.copy(), self._freq)
+        return locs
 
 
 class SeasonalTrendTab(SingleVariableExplorerTab):
@@ -276,6 +299,10 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
             axes[0].set_title(f"{self._target} — seasonal-trend decomposition", fontsize=10)
             for ax in axes[:-1]:
                 ax.tick_params(labelbottom=False)
+            # Same ticks, computed once per view (see the class).
+            locator = axes[0].xaxis.get_major_locator()
+            if type(locator) is mdates.AutoDateLocator:
+                locator.__class__ = _ViewMemoDateLocator
         except Exception as err:
             axes[0].text(0.5, 0.5, f"Cannot plot:\n{err}", ha="center", va="center",
                          wrap=True, transform=axes[0].transAxes)

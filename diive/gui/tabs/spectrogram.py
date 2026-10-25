@@ -18,6 +18,7 @@ from __future__ import annotations
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
+from matplotlib.collections import QuadMesh
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
@@ -49,6 +50,78 @@ _EXPLANATION = (
     "the daily cycle. A <b>wider analysis window</b> gives finer frequency detail "
     "but blurs timing; a <b>narrower window</b> does the reverse."
 )
+
+
+#: Pixels added on each side of the clip box before cropping the mesh. Agg
+#: rounds the clip box to whole pixels, so a triangle just outside the view
+#: can still paint the edge pixels.
+_CROP_MARGIN_PX = 2
+
+
+class _ViewCroppedMesh(QuadMesh):
+    """A rectilinear gouraud `QuadMesh` that draws only the cells in view.
+
+    A spectrogram holds every frequency up to the Nyquist frequency, but the
+    view usually shows only the lowest few cycles per day. Agg still
+    processes every triangle of the mesh, also those outside the axes, and
+    the mesh is split into triangles at every draw. This class draws
+    only the rows and columns that reach into the clip box (with a margin),
+    in their original order, which paints the same pixels. Outside ``draw``
+    the mesh holds all its cells, and pan, zoom or a new axis limit need no
+    rebuild.
+    """
+
+    def draw(self, renderer):
+        crop = self._view_crop() if self.get_visible() else None
+        if crop is None:
+            super().draw(renderer)
+            return
+        rows, cols = crop
+        if rows.stop - rows.start < 2 or cols.stop - cols.start < 2:
+            return  # no cell reaches into the view
+        saved = (self._coordinates, self._A, self._mapped_colors,
+                 self._facecolors, self._edgecolors)
+        self._coordinates = self._coordinates[rows, cols]
+        self._A = self._A[rows, cols]
+        try:
+            super().draw(renderer)  # maps the colours of the cropped array
+        finally:
+            (self._coordinates, self._A, self._mapped_colors,
+             self._facecolors, self._edgecolors) = saved
+
+    def _view_crop(self):
+        """The vertex rows and columns that reach into the view, or None for all."""
+        ax = self.axes
+        clip = self.get_clip_box()
+        if (ax is None or self._A is None or np.ndim(self._A) != 2
+                or self._A.shape != self._coordinates.shape[:2]
+                or not self.get_clip_on() or clip is None
+                or self.get_clip_path() is not None
+                or self.get_transform() is not ax.transData):
+            return None
+        # Map the colours with the limits of the whole array, not the crop.
+        self.autoscale_None()
+        xs = self._coordinates[0, :, 0]
+        ys = self._coordinates[:, 0, 1]
+        if np.any(np.diff(xs) < 0) or np.any(np.diff(ys) < 0):
+            return None
+        m = _CROP_MARGIN_PX
+        corners = ax.transData.inverted().transform(
+            [[clip.x0 - m, clip.y0 - m], [clip.x1 + m, clip.y1 + m]])
+        x0, x1 = sorted(corners[:, 0])
+        y0, y1 = sorted(corners[:, 1])
+        rows = _covering(ys, y0, y1)
+        cols = _covering(xs, x0, x1)
+        if rows.stop - rows.start == len(ys) and cols.stop - cols.start == len(xs):
+            return None
+        return rows, cols
+
+
+def _covering(edges: np.ndarray, lo: float, hi: float) -> slice:
+    """The vertices of non-decreasing `edges` with cells that overlap ``[lo, hi]``."""
+    start = max(int(np.searchsorted(edges, lo, side="right")) - 1, 0)
+    stop = min(int(np.searchsorted(edges, hi, side="left")) + 1, len(edges))
+    return slice(start, stop)
 
 
 class SpectrogramTab(SingleVariableExplorerTab):
@@ -233,6 +306,8 @@ class SpectrogramTab(SingleVariableExplorerTab):
             x = mdates.date2num(self._valid_index[pos].to_pydatetime())
             mesh = ax.pcolormesh(x, cycles_per_day, spec["power_db"],
                                  shading="gouraud", cmap=self.cmap.currentText())
+            # Same mesh, drawn without the cells outside the view (see the class).
+            mesh.__class__ = _ViewCroppedMesh
             ax.set_ylim(0, self.max_freq.value())
             ax.axhline(1.0, color="white", linestyle="--", linewidth=0.8, alpha=0.7)
             ax.xaxis_date()
