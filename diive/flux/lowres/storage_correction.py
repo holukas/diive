@@ -25,8 +25,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
     The storage term—the change in gas or heat concentration over time—is added
     to the measured eddy covariance flux.
 
-    Automatically detects the storage variable from flux type, optionally gap-fills
-    missing values using a rolling median, and tracks which values were filled.
+    Automatically detects the storage variable from flux type, optionally removes
+    spikes from the storage term, gap-fills missing and removed values using a
+    rolling median, and tracks which values were filled.
 
     **Output naming:** FC becomes NEE (storage-corrected CO2 flux); other fluxes
     (LE, H, FH2O, etc.) keep their name with the suffix {idstr} added
@@ -40,7 +41,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  gapfill_storage_term: bool = True,
                  idstr: str = 'L3.1',
                  set_storage_to_zero: bool = False,
-                 strgcol: str | None = None):
+                 strgcol: str | None = None,
+                 screen_storage_term: bool = False,
+                 storage_screening: dict | None = None):
         """Initialize the storage corrector.
 
         Args:
@@ -67,12 +70,30 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 FLUXNET / Swiss FluxNet naming convention (e.g. ``'co2_strg'``
                 from EddyPro full-output files, or a custom site-specific
                 name). Default None (auto-detect).
+            screen_storage_term: If True, remove spikes from the storage term before it
+                is added to the flux, and fill them like missing values. A spike in the
+                storage term would otherwise turn a good flux record into an outlier that
+                the outlier tests of Level 3.2 remove, so the flux record would be lost.
+                The screening is a Hampel filter on the double differences of the storage
+                term (13 days, 5.5 sigma, day and night together, one pass). It removes
+                isolated spikes only: a run of more than ``max_run`` (3) removed values in a
+                row is kept as measured, because it is a noisy period, not a spike. Each
+                removed run gets the mean of its measured values, so it keeps its sum, the
+                real concentration change across it, and the storage term stays balanced. Needs
+                ``gapfill_storage_term=True``, so that every measured flux keeps a storage
+                term. Default False.
+            storage_screening: Settings that replace the defaults above, e.g.
+                ``{'n_sigma': 7}``, ``{'repeat': True}`` or ``{'max_run': 5}``. The others go
+                to the Hampel filter, see
+                :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`.
 
         Attributes:
             results: DataFrame with corrected flux and gap-filling info.
             flux_corrected_col: Name of the corrected flux column.
             gapfilled_strgcol: Name of the gap-filled storage column (if enabled).
-            flag_isgapfilled: Flag column (0=original, 1=gap-filled).
+            flag_isgapfilled: Flag column (0=original, 1=gap-filled because missing,
+                2=removed by the screening and replaced by the mean of its run).
+            storage_outliers_: Timestamps of the storage values the screening removed.
         """
         self.df = df.copy()
         self.fluxcol = fluxcol
@@ -111,6 +132,17 @@ class FluxStorageCorrectionSinglePointEddyPro:
         # FLAG_..._ISFILLED column when gap-fill is enabled. Quality
         # aggregation at L3.1 inherits the L2 flags via FlagQCF.
         self.set_storage_to_zero = set_storage_to_zero
+        if screen_storage_term and not gapfill_storage_term and not set_storage_to_zero:
+            raise ValueError("screen_storage_term=True needs gapfill_storage_term=True: the removed "
+                             "storage values must be filled, or their flux records are lost.")
+        self.screen_storage_term = screen_storage_term and not set_storage_to_zero
+        screening = {'window_length': '13D', 'n_sigma': 5.5, 'use_differencing': True,
+                     'separate_day_night': False, 'repeat': False, 'max_run': 3,
+                     **(storage_screening or {})}
+        self._screening_repeat = screening.pop('repeat')
+        self._screening_max_run = screening.pop('max_run')
+        self.storage_screening = screening
+        self.storage_outliers_ = pd.DatetimeIndex([])
 
         # Name of gapfilled storage column and its flag
         self.gapfilled_strgcol = None
@@ -156,6 +188,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self._results = self.df[cols].copy()
 
         if not self.set_storage_to_zero:
+            if self.screen_storage_term:
+                self._screen_storage_term()
             # Gap-fill storage term
             if self.gapfill_storage_term:
                 gapfilled_df = self._gapfill_storage_term()
@@ -204,16 +238,20 @@ class FluxStorageCorrectionSinglePointEddyPro:
             # Gap-filling enabled
             locs_fluxmissing = self.results[self.fluxcol].isnull()
             fluxavailable = self.results[~locs_fluxmissing].copy()
-            locs_isfilled = fluxavailable[self.flag_isgapfilled] == 1
+            locs_isfilled = fluxavailable[self.flag_isgapfilled] >= 1  # 1 missing, 2 screened
             locs_isorig = fluxavailable[self.flag_isgapfilled] == 0
 
             n_isfilled = len(fluxavailable[locs_isfilled])
             n_isorig = len(fluxavailable[locs_isorig])
             n_flux_corrected = len(fluxavailable[self.flux_corrected_col].dropna())
-            perc_recovered = (n_isfilled / n_orig_missing_strg * 100) if n_orig_missing_strg > 0 else 0
+            n_filled_missing = int((fluxavailable[self.flag_isgapfilled] == 1).sum())
+            perc_recovered = (n_filled_missing / n_orig_missing_strg * 100) if n_orig_missing_strg > 0 else 0
 
             info(f"Measured flux: {n_flux:,}  |  Storage available: {n_storageterm:,}  |  Missing: {n_orig_missing_strg:,}")
-            info(f"Gap-fill: recovered {n_isfilled:,}  |  Recovery rate: {perc_recovered:.1f}%")
+            info(f"Gap-fill: recovered {n_filled_missing:,}  |  Recovery rate: {perc_recovered:.1f}%")
+            n_screened = int((fluxavailable[self.flag_isgapfilled] == 2).sum())
+            if self.screen_storage_term:
+                info(f"Screening: {n_screened:,} storage spike(s) at measured fluxes removed and filled")
             info(f"Output corrected flux: {n_flux_corrected:,}  ({n_isorig} original + {n_isfilled} gap-filled)")
 
             # Statistics if gap-filled values exist
@@ -238,6 +276,164 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 except (KeyError, IndexError, AttributeError):
                     pass
 
+    def _screen_storage_term(self) -> None:
+        """Find isolated spikes in the storage term with a Hampel filter.
+
+        ``_gapfill_storage_term`` replaces each run of them by its mean (flag 2). The
+        original storage column in the results keeps the measured values.
+        """
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        strg = self._results[self.strgcol]
+        if strg.notna().sum() < 3:
+            return
+        ham = Hampel(series=strg.copy(), **self.storage_screening)
+        ham.calc(repeat=self._screening_repeat)
+        flagged = (ham.overall_flag == 2).reindex(strg.index, fill_value=False)
+        # Only isolated spikes: runs of more than max_run flagged records stay as measured.
+        run_id = (flagged != flagged.shift()).cumsum()
+        run_len = flagged.groupby(run_id).transform('size')
+        keep = flagged & (run_len <= self._screening_max_run)
+        self.storage_outliers_ = strg.index[keep.to_numpy()]
+        info(f"Storage term {self.strgcol}: {len(self.storage_outliers_):,} spike(s) removed "
+             f"and filled ({100 * len(self.storage_outliers_) / max(strg.notna().sum(), 1):.2f} % "
+             f"of the measured storage values)")
+
+    def screening_summary(self, gain: float = 1.0) -> dict:
+        """Numbers that show whether the screened and filled storage term still makes sense.
+
+        On the records with a measured flux, compares the storage term without screening
+        (measured values, gaps filled) with the one used (removed values filled as well):
+
+        - ``removed``: number of storage values the screening removed at measured fluxes.
+        - ``removed_negative``: share of them below zero. Real storage spikes have both signs;
+          a large negative share in the morning hints at the real morning release being cut.
+        - ``sum_unscreened``, ``sum_used``: the sums of the two versions, times ``gain``
+          (``12.011e-6 * 1800`` gives gC m-2 for a 30-min CO2 storage term in umol m-2 s-1).
+          Over a year the storage term should sum to about zero. Their difference is the
+          direct effect of the screening on the sum of the flux.
+        - ``daily_abs_median_unscreened``, ``daily_abs_median_used``: median of the absolute
+          daily sums, times ``gain``. Lower means the daily balance improved.
+
+        Needs ``screen_storage_term=True`` and a finished ``storage_correction()``.
+        """
+        d = self._screening_frame()
+        removed = d['removed']
+        days = d.index.normalize()
+        daily_unscreened = (d['unscreened'] * gain).groupby(days).sum(min_count=1)
+        daily_used = (d['used'] * gain).groupby(days).sum(min_count=1)
+        return {
+            'removed': int(removed.sum()),
+            'removed_negative': float((d.loc[removed, 'unscreened'] < 0).mean()) if removed.any() else float('nan'),
+            'sum_unscreened': float(d['unscreened'].sum() * gain),
+            'sum_used': float(d['used'].sum() * gain),
+            'daily_abs_median_unscreened': float(daily_unscreened.abs().median()),
+            'daily_abs_median_used': float(daily_used.abs().median()),
+        }
+
+    def _screening_frame(self) -> DataFrame:
+        """Storage term at the records with a measured flux: unscreened, used, and removed."""
+        if not self.screen_storage_term or self.gapfilled_strgcol is None:
+            raise RuntimeError("Needs screen_storage_term=True and storage_correction() first.")
+        r = self.results
+        r = r[r[self.fluxcol].notna()]
+        removed = r[self.flag_isgapfilled] == 2
+        # Without screening the removed records would carry their measured value.
+        unscreened = r[self.gapfilled_strgcol].where(~removed, r[self.strgcol])
+        return DataFrame({'unscreened': unscreened, 'used': r[self.gapfilled_strgcol],
+                          'removed': removed})
+
+    def plot_screening(self, gain: float = 1.0, units: str = '', showplot: bool = True):
+        """Check the screened and filled storage term in three panels.
+
+        1. Mean daily cycle of the storage term with and without screening. The real cycle is
+           positive at night, when CO2 builds up, and negative in the morning, when it is released.
+           If the screened line flattens the morning dip, the screening cut real signal.
+        2. Removed values by hour of the day, positive above and negative below zero. Real spikes
+           spread over the day with both signs.
+        3. Cumulative sum of both versions over the record (times ``gain``). The storage term
+           should sum to about zero over a year; the gap between the lines is the direct effect of
+           the screening on the sum of the flux.
+
+        Args:
+            gain: Factor for the cumulative sums, e.g. ``12.011e-6 * 1800`` for gC m-2.
+            units: Unit of the cumulative sums.
+            showplot: Call ``plt.show()`` after drawing.
+        """
+        import numpy as np
+        import diive.core.plotting.styles.chainplots as cp
+        from diive.core.plotting.plotfuncs import nice_date_ticks
+
+        d = self._screening_frame()
+        summary = self.screening_summary(gain=gain)
+        hour = d.index.hour + d.index.minute / 60
+        fig = plt.figure(facecolor='white', figsize=(16, 5.6), layout='constrained')
+        gs = fig.add_gridspec(1, 3, width_ratios=[1, 1, 1.4])
+        ax_diel, ax_hour, ax_cum = (fig.add_subplot(gs[0, i]) for i in range(3))
+
+        for col, color, label, width in (('unscreened', cp.KEPT, 'without screening', 2.6),
+                                         ('used', cp.CLEANED, 'used (screened, filled)', 1.8)):
+            diel = d[col].groupby(hour).mean()
+            ax_diel.plot(diel.index, diel.to_numpy(), color=color, linewidth=width, label=label)
+        ax_diel.axhline(0, color=cp.INK, linewidth=0.7, alpha=0.5)
+        ax_diel.set_xlim(0, 24)
+        ax_diel.set_xticks(range(0, 25, 3))
+        ax_diel.set_xlabel('hour of the day')
+        ax_diel.set_ylabel(f'mean {self.strgcol}')
+        cp.style_axes(ax_diel)
+        cp.panel_label(ax_diel, "Mean daily cycle")
+        ax_diel.legend(loc='lower right', frameon=False, fontsize=8.5)
+
+        removed = d.loc[d['removed'], 'unscreened']
+        rh = removed.index.hour + removed.index.minute / 60
+        bins = np.arange(0, 24.5, 1)
+        pos = np.histogram(rh[removed.to_numpy() >= 0], bins=bins)[0]
+        neg = np.histogram(rh[removed.to_numpy() < 0], bins=bins)[0]
+        ax_hour.bar(bins[:-1] + 0.5, pos, width=0.85, color=cp.TEST_COLORS[0], label='positive')
+        ax_hour.bar(bins[:-1] + 0.5, -neg, width=0.85, color=cp.TEST_COLORS[3], label='negative')
+        ax_hour.axhline(0, color=cp.INK, linewidth=0.7)
+        ax_hour.set_xlim(0, 24)
+        ax_hour.set_xticks(range(0, 25, 3))
+        ax_hour.set_xlabel('hour of the day')
+        ax_hour.set_ylabel('removed values (negative below zero)')
+        cp.style_axes(ax_hour)
+        cp.panel_label(ax_hour, "Removed values by hour")
+        ax_hour.legend(loc='upper right', frameon=False, fontsize=8.5)
+
+        for col, color, label, width in (('unscreened', cp.KEPT, 'without screening', 2.6),
+                                         ('used', cp.CLEANED, 'used (screened, filled)', 1.8)):
+            cum = (d[col] * gain).cumsum()
+            ax_cum.plot(cum.index, cum.to_numpy(), color=color, linewidth=width, label=label)
+        ax_cum.axhline(0, color=cp.INK, linewidth=0.7, alpha=0.5)
+        ax_cum.set_ylabel(f"cumulative {self.strgcol}{f' ({units})' if units else ''}")
+        cp.style_axes(ax_cum)
+        cp.panel_label(ax_cum, "Cumulative sum")
+        ax_cum.legend(loc='best', frameon=False, fontsize=8.5)
+        nice_date_ticks(ax=ax_cum)
+
+        u = f" {units}" if units else ""
+        cp.figure_title(
+            fig, f"Storage term screening: {self.strgcol}",
+            f"{summary['removed']:,} values removed and filled at measured fluxes, "
+            f"{100 * summary['removed_negative']:.0f} % of them negative. Sum without screening "
+            f"{summary['sum_unscreened']:,.1f}{u}, used {summary['sum_used']:,.1f}{u}. Median absolute "
+            f"daily sum {summary['daily_abs_median_unscreened']:.2f} -> {summary['daily_abs_median_used']:.2f}{u}.")
+        self._fig = fig
+        if showplot:
+            plt.show()
+        return fig
+
+    def _screened_run_means(self) -> pd.Series:
+        """For each value the screening removed, the mean of the measured values of its run.
+
+        A run is a block of removed values in a row (at most ``max_run`` long). Replacing the
+        run by its mean keeps its sum and removes the spike shape: a concentration spike that
+        gives +X and then -X in the storage term becomes values near zero.
+        """
+        strg = self.results[self.strgcol]
+        flagged = pd.Series(strg.index.isin(self.storage_outliers_), index=strg.index)
+        run_id = (flagged != flagged.shift()).cumsum()
+        return strg.groupby(run_id).transform('mean')[flagged.to_numpy()]
+
     def _gapfill_storage_term(self) -> DataFrame:
         """Fill missing storage values using a rolling median.
 
@@ -253,10 +449,16 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self.gapfilled_strgcol = f"{self.strgcol}_gfRMED{self.idstr}"
         self.flag_isgapfilled = f"FLAG_{self.gapfilled_strgcol}_ISFILLED"
 
-        # Generate temporary subset where all flux values are available and check for missing storage
+        # Generate temporary subset where all flux values are available and check for missing
+        # storage. Each run of values removed by the screening gets the mean of its measured
+        # values (flag 2): the storage term is the change in concentration, so the sum over the
+        # run is the real concentration change across it, and keeping it keeps the balance.
+        strg_series = self.results[self.strgcol].copy()
+        strg_series[self.storage_outliers_] = self._screened_run_means()
         gapfilled_df = pd.concat([self.results[self.fluxcol], self.results[self.strgcol]], axis=1)
-        gapfilled_df[self.gapfilled_strgcol] = self.results[self.strgcol].copy()
+        gapfilled_df[self.gapfilled_strgcol] = strg_series
         gapfilled_df[self.flag_isgapfilled] = 0
+        gapfilled_df.loc[gapfilled_df.index.isin(self.storage_outliers_), self.flag_isgapfilled] = 2
         gapfilled_df = gapfilled_df.dropna(subset=[self.fluxcol])
         n_still_missing_strg = gapfilled_df[self.gapfilled_strgcol].isnull().sum()
         prev_n_still_missing_strg = n_still_missing_strg
@@ -272,7 +474,6 @@ class FluxStorageCorrectionSinglePointEddyPro:
         #    size already spans the entire series from any position, so once
         #    there are >=3 valid values the loop is guaranteed to fill every gap
         #    at or before the cap (it normally exits much earlier).
-        strg_series = self.results[self.strgcol]
         n_total = len(strg_series)
         n_valid = int(strg_series.notna().sum())
         max_window = 2 * n_total + 1

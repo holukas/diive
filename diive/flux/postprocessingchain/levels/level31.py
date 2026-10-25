@@ -55,6 +55,8 @@ def run_level31(
         gapfill_storage_term: bool = True,
         set_storage_to_zero: bool = False,
         strgcol: str | None = None,
+        screen_storage_term: bool = False,
+        storage_screening: dict | None = None,
 ) -> FluxLevelData:
     """
     Level-3.1: Apply single-point storage correction and compute the L3.1 QCF.
@@ -79,7 +81,8 @@ def run_level31(
     L3.1 introduces **no new quality test**. The ``FLAG_..._ISFILLED`` column
     that ``FluxStorageCorrectionSinglePointEddyPro`` emits when
     ``gapfill_storage_term=True`` is **informational only** (0 = storage was
-    measured, 1 = storage was gap-filled with a rolling median); it does
+    measured, 1 = storage was gap-filled with a rolling median, 2 = the screening
+    removed a spike and the mean of its run replaced it); it does
     *not* end in ``_TEST`` and is therefore deliberately ignored by
     ``FlagQCF``. Whether a record's storage term was measured or filled is
     not a quality criterion — users who care about provenance read the
@@ -104,6 +107,16 @@ def run_level31(
             Swiss FluxNet naming convention (e.g. EddyPro full-output
             ``co2_strg``, or a custom site-specific name). Default ``None``
             (auto-detect).
+        screen_storage_term: Remove spikes from the storage term before it is added,
+            and fill them like missing values (needs ``gapfill_storage_term=True``).
+            A spike in the storage term would otherwise make a good flux record an
+            outlier that Level 3.2 removes. Hampel filter on the double differences,
+            13 days, 5.5 sigma, one pass. Only runs of up to 3 removed values are
+            replaced, by the mean of the run, so the storage sum is kept; longer runs
+            stay as measured. Default False.
+        storage_screening: Settings that replace the defaults of the screening, e.g.
+            ``{'n_sigma': 7}`` or ``{'max_run': 5}``. See
+            ``FluxStorageCorrectionSinglePointEddyPro``.
 
     Returns:
         Updated FluxLevelData; see the field list above for what is populated.
@@ -130,6 +143,8 @@ def run_level31(
         idstr=idstr,
         set_storage_to_zero=set_storage_to_zero,
         strgcol=strgcol,
+        screen_storage_term=screen_storage_term,
+        storage_screening=storage_screening,
     )
     level31.storage_correction()
 
