@@ -365,6 +365,13 @@ class EventsTab(DiiveTab):
 
     def build(self) -> QWidget:
         self._df = None
+        #: Built cards by `_card_key`, reused across refreshes: a card costs a
+        #: few ms (stylesheets, shadow), and a filter keystroke or a data push
+        #: used to rebuild all of them.
+        self._cards: dict[tuple, _EventCard] = {}
+        #: What the board shows now. A refresh that would show the same is
+        #: skipped (e.g. the visibility toggle, a push with the same range).
+        self._board_key = None
         root = QWidget()
         root_lay = QVBoxLayout(root)
         root_lay.setContentsMargins(0, 0, 0, 0)
@@ -430,6 +437,11 @@ class EventsTab(DiiveTab):
                                   " border: none; }")
         self.scroll.viewport().setStyleSheet("background: transparent;")
         outer.addWidget(self.scroll, 1)
+
+        # Hidden holder for cached cards the filter hides, so clearing the
+        # filter brings them back without a rebuild. Never shown.
+        self._parking = QWidget(body)
+        self._parking.hide()
 
         root_lay.addWidget(body, stretch=1)
         events_store.manager.changed.connect(self._refresh)
@@ -576,7 +588,25 @@ class EventsTab(DiiveTab):
                      if text in evs[i].name.lower()
                      or text in (evs[i].category or "").lower()]
 
-        # Build a fresh board; the previous container + cards go at the end.
+        sections = self._sections(order)
+        keys = [self._card_key(i, evs[i].resolved_color(i, colors=cats),
+                               span, now, compact) for i in range(len(evs))]
+        board_key = (self.group_combo.currentText(), compact,
+                     tuple((title, tuple(keys[i] for i in idxs))
+                           for title, idxs in sections))
+        if board_key == self._board_key:
+            return  # the board would look the same
+        self._board_key = board_key
+
+        # Cards of events that changed (or moved index) are stale. The rest are
+        # reused, also those the filter hides now.
+        valid = set(keys)
+        for key in [k for k in self._cards if k not in valid]:
+            card = self._cards.pop(key)
+            card.setParent(None)  # deleted deliberately, see the board below
+            card.deleteLater()
+
+        # Build a fresh board. The previous container goes at the end.
         container = QWidget()
         container.setStyleSheet("background: transparent;")
         sp = container.sizePolicy()
@@ -588,15 +618,26 @@ class EventsTab(DiiveTab):
 
         grouped = self.group_combo.currentText() != "None"
         last_flow: FlowLayout | None = None
-        for sec_title, idxs in self._sections(order):
+        shown = set()
+        for sec_title, idxs in sections:
             if sec_title is not None:
                 vbox.addWidget(self._section_header(sec_title, len(idxs)))
             host, flow = self._flow_host()
             for idx in idxs:
-                color = evs[idx].resolved_color(idx, colors=cats)
-                flow.addWidget(self._make_card(idx, color, span, now, compact))
+                key = keys[idx]
+                card = self._cards.get(key)
+                if card is None:
+                    color = evs[idx].resolved_color(idx, colors=cats)
+                    card = self._make_card(idx, color, span, now, compact)
+                    self._cards[key] = card
+                flow.addWidget(card)
+                shown.add(key)
             vbox.addWidget(host)
             last_flow = flow
+        # Park the filtered-out cards before the old board is deleted with them.
+        for key, card in self._cards.items():
+            if key not in shown:
+                card.setParent(self._parking)
 
         add_card = _AddCard(self._add_event, compact=compact)
         if grouped or last_flow is None:
@@ -616,6 +657,17 @@ class EventsTab(DiiveTab):
             old.setParent(None)
             old.deleteLater()
         self.scroll.setWidget(container)
+
+    @staticmethod
+    def _card_key(idx: int, color: str, span, now, compact: bool) -> tuple:
+        """Everything a card shows or binds: two cards with the same key look and
+        act the same. The index is in it because the card's actions are bound to
+        it, the relative-time text because it changes with ``now``."""
+        ev = events_store.manager.events[idx]
+        return (idx, ev.name, ev.start, ev.end, ev.category, ev.description,
+                ev.color, color, span, compact, _relative_time(ev, now),
+                theme.manager.tooltip_qss(),
+                tuple(sorted(theme.manager.typography.items())))
 
     def _make_card(self, idx: int, color: str, span, now,
                    compact: bool) -> _EventCard:

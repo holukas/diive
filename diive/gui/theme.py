@@ -364,10 +364,19 @@ class ThemeManager(QObject):
                 f" padding: 6px 10px; font-size: 12px; }}")
 
     def apply(self) -> None:
-        """Re-apply the stylesheet app-wide and notify listeners (live preview)."""
+        """Re-apply the stylesheet app-wide and notify listeners (live preview).
+
+        ``app.setStyleSheet`` re-polishes every live widget (about 1 s with many
+        tabs open), even when the text is unchanged, so it runs only when the
+        stylesheet changed. Only ``tokens`` feed the stylesheet. The list width,
+        heatmap colormap, pill and line colours reach their widgets through
+        ``changed`` alone.
+        """
         app = QApplication.instance()
         if app is not None:
-            app.setStyleSheet(self.qss())
+            qss = self.qss()
+            if app.styleSheet() != qss:
+                app.setStyleSheet(qss)
         self.changed.emit()
 
     def as_dict(self) -> dict:

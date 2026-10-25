@@ -71,9 +71,12 @@ class _ColorSwatch(QPushButton):
         # AND its children, and the colour dialog below is parented to the
         # swatch, so an unscoped rule would paint the dialog's own buttons
         # (OK/Cancel/Pick Screen Color) in the swatch colour.
-        self.setStyleSheet(
-            f"QPushButton#colorswatch {{ background: {self._get()};"
-            f" border: 1px solid #607D8B; border-radius: 4px; }}")
+        qss = (f"QPushButton#colorswatch {{ background: {self._get()};"
+               f" border: 1px solid #607D8B; border-radius: 4px; }}")
+        # Every theme change refreshes all swatches. Restyle only a swatch with
+        # a new colour (setStyleSheet re-polishes even for the same text).
+        if self.styleSheet() != qss:
+            self.setStyleSheet(qss)
 
     def _pick(self) -> None:
         chosen = QColorDialog.getColor(QColor(self._get()), self, "Pick colour")

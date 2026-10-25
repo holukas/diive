@@ -83,6 +83,7 @@ class SubTabs(QWidget):
         self._stack = QStackedWidget()
         v.addWidget(self._stack, stretch=1)
 
+        self._qss = ""
         self._apply_style()
         theme.manager.changed.connect(self._apply_style)
 
@@ -99,7 +100,7 @@ class SubTabs(QWidget):
         # Insert before the trailing stretch so pills stay left-aligned.
         self._segrow.insertWidget(self._segrow.count() - 1, b)
         self._stack.addWidget(widget)
-        self._apply_style()
+        b.setStyleSheet(self._qss)  # style the new pill only
         if idx == 0:
             self.set_page(0)
         return idx
@@ -143,5 +144,10 @@ class SubTabs(QWidget):
             f"border-radius: 6px; background: transparent; }} "
             f"QPushButton:checked {{ background: {accent}; color: white; "
             f"border-color: {accent}; }}")
+        # Every theme change lands here (in every SubTabs). setStyleSheet
+        # re-polishes even for the same text, so restyle only on a real change.
+        if qss == self._qss:
+            return
+        self._qss = qss
         for b in self._buttons:
             b.setStyleSheet(qss)
