@@ -72,8 +72,8 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   `FluxStorageCorrectionSinglePointEddyPro(screen_storage_term=True)` remove spikes from the storage
   term with a Hampel filter on its double differences (13 days, 5.5 sigma, one pass;
   `storage_screening` changes the settings) before the term is added to the flux. Only isolated
-  spikes are replaced, runs of up to 3 values, each by the mean of its run, so the storage sum is
-  kept. A storage spike no longer turns a good flux record into an outlier, and every measured flux
+  spikes are replaced, runs of up to 3 values: each run, with one record on either side, by the
+  mean of that block, so the storage sum is kept and a single spike is spread over three records. A storage spike no longer turns a good flux record into an outlier, and every measured flux
   keeps a storage term. The `ISFILLED` flag is 2 for screened values; `storage_outliers_` lists
   them. `plot_screening()` and `screening_summary()` check the result: mean daily cycle, removed
   values by hour and sign, and the cumulative storage sum with and without screening.
@@ -82,6 +82,10 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   filter, and the records left for gap-filling, split into QCF 0 and 1 and into day and night.
   `plot_gapfilling_input` shows the records for gap-filling and the highest-quality records (QCF 0)
   as heatmaps, one column per scenario. `report_gaps` reports the gaps left per scenario.
+- **Model overview:** `report_model_overview` lists, per ML method, USTAR scenario and year, the
+  training years, features, training and test records, the number of trees early stopping chose,
+  the records of the final fit, the test scores and how the year's gaps were filled.
+  `report_gapfilling_feature_importances(ustar_scenario=)` reports one scenario.
 - **Hampel filter per time of day:** `Hampel(by_time_of_day=True)` and
   `flag_outliers_hampel_test(by_time_of_day=True)` judge each value against the records of the same
   time of day (`time_of_day_slots` steps on either side, over the days of `window_length`), so the
