@@ -68,8 +68,56 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 - **Nighttime uncertainty for the chain:** `nighttime_uncertainty` gives EddyPro's random
   uncertainty, the PAS20 (ONEFlux) random uncertainty and the larger of the two for each record,
   and compares what each would remove.
+- **Storage term screening:** `run_level31(screen_storage_term=True)` and
+  `FluxStorageCorrectionSinglePointEddyPro(screen_storage_term=True)` remove spikes from the storage
+  term with a Hampel filter on its double differences (13 days, 5.5 sigma, one pass;
+  `storage_screening` changes the settings) before the term is added to the flux. Only isolated
+  spikes are replaced, runs of up to 3 values, each by the mean of its run, so the storage sum is
+  kept. A storage spike no longer turns a good flux record into an outlier, and every measured flux
+  keeps a storage term. The `ISFILLED` flag is 2 for screened values; `storage_outliers_` lists
+  them. `plot_screening()` and `screening_summary()` check the result: mean daily cycle, removed
+  values by hour and sign, and the cumulative storage sum with and without screening.
+- **What the gap-filling starts from:** `report_gapfilling_input` counts, per USTAR scenario, the
+  measured records, those removed by the tests and the outlier detection, those removed by the USTAR
+  filter, and the records left for gap-filling, split into QCF 0 and 1 and into day and night.
+  `plot_gapfilling_input` shows the records for gap-filling and the highest-quality records (QCF 0)
+  as heatmaps, one column per scenario. `report_gaps` reports the gaps left per scenario.
+- **Hampel filter per time of day:** `Hampel(by_time_of_day=True)` and
+  `flag_outliers_hampel_test(by_time_of_day=True)` judge each value against the records of the same
+  time of day (`time_of_day_slots` steps on either side, over the days of `window_length`), so the
+  daily cycle no longer widens the band. An early-morning flux is compared with other early
+  mornings, not with the noon values. Values only (`use_differencing=False`); windows with fewer
+  than `min_records` values are not tested.
+- **Night threshold of the outlier tests:** `nighttime_threshold` on `StepwiseOutlierDetection` and
+  on the outlier tests that treat day and night separately (`Hampel`, `LocalSD`, `zScore`, `TrimLow`,
+  `AbsoluteLimits`, `LocalOutlierFactor`, `NegativeNighttime`) sets the potential radiation below
+  which a record is nighttime. It was fixed at 20 W m-2. The flux chain passes its own
+  `nighttime_threshold` to Level 3.2.
+- **One feature set for all USTAR scenarios:** with `reduce_features=True`, `run_level41_rf` and
+  `run_level41_xgb` fit every USTAR scenario on the features any scenario selected
+  (`shared_features=True`, the default). Before, each scenario kept its own selection, so the spread
+  between the scenarios also reflected the selection. `use_features()` on the long-term gap-filling
+  classes sets the features by hand.
 
 ### Changed
+
+- **Heatmap colours:** flux heatmaps use the diive default `RdYlBu_r` (blue for low values, red
+  for high ones) instead of `RdBu_r`: the gap-filled and quality heatmaps of the flux chain, the QCF
+  heatmaps and the default of `TreeRingPlot`. Categorical heatmaps such as the quality flags keep
+  their own colours.
+- **Machine-learning gap-filling refits on all records (changes results):** the gaps are now filled
+  by a model fitted on all complete records, training and test. Before, the model trained on the
+  training split (75 % by default) filled them. With early stopping the final model gets the number
+  of trees early stopping chose. Applies to `RandomForestTS`, `XGBoostTS`, the long-term classes and
+  the flux chain's Level 4.1.
+- **Early stopping no longer sees the test set (changes results):** XGBoost early stopping watched
+  the held-out test set, which chose the number of trees on it and made the test scores optimistic.
+  It now watches 10 % of the training data.
+- **Hampel window spans a fixed time (changes results):** on a time index with a regular step the
+  window is `window_length` records long in time, so a gap shortens it. Before, missing records did
+  not count and the window reached across long gaps into data weeks away. A single pass over
+  complete data gives the same flags as before. With `repeat=True`, records removed in earlier
+  passes no longer widen the window either, so later passes can flag a few more.
 
 - **MDS in ONEFlux mode removes long gaps (changes results):** with `mode='oneflux'`, gap-filled
   values in long gaps are set missing again, as in the FLUXNET product of ONEFlux since 2025. This
@@ -147,6 +195,14 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 - **Daytime partitioning (REddyProc):** no longer stops with a division by zero when the E0
   smoothing starts on a flat likelihood, which happened on short records. It continues as
   REddyProc does.
+- **Negative nighttime test:** `verbose=True` now prints the removed and expected counts. The
+  expected noise removals are labelled as Gaussian expectations, not bounds, and `expected_noise`
+  adds `bias`, how much the removals raise a sum once their gaps are filled.
+- **Hampel example:** the global example counts the outliers of all iterations (`overall_flag`);
+  `flag` holds only the last iteration, which is 0 with `repeat=True`.
+- **Nighttime uncertainty:** where one of the two uncertainties is missing, `MAX` takes the other
+  instead of leaving the record untested, and the table reports records without an uncertainty.
+  PAS20 is described as a generous estimate of the random error.
 
 ## [0.92.0] - 2026-10-21
 
