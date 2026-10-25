@@ -188,3 +188,35 @@ class TestResampling(unittest.TestCase):
         self.assertEqual(aggs.loc[1].sum().sum(), 1235.2002345850228)
         self.assertEqual(aggs.loc[6].sum().sum(), 4928.0285111555195)
         self.assertEqual(aggs.loc[12].sum().sum(), 1043.884056104728)
+
+    def test_diel_cycle_matches_grouping_by_time_objects(self):
+        # diel_cycle groups by integer microseconds of the day instead of
+        # index.time; the result must stay identical to the time-object grouping.
+        def reference(series, each_month):
+            keys = [series.index.month, series.index.time] if each_month else [series.index.time]
+            aggs = series.groupby(keys).agg(['count', 'mean', 'std'])
+            aggs['mean+sd'] = aggs['mean'] + aggs['std']
+            aggs['mean-sd'] = aggs['mean'] - aggs['std']
+            aggs[aggs['count'] < 1] = np.nan
+            if not each_month:
+                aggs = pd.concat({'ALL_MONTHS': aggs}, names=[series.index.name])
+            return aggs
+
+        rng = np.random.default_rng(3)
+        year = ed.load_exampledata_parquet()['Tair_f'].loc['2018']
+        tz = year.tz_localize('UTC').tz_convert('Europe/Zurich')  # DST shifts wall time
+        coarse = year.copy()
+        coarse.index = year.index.as_unit('s')
+        # Before 1970, irregular, and two records one nanosecond-step apart in
+        # the same microsecond (datetime.time drops nanoseconds).
+        ticks = pd.date_range('1969-12-20', periods=400, freq='37min').asi8
+        old = pd.Series(rng.normal(size=800),
+                        index=pd.DatetimeIndex(np.repeat(ticks, 2) + np.tile([0, 999], 400),
+                                               name='T'))
+        for series in (year, tz, coarse, old):
+            for each_month in (True, False):
+                got = diel_cycle(series=series, each_month=each_month)
+                pd.testing.assert_frame_equal(got, reference(series, each_month),
+                                              check_exact=True)
+                self.assertTrue(all(isinstance(t, type(series.index[0].time()))
+                                    for t in got.index.get_level_values(-1)))

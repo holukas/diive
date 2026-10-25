@@ -246,6 +246,39 @@ def resample_series_to_30MIN(series: Series,
         mincounts_perc=mincounts_perc, output_timestamp_shows=output_timestamp_shows)
 
 
+def _time_of_day_keys(index):
+    """Integer group keys for the wall-clock time of day of each timestamp.
+
+    Grouping by ``index.time`` builds one ``datetime.time`` object per record,
+    which took most of `diel_cycle`'s run time on long records. The keys here
+    are the microseconds since midnight (``datetime.time`` keeps microseconds
+    and drops nanoseconds), so they sort and group exactly as the time objects
+    do. The time objects are built for the distinct keys only.
+
+    Returns:
+        ``(keys, distinct, labels)``: one key per record, the sorted distinct
+        keys, and the ``datetime.time`` of each distinct key. ``None`` if the
+        index is not a ``DatetimeIndex`` or has missing timestamps; the caller
+        then groups by ``index.time`` as before.
+    """
+    if not isinstance(index, pd.DatetimeIndex) or index.hasnans:
+        return None
+    wall = index.tz_localize(None) if index.tz is not None else index
+    per_second = {'s': 1, 'ms': 10 ** 3, 'us': 10 ** 6, 'ns': 10 ** 9}.get(wall.unit)
+    if per_second is None:
+        return None
+    ticks = wall.asi8
+    # Floor division and modulo, as the calendar fields of a timestamp before
+    # 1970 are computed.
+    if per_second >= 10 ** 6:
+        keys = (ticks // (per_second // 10 ** 6)) % (86_400 * 10 ** 6)
+    else:
+        keys = (ticks % (86_400 * per_second)) * (10 ** 6 // per_second)
+    distinct, first = np.unique(keys, return_index=True)
+    labels = np.asarray(index[first].time, dtype=object)
+    return keys, distinct, labels
+
+
 def diel_cycle(series: Series,
                mincounts: int = 1,
                mean: bool = True,
@@ -276,12 +309,21 @@ def diel_cycle(series: Series,
     if minmax:
         aggstr.extend(['min', 'max'])
 
+    tod = _time_of_day_keys(series.index)
+    times = series.index.time if tod is None else tod[0]
     if each_month:
-        aggs = series.groupby([series.index.month, series.index.time]).agg(aggstr)
+        aggs = series.groupby([series.index.month, times]).agg(aggstr)
         # aggs = aggs.unstack()
         # aggs = aggs.transpose()
     else:
-        aggs = series.groupby([series.index.time]).agg(aggstr)
+        aggs = series.groupby([times]).agg(aggstr)
+    if tod is not None:
+        # The sorted keys become the time objects they stand for, giving the
+        # same index as grouping by `index.time`.
+        _, distinct, labels = tod
+        found = aggs.index.levels[1] if each_month else aggs.index
+        found = pd.Index(labels[np.searchsorted(distinct, found)], dtype=object)
+        aggs.index = (aggs.index.set_levels(found, level=1) if each_month else found)
 
     if mean and std:
         aggs['mean+sd'] = aggs['mean'] + aggs['std']

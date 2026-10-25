@@ -17,7 +17,8 @@ import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 from matplotlib.artist import Artist
-from matplotlib.ticker import Locator, MaxNLocator, ScalarFormatter
+from matplotlib.legend import Legend
+from matplotlib.ticker import AutoLocator, Locator, MaxNLocator, ScalarFormatter
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -138,6 +139,8 @@ _TS_COLUMNS_PER_PIXEL = 2
 # Quiet time after the last pan/zoom step before the diel cycle and histogram
 # are recomputed for the visible window.
 _ZOOM_SETTLE_MS = 150
+# Passes over the posted layout requests before a render (see _render_figure).
+_LAYOUT_SETTLE_PASSES = 6
 # The diel cycle now draws one auto-coloured line per month (no single colour).
 _ZERO_COLOR = "#90A4AE"   # blue-grey 300 — zero reference line
 
@@ -156,16 +159,82 @@ _HOUR_STEPS = (3, 6, 12)
 _HOUR_TICK_EMS = 2.2
 
 
-class _FittedDateLocator(mdates.AutoDateLocator):
+class _TicksPerView:
+    """Locator mixin that computes the ticks once per view.
+
+    One draw of the Overview asks each locator for its ticks dozens of times:
+    per panel, again for the minor ticks, for the tick-label boxes of every
+    linked panel, for the spines, and once more per layout pass. The ticks
+    change only with what `_view_key` returns, so they are computed once for
+    each key."""
+
+    _memo = (None, None)
+
+    def _view_key(self) -> tuple:
+        return tuple(self.axis.get_view_interval())
+
+    def __call__(self):
+        key = self._view_key()
+        if self._memo[0] != key:
+            self._memo = (key, np.asarray(super().__call__()))
+        return self._memo[1].copy()
+
+
+class _DateTicksPerView(_TicksPerView, mdates.AutoDateLocator):
+    """`AutoDateLocator` with its ticks computed once per view."""
+
+
+class _SpacedTicksPerView(_TicksPerView):
+    """`_TicksPerView` for a `MaxNLocator`: an 'auto' tick count follows the
+    axis length and tick-label size, so the tick space is part of the key."""
+
+    def _view_key(self) -> tuple:
+        return super()._view_key() + (self.axis.get_tick_space(),)
+
+
+class _AutoTicksPerView(_SpacedTicksPerView, AutoLocator):
+    """`AutoLocator` with its ticks computed once per view and tick space."""
+
+
+class _MaxNTicksPerView(_SpacedTicksPerView, MaxNLocator):
+    """`MaxNLocator` with its ticks computed once per view and tick space."""
+
+
+_PER_VIEW = {mdates.AutoDateLocator: _DateTicksPerView,
+             AutoLocator: _AutoTicksPerView,
+             MaxNLocator: _MaxNTicksPerView}
+
+
+def _ticks_per_view(ax) -> None:
+    """Give the panel's stock major locators a per-view memo (`_TicksPerView`).
+
+    Only the exact stock classes are switched; their settings stay as they
+    are, so the ticks are the same."""
+    for axis in (ax.xaxis, ax.yaxis):
+        locator = axis.get_major_locator()
+        memo = _PER_VIEW.get(type(locator))
+        if memo is not None:
+            locator.__class__ = memo
+
+
+class _FittedDateLocator(_TicksPerView, mdates.AutoDateLocator):
     """`AutoDateLocator` whose tick cap also follows the narrowest linked panel.
 
     The linked datetime panels share one locator, so the cap comes from the
     narrowest axes that shares this x-axis. Evaluated at draw time, so it
     follows resizes."""
 
+    def _view_key(self) -> tuple:
+        ax = self.axis.axes
+        return super()._view_key() + (self._narrowest(ax), ax.figure.dpi)
+
+    @staticmethod
+    def _narrowest(ax) -> float:
+        return min(a.bbox.width for a in ax.get_shared_x_axes().get_siblings(ax))
+
     def get_locator(self, dmin, dmax):
         ax = self.axis.axes
-        width = min(a.bbox.width for a in ax.get_shared_x_axes().get_siblings(ax))
+        width = self._narrowest(ax)
         room = 1 + width / (_DATE_TICK_EMS * _FONT_SIZE * ax.figure.dpi / 72)
         # At least 3: with 2, a one-year range finds no month interval that
         # fits and AutoDateLocator warns and falls back to its own choice.
@@ -251,6 +320,33 @@ class _LegendFitGuard(Artist):
             shown = shown or fits
 
 
+class _PlacedLegend(Legend):
+    """A ``loc='best'`` legend that searches again only when its inputs change.
+
+    matplotlib searches for the best place twice per draw, and a pan step
+    repaints the diel cycle and the histogram although they do not change
+    until the view settles. The search looks only at the legend size, the
+    panel box, the dpi and the display geometry of the panel's artists
+    (``_auto_legend_data``), so the result is reused while all of these stay
+    the same. Gathering that geometry is cheap next to the search itself.
+    """
+
+    _best = (None, None)
+
+    def _find_best_position(self, width, height, renderer):
+        bboxes, lines, offsets = self._auto_legend_data(renderer)
+        key = (width, height, renderer.points_to_pixels(1.0),
+               self.get_bbox_to_anchor().bounds,
+               tuple(b.bounds for b in bboxes),
+               tuple((p.vertices.tobytes(),
+                      None if p.codes is None else p.codes.tobytes())
+                     for p in lines),
+               np.asarray(offsets, dtype=float).tobytes())
+        if self._best[0] != key:
+            self._best = (key, super()._find_best_position(width, height, renderer))
+        return self._best[1]
+
+
 def _compact_legend(ax, ncol: int) -> None:
     """Rebuild the panel's legend in a compact form that stays inside the panel.
 
@@ -280,6 +376,8 @@ def _compact_legend(ax, ncol: int) -> None:
         handle.set_visible(False)
     for legend in (full, names):
         legend.set_in_layout(False)
+        if type(legend) is Legend:
+            legend.__class__ = _PlacedLegend
     ax.add_artist(_LegendFitGuard([full, names]))
 
 
@@ -386,6 +484,12 @@ def _chip_qss(bg: str, fg: str) -> str:
             f" padding: 2px 9px; font-size: 11px; font-weight: 600; }}")
 
 
+def _set_qss(widget: QWidget, qss: str) -> None:
+    """Set a stylesheet only if it differs: each set re-polishes the widget."""
+    if widget.styleSheet() != qss:
+        widget.setStyleSheet(qss)
+
+
 def _chip(text: str, bg: str, fg: str) -> QLabel:
     """A small rounded pill (origin badge / tag chip)."""
     lbl = QLabel(text)
@@ -416,24 +520,6 @@ def _history_notes_html(meta) -> str:
         rows.append("<span style='color:#90A4AE'>history:</span>"
                     f"<ol style='margin:2px 0 0 -22px'>{steps}</ol>")
     return "<br>".join(rows)
-
-
-def _clear_layout(layout) -> None:
-    """Recursively remove and delete every item in a layout.
-
-    Widgets are unparented immediately (``setParent(None)``) before
-    ``deleteLater``: ``deleteLater`` alone keeps them as children until a later
-    event-loop pass, so the old content lingers/flickers under the new content.
-    """
-    while layout.count():
-        item = layout.takeAt(0)
-        w = item.widget()
-        if w is not None:
-            w.setParent(None)
-            w.deleteLater()
-        elif item.layout() is not None:
-            _clear_layout(item.layout())
-            item.layout().deleteLater()
 
 
 class _MetricSlot(QWidget):
@@ -535,8 +621,8 @@ class _HeroBand(QFrame):
 
     Built **once** with persistent widgets — `set_variable` only updates their
     text/visibility, never tears them down — so switching variables can't flicker.
-    The only per-call rebuild is the tag chips (variable count), confined to a
-    small sub-container. The stat slots sit in a wrapping `FlowLayout` so a narrow
+    The tag chips (one per user tag) are reused too, and new ones are added
+    only when a variable has more tags. The stat slots sit in a wrapping `FlowLayout` so a narrow
     window (e.g. a high-DPI laptop) stacks them into extra rows instead of forcing
     the band — and the figure beside it — wider than the screen (which clipped the
     plots on the right). Vertical policy is therefore height-for-width Minimum: the
@@ -597,11 +683,12 @@ class _HeroBand(QFrame):
         idrow.addWidget(self._origin)
 
         # Tag chips vary in number, so they live in their own small container
-        # that's the only thing rebuilt per selection.
+        # (chips are reused across selections, see set_variable).
         self._tags_box = QWidget()
         self._tags_lay = QHBoxLayout(self._tags_box)
         self._tags_lay.setContentsMargins(0, 0, 0, 0)
         self._tags_lay.setSpacing(6)
+        self._tag_chips: list[QLabel] = []
         idrow.addWidget(self._tags_box)
 
         self._hist = QLabel("history & notes")
@@ -640,19 +727,26 @@ class _HeroBand(QFrame):
         if origin:
             bg, fg = _ORIGIN_COLORS.get(origin, ("#ECEFF1", "#37474F"))
             self._origin.setText(origin.upper())
-            self._origin.setStyleSheet(_chip_qss(bg, fg))
+            _set_qss(self._origin, _chip_qss(bg, fg))
             self._origin.show()
         else:
             self._origin.hide()
 
-        # Tags: rebuild only the small tag container (updates suppressed on it
-        # alone so the rest of the band is untouched).
+        # Tag chips are reused: only their text and colours change, and a
+        # chip is created only when a variable has more tags than any before.
+        tags = sorted(meta.user_tags()) if meta is not None else []
         self._tags_box.setUpdatesEnabled(False)
-        _clear_layout(self._tags_lay)
-        if meta is not None:
-            for tag in sorted(meta.user_tags()):
-                cbg, cfg = theme.tag_color(tag)
-                self._tags_lay.addWidget(_chip(tag, cbg, cfg))
+        for i, tag in enumerate(tags):
+            if i == len(self._tag_chips):
+                chip = QLabel()
+                self._tags_lay.addWidget(chip)
+                self._tag_chips.append(chip)
+            chip = self._tag_chips[i]
+            chip.setText(tag)
+            _set_qss(chip, _chip_qss(*theme.tag_color(tag)))
+            chip.show()
+        for chip in self._tag_chips[len(tags):]:
+            chip.hide()
         self._tags_lay.activate()
         self._tags_box.setUpdatesEnabled(True)
 
@@ -865,6 +959,10 @@ class OverviewTab(DiiveTab):
         self._zoom_debounce.cancel()  # its axes are about to be replaced
         self._ts_line = self._ts_xy = None
         fig = self.canvas.fig
+        # Figure.clear() below clears every old panel before removing it,
+        # about 50 ms for the eight axes. Removed axes need no clearing.
+        for ax in list(fig.axes):
+            fig.delaxes(ax)
         # Clear + re-enable constrained layout (canvas.draw() freezes it after,
         # so zoom/pan don't reflow the panels).
         self.canvas.reset_layout()
@@ -872,8 +970,12 @@ class OverviewTab(DiiveTab):
         # differently per variable). Settle the canvas size now, while the
         # figure is empty, so the layout is solved once, at the final size.
         # Otherwise the resize arrives after the draw and solves the full
-        # figure again, plus a second full draw.
-        QApplication.sendPostedEvents(None, QEvent.Type.LayoutRequest)
+        # figure again, plus a second full draw. A new value text reaches the
+        # canvas size one widget level per pass (value label, metric slot,
+        # stats flow, band, right column), so one pass is not enough, e.g.
+        # for the first render after startup.
+        for _ in range(_LAYOUT_SETTLE_PASSES):
+            QApplication.sendPostedEvents(None, QEvent.Type.LayoutRequest)
         # Pack the panels tighter (less whitespace between them, esp. the three
         # lower panels) while keeping room for tick labels.
         engine = fig.get_layout_engine()
@@ -906,6 +1008,7 @@ class OverviewTab(DiiveTab):
         # band above the figure, so no in-figure name badge is drawn.
         for ax in fig.axes:
             self._panel_fonts(ax)
+            _ticks_per_view(ax)
 
         # Event overlays: vertical line / shaded span on the datetime panels and a
         # horizontal line / band on the heatmap (date is on its y-axis). Drawn
@@ -1132,6 +1235,7 @@ class OverviewTab(DiiveTab):
                 self._draw_panel(ax, sub, ptype)
                 self._style_panel(ax, ptype)
                 self._panel_fonts(ax)
+                _ticks_per_view(ax)
         finally:
             self._syncing_zoom = False
         self.canvas.draw_idle()
