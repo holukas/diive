@@ -51,6 +51,8 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   into GPP and RECO, with the option to add the GPP and RECO REF.
 - **GUI, long gaps:** the MDS tab and Level 4.1 of the flux chain tab have a "Fill long gaps"
   option.
+- **Annual sums in the flux chain:** `report_annual_sums` reports the annual sum of every gap-filled
+  flux per method and USTAR scenario, with the share of measured records and incomplete years marked.
 
 ### Changed
 
@@ -86,6 +88,23 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   numba below 0.63, the last versions with wheels for them.
 - **Generated scripts:** constant thresholds labelled by percentile (`CUT_16`, `CUT_50`, ...) are
   written as `run_level33_ustar_detection(thresholds=...)`, which gives the same flags.
+- **Flux chain reports:** the Level 4.1 reports print one compact table each. The score reports show
+  R², RMSE, MAE, MedAE and the maximum error for all scenarios in one table, the train/test report
+  shows record counts and the model settings instead of the training data, and the feature
+  importance report shows the top 10 features. The CSV files keep every value.
+- **Exported columns:** `merged_df()` summarises the added columns per level. The full list prints
+  at debug verbosity.
+- **Outlier plots:** the outlier tests draw one figure each, with the time series before and after
+  the test and its distribution beside it on the same y-axis, on a log count axis with a z-score
+  scale. Tests run by day and night colour the two periods and show each one after the test.
+  Rejected records are red, and the title and a subtitle give the counts.
+- **Quality flag heatmaps:** `showplot_qcf_heatmaps` centres the colour scale of the flux on zero,
+  names the three QCF codes and gives their counts in the subtitle.
+- **Flux chain result plots:** `plot_gapfilled_heatmaps` adds a panel with only the filled records
+  when one method has run and uses a colour scale centred on zero. `plot_cumulative_comparison`
+  and `plot_gapfilled_cumulative` label each line with its total, and the per-year view draws the
+  scenarios side by side in one figure. `plot_feature_ranks_per_year` draws one panel per scenario,
+  coloured by the driver each feature comes from: bars for one year, ranks for several.
 
 ### Deprecated
 
@@ -96,6 +115,12 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 
 ### Fixed
 
+- **Feature rank plot:** `showplot_feature_ranks_per_year` no longer warns about a marker defined
+  twice.
+- **Hampel plot:** with `separate_day_night=True` the Hampel filter draws one figure instead of two
+  that repeated the same panels.
+- **Z-score axis of histograms:** a wide z-score range no longer prints overlapping labels. The axis
+  labels at most about nine z-scores, at an even step.
 - **Labels of percentiles with decimals:** `run_level33_ustar_detection(percentiles=(2.5, 50, 97.5))`
   labelled 2.5 as `CUT_02`. Whole percentiles keep their labels (`CUT_50`), and percentiles with decimals get four digits in hundredths (`CUT_0250`, `CUT_9750`).
 - **Plots with infinite or missing values:** `Cumulative`, `ScatterXY`, `ShiftedDistributionPlot`,
