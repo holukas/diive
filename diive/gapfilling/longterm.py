@@ -65,6 +65,7 @@ class LongTermGapFillingBase:
         """
         self.regressor = regressor
         self.input_df = input_df
+        self._input_df_all = input_df  # all features, for use_features() after a reduction
         self.target_col = target_col
         self.verbose = verbose
         self.test_size = test_size
@@ -271,13 +272,21 @@ class LongTermGapFillingBase:
 
         info(f"Feature reduction complete.  Accepted across all years: "
              f"{self.features_reduced_across_years}", verbose=self.verbose)
+        self.use_features(self.features_reduced_across_years)
 
-        # Keep features that were selected
-        keepcols = self.features_reduced_across_years.copy()
-        keepcols.append(self.target_col)
-        self.input_df = self.input_df[keepcols].copy()
+    def use_features(self, features: list[str]):
+        """Keep only *features* (and the target) and set up the yearly models again.
 
-        # Re-setup yearpools and models with the updated features
+        Used after :meth:`reduce_features_across_years`, and by callers that fit
+        several targets on one shared feature set, such as the USTAR scenarios of
+        the flux chain.
+        """
+        # From all input features: a reduction may have dropped some of them already.
+        missing = [f for f in features if f not in self._input_df_all.columns]
+        if missing:
+            raise KeyError(f"Feature(s) not in the input data: {missing}")
+        self._features_reduced_across_years = sorted(features)
+        self.input_df = self._input_df_all[self._features_reduced_across_years + [self.target_col]].copy()
         self.create_yearpools()
         self.initialize_yearly_models()
 

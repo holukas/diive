@@ -242,6 +242,7 @@ class MlRegressorGapFillingBase:
         self._scores_traintest = dict()
         self._accepted_features = []
         self._rejected_features = []
+        self._n_trees = None  # set by trainmodel() when early stopping is used
 
         self.n_timeseriessplits = None
 
@@ -409,13 +410,14 @@ class MlRegressorGapFillingBase:
         """Fit model.
 
         For XGBoost, ``early_stopping_rounds`` monitors the LAST ``eval_set``
-        entry, so that entry must be a genuine hold-out. The feature-reduction
-        and fallback paths call this with the training data itself as the eval
-        set (``X_test is X_train``); left as-is, early stopping would only ever
-        see training loss — which keeps falling as trees are added — so it would
-        never trigger and the model would overfit. In that case, carve out a
-        small validation split so early stopping watches unseen data. When early
-        stopping is not configured, behaviour is unchanged.
+        entry. That entry is always a validation split of 10 % carved from the
+        training data, never the test set: early stopping on the test set
+        chooses the number of trees on it, and the test scores are then no
+        longer out-of-sample. The feature-reduction and fallback paths pass the
+        training data itself as the test set (``X_test is X_train``), where the
+        training loss keeps falling as trees are added, so early stopping would
+        never trigger. When early stopping is not configured, the test set is
+        only reported on.
         """
         if isinstance(model, RandomForestRegressor):
             model.fit(X=X_train, y=y_train)
@@ -424,7 +426,7 @@ class MlRegressorGapFillingBase:
             # so no diive console gate can see it. eval_set stays: early stopping
             # monitors it. Only the reporting is silenced.
             eval_verbose = self.verbose >= VERBOSE_DEBUG
-            if getattr(model, 'early_stopping_rounds', None) and X_test is X_train:
+            if getattr(model, 'early_stopping_rounds', None):
                 X_tr, X_val, y_tr, y_val = train_test_split(
                     X_train, y_train, test_size=0.1,
                     random_state=self._random_state, shuffle=True)
@@ -705,6 +707,9 @@ class MlRegressorGapFillingBase:
                f"({self.train_df.index[0]} to {self.train_df.index[-1]}) ...",
                verbose=self.verbose)
         self._model = self._fitmodel(model=self._model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test)
+        # The number of trees early stopping chose; the final model reuses it (see _final_model).
+        best = getattr(self._model, 'best_iteration', None) if self.kwargs.get('early_stopping_rounds') else None
+        self._n_trees = int(best) + 1 if best is not None else None
 
         # Predict targets in test data
         detail(f"Predicting {self.target_col} on unseen test data ...", verbose=self.verbose)
@@ -800,10 +805,13 @@ class MlRegressorGapFillingBase:
                  showplot_importance: bool = True,
                  progress_callback=None):
         """
-        Gap-fill data with previously built model
+        Gap-fill data with a model fitted on all complete records.
 
-        No new model is built here, instead the last model built in
-        the preceding step .trainmodel() is used.
+        trainmodel() fits on the training split only, so that its test scores
+        are out-of-sample. The gaps are filled by a new model with the same
+        settings, fitted on every complete record, training and test. With
+        early stopping it gets the number of trees early stopping chose in
+        trainmodel(), because no unseen records are left to stop on.
 
         y = target
         X = features
@@ -818,11 +826,26 @@ class MlRegressorGapFillingBase:
                 The results are the same either way.
         """
         self._section(f"GAP-FILLING — {self.target_col}")
+        self._model = self._final_model()
         self._fillgaps_fullmodel(showplot_scores, showplot_importance,
                                  progress_callback=progress_callback)
         self._fillgaps_fallback()
         self._fillgaps_combinepredictions()
         self._log_gapfill_summary()
+
+    def _final_model(self):
+        """The gap-filling model: same settings, fitted on all complete records."""
+        df = self.model_df.dropna()
+        X = df.drop(columns=self.target_col).to_numpy()
+        y = df[self.target_col].to_numpy()
+        params = dict(self.kwargs)
+        n_trees = self._n_trees
+        if n_trees is not None:
+            params.update(n_estimators=n_trees, early_stopping_rounds=None)
+        info(f"Final model fitted on all {len(df):,} complete records"
+             f"{f' with {n_trees} trees (chosen by early stopping)' if n_trees else ''}.",
+             verbose=self.verbose)
+        return self._fitmodel(model=self.regressor(**params), X_train=X, y_train=y, X_test=X, y_test=y)
 
     def reduce_features(self, shap_threshold_factor: float = 0.5):
         """Reduce number of features using SHAP importance
@@ -1119,7 +1142,7 @@ class MlRegressorGapFillingBase:
             plot_observed_predicted(predictions=pred_y,
                                     targets=y,
                                     scores=self.scores_,
-                                    infotxt=f"trained on training set, tested on FULL set",
+                                    infotxt=f"final model, fitted and tested on all records",
                                     random_state=self._random_state)
 
             # print(f">>> Plotting residuals and prediction error based on all data ...")

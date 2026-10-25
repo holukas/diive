@@ -623,15 +623,16 @@ class TestGapFilling(unittest.TestCase):
         self.assertTrue((flag[daytime_gaps] == 1).all())
         self.assertTrue((flag[gaps & (pot < 0.001)] == 3).all())
 
-        # daytime_model_ exposes the model that did the filling, so a caller can
-        # validate against data it never saw. Reconstructing the held-out score from
-        # its test set must reproduce scores_traintest — that is what proves the
-        # exposed test set is the one the model was actually scored on.
+        # daytime_model_ exposes the gap-filling model, so a caller can validate
+        # against data it never saw. The gaps are filled by a refit on all records,
+        # so the held-out score is reproduced with the model trained on the
+        # training split, kept in traintest_details_ — that proves the exposed test
+        # set is the one the model was actually scored on.
         dtm = g.daytime_model_
         self.assertIsNotNone(dtm)
         test_df = dtm.traintest_details_['test_df']
         y = test_df[dtm.target_col].values
-        p = dtm.model_.predict(test_df.drop(columns=dtm.target_col))
+        p = dtm.traintest_details_['model'].predict(test_df.drop(columns=dtm.target_col))
         rmse = float(np.sqrt(((p - y) ** 2).mean()))
         self.assertAlmostEqual(rmse, g.results.scores_traintest['rmse'], places=4)
 
@@ -1172,6 +1173,57 @@ class TestGapFilling(unittest.TestCase):
         self.assertEqual(gfdf['NEE_CUT_REF_orig_gfXG'].sum(), gapfilled.sum())
         self.assertGreater(fi['SHAP_IMPORTANCE']['Rg_f'], 2.5)
         self.assertLess(fi['SHAP_IMPORTANCE']['Rg_f'], 3.5)
+
+    def test_xgboost_early_stopping_ignores_the_test_set_and_refits_on_all_records(self):
+        """Early stopping watches a split of the training data, never the test set, and the
+        gaps are filled by a model fitted on all complete records with the trees it chose."""
+        import pandas as pd
+        from xgboost import XGBRegressor
+        rng = np.random.default_rng(0)
+        index = pd.date_range('2022-01-01', periods=2000, freq='30min')
+        df = pd.DataFrame(rng.normal(size=(2000, 2)), index=index, columns=['x1', 'x2'])
+        df['y'] = 2 * df['x1'] - df['x2'] + rng.normal(scale=0.3, size=2000)
+        df.loc[df.index[::7], 'y'] = np.nan
+        kwargs = dict(target_col='y', verbose=0, n_estimators=300, early_stopping_rounds=10,
+                      learning_rate=0.3, max_depth=3, random_state=42)
+        a = XGBoostTS(input_df=df, **kwargs)
+        b = XGBoostTS(input_df=df, **kwargs)
+        b.test_df['y'] = rng.normal(scale=100, size=len(b.test_df))  # test targets are noise
+        for m in (a, b):
+            m.trainmodel(showplot_scores=False, showplot_importance=False)
+        self.assertIsNotNone(a._n_trees)
+        self.assertLess(a._n_trees, 300)
+        self.assertEqual(a._n_trees, b._n_trees)
+
+        a.fillgaps(showplot_scores=False, showplot_importance=False)
+        self.assertIsNot(a.model_, a.traintest_details_['model'])
+        self.assertEqual(a.model_.get_booster().num_boosted_rounds(), a._n_trees)
+        complete = df.dropna()
+        X = complete[['x1', 'x2']].to_numpy()
+        ref = XGBRegressor(n_estimators=a._n_trees, learning_rate=0.3, max_depth=3, random_state=42)
+        ref.fit(X, complete['y'].to_numpy())
+        np.testing.assert_allclose(a.model_.predict(X), ref.predict(X), rtol=1e-5)
+
+    def test_longterm_use_features_after_reduction(self):
+        """use_features() can bring back features that the reduction dropped."""
+        import pandas as pd
+        from diive.gapfilling.longterm import LongTermGapFillingXGBoostTS
+        rng = np.random.default_rng(3)
+        index = pd.date_range('2021-01-01 00:15', '2022-12-31 23:45', freq='30min')
+        df = pd.DataFrame(rng.normal(size=(len(index), 3)), index=index, columns=['x1', 'x2', 'noise'])
+        df['y'] = 3 * df['x1'] + rng.normal(scale=0.2, size=len(index))
+        df.loc[df.index[::5], 'y'] = np.nan
+        gf = LongTermGapFillingXGBoostTS(input_df=df, target_col='y', verbose=0, n_estimators=20,
+                                         max_depth=3, random_state=42)
+        gf.create_yearpools()
+        gf.initialize_yearly_models()
+        gf.reduce_features_across_years()
+        gf.use_features(['x1'])  # as a reduction that dropped x2 and noise
+        self.assertEqual(sorted(gf.input_df.columns), ['x1', 'y'])
+        gf.use_features(['x1', 'x2', 'noise'])
+        self.assertEqual(sorted(gf.input_df.columns), ['noise', 'x1', 'x2', 'y'])
+        gf.fillgaps()
+        self.assertEqual(int(gf.gapfilled_.isna().sum()), 0)
 
     def test_gapfilling_stl_features_randomforest(self):
         """Test STL decomposition features with RandomForest gap-filling"""

@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Callable
 
 import pandas as pd
 
-from diive.core.utils.console import detail, rule, warn
+from diive.core.utils.console import detail, info, rule, warn
 from diive.flux.postprocessingchain.container import FluxLevelData
 from diive.flux.postprocessingchain.levels._rerun import (
     clear_ustar_reference,
@@ -285,6 +285,7 @@ def _run_level41_ml(
         model_kwargs: dict,
         results_attr: str,
         scenarios=None,
+        shared_features: bool = True,
 ) -> FluxLevelData:
     """Internal: shared workflow for Random Forest and XGBoost L4.1 gap-filling."""
     # Validate feature columns exist in full_df before doing any work.
@@ -315,6 +316,7 @@ def _run_level41_ml(
     # so run it once and reuse the result across all scenarios.
     engineered = engineer.fit_transform(data.full_df[features].copy())
 
+    instances = {}
     for ustar_scen, ustar_flux in filteredseries_l33.items():
         assert_aligned_index(engineered, fpc_df[ustar_flux.name],
                              context=f"_run_level41_ml[{ustar_scen!r}] scen_df build")
@@ -330,6 +332,21 @@ def _run_level41_ml(
         instance.initialize_yearly_models()
         if reduce_features:
             instance.reduce_features_across_years()
+        instances[ustar_scen] = instance
+
+    # One feature set for all scenarios: the features any scenario selected.
+    # With a set of its own per scenario, the spread between the scenarios
+    # would mix the effect of the USTAR threshold with that of the selection.
+    if reduce_features and shared_features and len(instances) > 1:
+        shared = sorted(set().union(*(i.features_reduced_across_years for i in instances.values())))
+        counts = ", ".join(f"{s} {len(i.features_reduced_across_years)}" for s, i in instances.items())
+        info(f"Features selected per scenario: {counts}. All scenarios use the "
+             f"{len(shared)} features any of them selected.", verbose=verbose)
+        for instance in instances.values():
+            instance.use_features(shared)
+
+    for ustar_scen, ustar_flux in filteredseries_l33.items():
+        instance = instances[ustar_scen]
         instance.fillgaps()
 
         flag_col = _extract_gapfilling_flag_col(instance.gapfilling_df_)
@@ -371,6 +388,7 @@ def run_level41_rf(
         features: list[str],
         engineer: 'FeatureEngineer',
         reduce_features: bool = False,
+        shared_features: bool = True,
         scenarios: list[str] | None = None,
         verbose: int = 0,
         **rf_kwargs,
@@ -414,6 +432,11 @@ def run_level41_rf(
                 )
 
         reduce_features: Apply SHAP-based feature selection across all years.
+        shared_features: With ``reduce_features``, fit every USTAR scenario on
+            the same features: those selected for any scenario (default). With
+            False each scenario keeps its own selection, and the spread between
+            the scenarios then also reflects the selection, not only the USTAR
+            threshold.
         scenarios: USTAR scenario labels to gap-fill. None (default) takes all
             Level 3.3 scenarios except the 40 REF versions of
             ``reference=True`` (see ``select_scenarios``), so with REF on it
@@ -439,6 +462,7 @@ def run_level41_rf(
         model_kwargs=rf_kwargs,
         results_attr='level41_rf',
         scenarios=scenarios,
+        shared_features=shared_features,
     )
 
 
@@ -448,6 +472,7 @@ def run_level41_xgb(
         features: list[str],
         engineer: 'FeatureEngineer',
         reduce_features: bool = False,
+        shared_features: bool = True,
         scenarios: list[str] | None = None,
         verbose: int = 0,
         **xgb_kwargs,
@@ -473,6 +498,7 @@ def run_level41_xgb(
             irrelevant for L4.1 feature engineering (see ``run_level41_rf``
             for a usage example).
         reduce_features: Apply SHAP-based feature selection across all years.
+        shared_features: As in :func:`run_level41_rf`.
         scenarios: As in :func:`run_level41_rf`.
         verbose: Verbosity level (0=silent, 1+=progress).
         **xgb_kwargs: ``XGBRegressor`` hyperparameters (``n_estimators``,
@@ -495,6 +521,7 @@ def run_level41_xgb(
         model_kwargs=xgb_kwargs,
         results_attr='level41_xgb',
         scenarios=scenarios,
+        shared_features=shared_features,
     )
 
 
