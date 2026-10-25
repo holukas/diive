@@ -16,6 +16,8 @@ Detects values that deviate significantly from local trend, ideal for spike remo
 
 import warnings
 
+import pandas as pd
+
 import diive as dv
 
 warnings.filterwarnings('ignore')
@@ -89,7 +91,7 @@ ham_global = dv.outliers.Hampel(
 ham_global.calc(repeat=True)  # Iterate until convergence
 
 filtered_global = ham_global.filteredseries
-flag_global = ham_global.flag
+flag_global = ham_global.overall_flag  # all iterations; .flag holds the last one only
 
 print("\nGlobal threshold results:")
 print(f"  Outliers detected: {(flag_global == 2).sum()}")
@@ -109,6 +111,35 @@ print(
     f"  Day/night filtered: {filtered_dtnt.notna().sum()} ({100 * filtered_dtnt.notna().sum() / s_noise.notna().sum():.1f}%)")
 print(
     f"  Global filtered: {filtered_global.notna().sum()} ({100 * filtered_global.notna().sum() / s_noise.notna().sum():.1f}%)")
+
+# %%
+# Values per time of day
+# ^^^^^^^^^^^^^^^^^^^^^^
+#
+# On the values (use_differencing=False) the daily cycle widens the band: with
+# day and night separate, an early-morning flux is still judged against the
+# noon values of the window. by_time_of_day=True takes the median and MAD from
+# the same time of day instead, here the half-hour itself and one on either side
+# over 13 days (up to 39 records). Windows with fewer than min_records values are
+# not tested.
+
+# The gap-filled NEE, so that every time of day has records.
+nee = df['NEE_CUT_REF_f'].loc['2022-05':'2022-09'].copy()
+sunrise = pd.Timestamp('2022-07-14 05:15')
+nee[sunrise] = -25.0  # noon-like uptake at sunrise, where NEE is near 0
+
+kw = dict(series=nee, n_sigma=5.5, window_length='13D', use_differencing=False,
+          separate_day_night=True, lat=46.81533, lon=9.85591, utc_offset=1)
+ham_values = dv.outliers.Hampel(**kw)
+ham_values.calc(repeat=True)
+ham_tod = dv.outliers.Hampel(**kw, by_time_of_day=True, time_of_day_slots=1, min_records=10,
+                             showplot=True)
+ham_tod.calc(repeat=True)
+
+for label, ham in (('values, day and night', ham_values), ('values per time of day', ham_tod)):
+    # overall_flag combines all iterations; flag holds the last iteration only.
+    print(f"{label}: {(ham.overall_flag == 2).sum()} outliers, "
+          f"{sunrise} removed: {ham.overall_flag[sunrise] == 2}")
 
 # %%
 # Parameter tuning: sensitivity analysis
@@ -185,6 +216,7 @@ for win_len in window_lengths:
 # - **window_length:** Use 10-15 days for typical QC, longer for smoothing, shorter for real-time detection
 # - **use_differencing:** Enable for spike detection, disable for level-based thresholding
 # - **separate_day_night:** Use when daytime/nighttime signals differ significantly
+# - **by_time_of_day:** On the values, use it when a daily cycle widens the band (fluxes, radiation)
 
 print("\nParameter Selection Summary:")
 print("  Balanced (default): n_sigma=5.5, window=13 days")

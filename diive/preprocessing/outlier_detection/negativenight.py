@@ -14,9 +14,12 @@ purpose. Removing every negative value instead would cut off one side of the noi
 nighttime NEE up. Daytime records are never tested: by day both signs are real.
 
 The test also estimates how many of the removed records noise alone would have produced, from the
-local nighttime level (a rolling median) and each record's uncertainty. If that number is a small
-share of the removed records, the test removes errors rather than noise, and the bias it adds to a
-sum is at most the expected noise removals.
+local nighttime level (a rolling median) and each record's uncertainty, and how much removing them
+raises a sum once their gaps are filled. If the number is a small share of the removed records, the
+test removes errors rather than noise. Both estimates assume Gaussian noise. Eddy-covariance random
+errors have heavier tails, closer to a Laplace distribution (Hollinger and Richardson 2005), so the
+true numbers can be higher: at z = 3 a Laplace tail of the same standard deviation is about five
+times larger.
 
 Quality flags (overall_flag):
   - flag=0: daytime record, or nighttime record not clearly below zero (valid)
@@ -31,7 +34,7 @@ from pandas import DatetimeIndex, Series
 from scipy.stats import norm
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.utils.console import detail
+from diive.core.utils.console import info
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
@@ -46,6 +49,7 @@ class NegativeNighttime(FlagBase):
                  lat: float,
                  lon: float,
                  utc_offset: int,
+                 nighttime_threshold: float = 20,
                  z: float = 2.0,
                  level_window: int | str = '13D',
                  idstr: str = None,
@@ -61,6 +65,7 @@ class NegativeNighttime(FlagBase):
             lat: Latitude of the site, to tell day from night.
             lon: Longitude of the site.
             utc_offset: UTC offset of the timestamps in hours.
+            nighttime_threshold: Potential radiation (W m-2) below which a record is nighttime.
             z: Number of uncertainties below zero beyond which a nighttime value is removed.
             level_window: Window of the rolling median of nighttime values that serves as the local
                 respiration level for the expected noise removals, as a time span or a record count.
@@ -80,7 +85,8 @@ class NegativeNighttime(FlagBase):
         self.last_lower_bound = None
         self.last_upper_bound = None
         self.flag_daytime, _, self.is_daytime, self.is_nighttime = create_daytime_nighttime_flags(
-            timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset)
+            timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset,
+            nighttime_threshold=nighttime_threshold)
         self.expected_noise = {}
 
     def calc(self, repeat: bool = False, progress_callback=None):
@@ -91,8 +97,10 @@ class NegativeNighttime(FlagBase):
         self.expected_noise = self._expected_noise()
         if self.verbose:
             n_removed = int((self.overall_flag == 2).sum())
-            detail(f"Nighttime records below -{self.z:g} uncertainties: {n_removed}; expected from "
-                   f"noise alone: {self.expected_noise['records']:.1f}", verbose=self.verbose)
+            info(f"Nighttime records below -{self.z:g} uncertainties: {n_removed:,}. Expected from "
+                 f"noise alone (Gaussian): {self.expected_noise['records']:.1f} records, raising "
+                 f"the sum by {self.expected_noise['bias']:.2f} (flux units x records) once their "
+                 f"gaps are filled.", verbose=self.verbose)
         if self.showplot:
             self._plot()
 
@@ -116,21 +124,29 @@ class NegativeNighttime(FlagBase):
     def _expected_noise(self) -> dict:
         """Removals noise alone would cause, if each value were its local level plus noise.
 
-        For a record with level R and uncertainty sigma, noise pushes it below ``-z * sigma``
-        with probability ``Phi(-z - R / sigma)``. The mean of such a value is that of a normal
-        distribution truncated at the limit, ``R - sigma * phi(a) / Phi(a)`` with
-        ``a = -z - R / sigma``. Summed over the records this gives the expected number of noise
-        removals and their expected sum, which is the most the test can bias a total by.
+        For a record with level R and uncertainty sigma, Gaussian noise pushes it below
+        ``-z * sigma`` with probability ``p = Phi(a)``, ``a = -z - R / sigma``. The mean of such a
+        value is that of a normal distribution truncated at the limit, ``R - sigma * phi(a) / p``.
+        Summed over the records:
+
+        - ``records``: the expected number of noise removals, ``sum(p)``.
+        - ``sum``: the expected sum of the removed noise values, ``sum(p * mean)``.
+        - ``bias``: how much the removals raise a total once gap-filling replaces each one with its
+          level R, ``sum(p * (R - mean)) = sum(sigma * phi(a))``. This exceeds ``-sum`` by
+          ``sum(p * R)``.
+
+        These are expectations under Gaussian noise, not bounds (see the module docstring).
         """
         df = self._night_frame()
         if df.empty:
-            return {'records': 0.0, 'sum': 0.0}
+            return {'records': 0.0, 'sum': 0.0, 'bias': 0.0}
         level = df['level'].clip(lower=0)  # the true nighttime value is not negative
         a = -self.z - level / df['sigma']
         p = norm.cdf(a)
         truncated_mean = level - df['sigma'] * norm.pdf(a) / np.where(p > 0, p, np.nan)
         return {'records': float(np.nansum(p)),
-                'sum': float(np.nansum(p * np.nan_to_num(truncated_mean)))}
+                'sum': float(np.nansum(p * np.nan_to_num(truncated_mean))),
+                'bias': float(np.nansum(df['sigma'] * norm.pdf(a)))}
 
     def _plot(self):
         import matplotlib.pyplot as plt

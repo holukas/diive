@@ -45,14 +45,16 @@ def nighttime_uncertainty(
     - ``PAS20``: the random uncertainty of FLUXNET2015 and ONEFlux (Pastorello et al. 2020,
       :class:`~diive.flux.lowres.uncertainty.RandomUncertaintyPAS20`): the spread of measured
       fluxes under similar conditions (air temperature, VPD, radiation) within days of each
-      record. It covers the whole random error.
-    - ``MAX``: the larger of the two for each record. A value is then called clearly below zero
-      only when neither uncertainty explains it.
+      record. Besides the random error, that spread holds real flux differences between the
+      records, so PAS20 is a generous estimate of the random error.
+    - ``MAX``: the larger of the two for each record, or the one available where the other is
+      missing. A value is then called clearly below zero only when neither uncertainty explains it.
 
     PAS20 is computed from the series the detector holds now, so call this after the other
     outlier tests have been accepted: outliers would otherwise widen it. Records without a value
-    get no uncertainty. A table compares, for each uncertainty and each ``z``, how many nighttime
-    records lie below ``-z`` times it.
+    get no uncertainty, and a nighttime record without either uncertainty is not tested; the
+    table reports how many there are. It compares, for each uncertainty and each ``z``, how many
+    nighttime records lie below ``-z`` times it.
 
     Args:
         data: Chain container, for the drivers and the EddyPro uncertainty in ``full_df``.
@@ -106,7 +108,7 @@ def nighttime_uncertainty(
     has = series.notna()
     out = pd.DataFrame({'FS': full[randunc_col].reindex(series.index).where(has),
                         'PAS20': pas.randunc_series.reindex(series.index).where(has)})
-    out['MAX'] = out[['FS', 'PAS20']].max(axis=1, skipna=False)
+    out['MAX'] = out[['FS', 'PAS20']].max(axis=1)
 
     night = data.fpc_df['NIGHTTIME'].reindex(series.index) == 1
     value = series[night & has]
@@ -122,9 +124,15 @@ def nighttime_uncertainty(
             n = int((value < -z * sigma).sum())
             cells.append(f"{n:,} ({100 * n / len(value):.1f} %)" if len(value) else "-")
         table.add_row(*cells)
+    notes = ["FS: EddyPro, sampling error of each half-hour. PAS20: spread of similar "
+             "measurements (ONEFlux), a generous estimate. MAX: the larger of the two."]
+    for col in out.columns:
+        n_missing = int(out.loc[value.index, col].isna().sum())
+        if n_missing:
+            notes.append(f"{col} is missing for {n_missing:,} nighttime records"
+                         f"{'; these are not tested' if col == 'MAX' else ''}.")
     _print_report(f"Random uncertainty of the {len(value):,} nighttime records", table,
-                  ["FS: EddyPro, sampling error of each half-hour. PAS20: spread of similar "
-                   "measurements (ONEFlux). MAX: the larger of the two."], verbose=verbose)
+                  notes, verbose=verbose)
     return out
 
 
@@ -185,6 +193,7 @@ def make_level32_detector(
         site_lon=data.meta.site_lon,
         utc_offset=data.meta.utc_offset,
         idstr='L3.2',
+        nighttime_threshold=data.meta.nighttime_threshold,
     )
     return data, sod
 

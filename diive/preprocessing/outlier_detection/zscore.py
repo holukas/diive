@@ -76,6 +76,7 @@ class zScore(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
+                 nighttime_threshold: float = 20,
                  idstr: str = None,
                  thres_zscore: float = 4,
                  thres_zscore_daytime: float = None,
@@ -96,6 +97,7 @@ class zScore(FlagBase):
                 Example: 9.790639. Used to detect daytime/nighttime.
             utc_offset: UTC offset of timestamp_index (required if separate_day_night=True).
                 Example: 1 for UTC+01:00. Used to detect daytime/nighttime.
+            nighttime_threshold: Potential radiation (W m-2) below which a record is nighttime.
             idstr: Identifier, added as suffix to output variable names.
             thres_zscore: Z-score threshold for outlier detection (default 4).
                 Values with an absolute z-score above the threshold are flagged as outliers. Used for:
@@ -146,7 +148,8 @@ class zScore(FlagBase):
 
             # Detect daytime and nighttime
             self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
-                create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset))
+                create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon, utc_offset=utc_offset,
+                                               nighttime_threshold=nighttime_threshold))
 
     def calc(self, repeat: bool = True, progress_callback=None):
         """Calculate overall flag based on z-score thresholds.

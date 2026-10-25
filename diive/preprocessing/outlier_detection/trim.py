@@ -88,6 +88,7 @@ class TrimLow(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
+                 nighttime_threshold: float = 20,
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False):
@@ -116,6 +117,7 @@ class TrimLow(FlagBase):
                 ``trim_daytime`` or ``trim_nighttime`` is True.
             utc_offset: UTC offset in hours (e.g., 1 for UTC+01:00). Only required
                 when ``trim_daytime`` or ``trim_nighttime`` is True.
+            nighttime_threshold: Potential radiation (W m-2) below which a record is nighttime.
             idstr: Identifier suffix for output variable names.
             showplot: If True, display results plot.
             verbose: If True, print iteration statistics.
@@ -155,7 +157,8 @@ class TrimLow(FlagBase):
         if self._separate:
             self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(timestamp_index=self.series.index,
-                                               lat=lat, lon=lon, utc_offset=utc_offset))
+                                               lat=lat, lon=lon, utc_offset=utc_offset,
+                                               nighttime_threshold=nighttime_threshold))
         else:
             self.flag_daytime = self.is_daytime = self.is_nighttime = None
 

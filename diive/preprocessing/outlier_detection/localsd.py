@@ -100,6 +100,7 @@ class LocalSD(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
+                 nighttime_threshold: float = 20,
                  showplot: bool = False,
                  verbose: bool = False,
                  **legacy):
@@ -147,6 +148,7 @@ class LocalSD(FlagBase):
                 `separate_day_night` is True. Defaults to None.
             utc_offset (int, optional): UTC offset in hours, required if
                 `separate_day_night` is True. Defaults to None.
+            nighttime_threshold: Potential radiation (W m-2) below which a record is nighttime.
             showplot (bool, optional): If True, generates a plot of the
                 detection process upon calling `.calc()`. Defaults to False.
             verbose (bool, optional): If True, prints iteration details to the
@@ -206,7 +208,8 @@ class LocalSD(FlagBase):
             self._validate_daytime_nighttime_setup()
             self.flag_daytime, self.flag_nighttime, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon,
-                                               utc_offset=utc_offset))
+                                               utc_offset=utc_offset,
+                                               nighttime_threshold=nighttime_threshold))
         else:
             self.flag_daytime = None
             self.flag_nighttime = None

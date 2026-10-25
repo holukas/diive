@@ -247,20 +247,23 @@ class TestOutlierDetection(unittest.TestCase):
         # L239: median and MAD per period (223 -> 225).
         # L255: edge tests with the central sign, differences inside one period
         # (225 -> 220: the same 89 of 104 spikes, 5 fewer good records).
-        self.assertEqual(baddata_stats.loc['count']['flag'], 220)
+        # 222 since the window spans a fixed time (see test_hampel_filter_basic).
+        self.assertEqual(baddata_stats.loc['count']['flag'], 222)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 220)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 222)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
         # L255: at n_sigma=100 one borderline spike (+34 degC) stays and another
         # (+19 degC) goes, so the largest kept value changed (was 51.98).
-        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 53.93064794948049)
+        # 65.29 since the window spans a fixed time: at n_sigma=100 with a one-day
+        # window a borderline +40 degC spike now stays and two others go.
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 65.28931391600881)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -24.68608044400628)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1268)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1266)
 
     def test_hampel_filter_basic(self):
         df = ed.load_exampledata_parquet()
@@ -299,18 +302,21 @@ class TestOutlierDetection(unittest.TestCase):
         baddata_stats = checkdf.loc[checkdf.flag == 2].describe()
         self.assertEqual(baddata_stats.loc['max']['s_noise'], 420.37816376334473)
         self.assertEqual(baddata_stats.loc['min']['s_noise'], -38.04507418841196)
-        self.assertEqual(baddata_stats.loc['count']['flag'], 92)
+        # 93 since the window spans a fixed time: in the later passes of repeat=True
+        # the records removed before no longer widen it.
+        self.assertEqual(baddata_stats.loc['count']['flag'], 93)
         self.assertEqual(baddata_stats.loc['min']['flag'], 2)
         self.assertEqual(baddata_stats.loc['max']['flag'], 2)
-        self.assertEqual(baddata_stats.loc['count']['s_noise'], 92)
+        self.assertEqual(baddata_stats.loc['count']['s_noise'], 93)
 
         # Checks on good data
         gooddata_stats = checkdf.loc[checkdf.flag == 0].describe()
-        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 51.98160999845608)
+        # The +52 degC spike kept before is now removed (window of fixed time).
+        self.assertEqual(gooddata_stats.loc['max']['s_noise'], 33.72896422933141)
         self.assertEqual(gooddata_stats.loc['min']['s_noise'], -7.383053125047635)
         self.assertEqual(gooddata_stats.loc['min']['flag'], 0)
         self.assertEqual(gooddata_stats.loc['max']['flag'], 0)
-        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1396)
+        self.assertEqual(gooddata_stats.loc['count']['s_noise'], 1395)
 
     def test_zscore(self):
         df = ed.load_exampledata_parquet()
@@ -1257,3 +1263,134 @@ class TestNegativeNighttime(unittest.TestCase):
         sod.addflag()
         self.assertEqual(list(sod.flags.columns), ['FLAG_NEE_OUTLIER_NEGNIGHT_TEST'])
         self.assertTrue(np.isnan(sod.series_hires_cleaned[night_ix[10]]))
+
+    def test_nighttime_threshold_reaches_the_test(self):
+        """With a threshold above any potential radiation every record is nighttime."""
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        values, sigma, _, _ = self._series()
+        values[:] = -5.0
+        removed = {}
+        for threshold in (20, 5000):
+            sod = StepwiseOutlierDetection(dfin=values.to_frame(), col='NEE', site_lat=self.COORDS['lat'],
+                                           site_lon=self.COORDS['lon'], utc_offset=1,
+                                           nighttime_threshold=threshold)
+            sod.flag_outliers_negative_night_test(uncertainty=sigma, z=2)
+            sod.addflag()
+            removed[threshold] = int(sod.series_hires_cleaned.isna().sum())
+        self.assertLess(removed[20], len(values))
+        self.assertEqual(removed[5000], len(values))
+
+    def test_expected_bias_once_gaps_are_filled(self):
+        """Filling a noise removal with its level R raises a sum by R minus the removed value."""
+        from scipy.stats import norm
+        from diive.preprocessing.outlier_detection import NegativeNighttime
+        values, sigma, _, _ = self._series()
+        values[:] = 0.5
+        t = NegativeNighttime(series=values, uncertainty=sigma, z=2, **self.COORDS).run()
+        df = t._night_frame()
+        p = norm.cdf(-2 - df['level'] / df['sigma'])
+        e = t.expected_noise
+        self.assertGreater(e['bias'], 0)
+        self.assertAlmostEqual(e['bias'], float((p * df['level']).sum()) - e['sum'], places=9)
+
+
+class TestHampelTimeOfDay(unittest.TestCase):
+    """by_time_of_day=True judges a value against the same time of day."""
+
+    @staticmethod
+    def _series():
+        # 30 days with a daily cycle of +-20 around zero and noise of 1. At 06:15 the
+        # cycle is near zero; a value of -20 there is a noon value at the wrong time.
+        rng = np.random.default_rng(4)
+        index = pd.date_range('2022-07-01 00:15', periods=48 * 30, freq='30min', name='TIMESTAMP_MIDDLE')
+        hours = index.hour + index.minute / 60
+        s = pd.Series(20 * np.sin(2 * np.pi * (hours - 6) / 24) + rng.normal(0, 1, len(index)),
+                      index=index, name='NEE')
+        spike = pd.Timestamp('2022-07-15 06:15')
+        s[spike] = -20.0
+        return s, spike
+
+    def test_finds_a_value_at_the_wrong_time_of_day(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s, spike = self._series()
+        kw = dict(series=s, window_length='13D', use_differencing=False, separate_day_night=False)
+        plain = Hampel(**kw).run()
+        self.assertEqual(plain.overall_flag[spike], 0)  # the daily cycle widens the band
+        tod = Hampel(**kw, by_time_of_day=True).run()
+        self.assertEqual(list(tod.overall_flag[tod.overall_flag == 2].index), [spike])
+
+    def test_neighbouring_slots_cross_midnight(self):
+        """The 00:15 slot also uses 23:45 of the day before."""
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s, _ = self._series()
+        h = Hampel(series=s, window_length='13D', use_differencing=False, separate_day_night=False,
+                   by_time_of_day=True)
+        median, _ = h._time_of_day_median_mad(s)
+        t = pd.Timestamp('2022-07-15 00:15')
+        same = s[(s.index.normalize() >= t.normalize() - pd.Timedelta('6D'))
+                 & (s.index.normalize() <= t.normalize() + pd.Timedelta('6D'))]
+        slot = same.index.hour * 2 + same.index.minute // 30
+        window = same[slot.isin([0, 1])]
+        before = s[(s.index.hour == 23) & (s.index.minute == 45)
+                   & (s.index.normalize() >= t.normalize() - pd.Timedelta('7D'))
+                   & (s.index.normalize() <= t.normalize() + pd.Timedelta('5D'))]
+        self.assertAlmostEqual(median[t], float(pd.concat([window, before]).median()), places=12)
+
+    def test_too_few_records_are_not_tested(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s, spike = self._series()
+        h = Hampel(series=s, window_length='13D', use_differencing=False, separate_day_night=False,
+                   by_time_of_day=True, min_records=40).run()  # at most 39 in the window
+        self.assertFalse((h.overall_flag == 2).any())
+
+    def test_invalid_settings(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s, _ = self._series()
+        with self.assertRaises(ValueError):
+            Hampel(series=s, by_time_of_day=True, use_differencing=True, separate_day_night=False)
+        with self.assertRaises(ValueError):
+            Hampel(series=s, window_length='36h', by_time_of_day=True, use_differencing=False,
+                   separate_day_night=False)
+
+    def test_stepwise_detector_passes_it_on(self):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        s, spike = self._series()
+        sod = StepwiseOutlierDetection(dfin=s.to_frame(), col='NEE', site_lat=47.48, site_lon=8.36,
+                                       utc_offset=1)
+        sod.flag_outliers_hampel_test(window_length='13D', use_differencing=False, by_time_of_day=True)
+        sod.addflag()
+        self.assertTrue(np.isnan(sod.series_hires_cleaned[spike]))
+        self.assertEqual(int(sod.series_hires_cleaned.isna().sum()), 1)
+
+
+class TestHampelWindowSpan(unittest.TestCase):
+    """The Hampel window spans a fixed time, so a long gap does not widen it."""
+
+    def test_window_does_not_reach_across_a_long_gap(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        rng = np.random.default_rng(1)
+        index = pd.date_range('2020-01-01 00:15', periods=48 * 120, freq='30min')
+        s = pd.Series(rng.normal(0, 1, len(index)), index=index, name='x')
+        s.iloc[48 * 30:48 * 90] = np.nan  # 60-day gap
+        s.iloc[48 * 90:] += 10            # different level after it
+        ham = Hampel(series=s, window_length='13D', separate_day_night=False, use_differencing=False)
+        self.assertEqual(ham._window_span, pd.Timedelta('13D'))
+        median, _ = ham._rolling_median_mad(s.dropna())
+        # Next to the gap the median comes from records on its own side only.
+        self.assertGreater(median[index[48 * 90]], 9)
+        self.assertLess(median[index[48 * 30 - 1]], 1)
+
+    def test_same_flags_as_a_record_count_on_complete_data(self):
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        rng = np.random.default_rng(2)
+        index = pd.date_range('2020-01-01 00:15', periods=48 * 60, freq='30min')
+        s = pd.Series(rng.normal(0, 1, len(index)), index=index, name='x')
+        s.iloc[::97] += 15
+        flags = []
+        for span in (True, False):
+            ham = Hampel(series=s, window_length=48 * 13, separate_day_night=False)
+            if not span:
+                ham._window_span = None
+            ham.calc(repeat=False)
+            flags.append(ham.overall_flag)
+        pd.testing.assert_series_equal(flags[0], flags[1])

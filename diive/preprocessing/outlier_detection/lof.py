@@ -137,6 +137,7 @@ class LocalOutlierFactor(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
+                 nighttime_threshold: float = 20,
                  showplot: bool = False,
                  verbose: bool = False,
                  n_jobs: int = 1,
@@ -163,6 +164,7 @@ class LocalOutlierFactor(FlagBase):
             lat: Latitude of location as float (e.g., 46.583056). Required if separate_day_night=True.
             lon: Longitude of location as float (e.g., 9.790639). Required if separate_day_night=True.
             utc_offset: UTC offset in hours for sun position calculations. Required if separate_day_night=True.
+            nighttime_threshold: Potential radiation (W m-2) below which a record is nighttime.
             showplot: Show plot with results from the outlier detection.
             verbose: Print more text output.
             n_jobs: The number of parallel jobs to run for neighbors search. None means 1
@@ -196,7 +198,8 @@ class LocalOutlierFactor(FlagBase):
                 raise ValueError("lat, lon, and utc_offset are required when separate_day_night=True")
             self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(timestamp_index=self.series.index, lat=lat, lon=lon,
-                                               utc_offset=utc_offset))
+                                               utc_offset=utc_offset,
+                                               nighttime_threshold=nighttime_threshold))
 
     def calc(self, repeat: bool = False, progress_callback=None):
         """Calculate overall flag, based on individual flags from multiple iterations.

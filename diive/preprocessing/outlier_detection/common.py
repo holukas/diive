@@ -110,12 +110,14 @@ def window_to_records(window: int | str | None, series: Series, name: str = 'win
     return int(n_records)
 
 
-def create_daytime_nighttime_flags(timestamp_index, lat, lon, utc_offset):
-    # Detect daytime and nighttime
-    """Return daytime/nighttime flags (0/1 and boolean) from potential radiation for an index."""
+def create_daytime_nighttime_flags(timestamp_index, lat, lon, utc_offset, nighttime_threshold: float = 20):
+    """Return daytime/nighttime flags (0/1 and boolean) from potential radiation for an index.
+
+    A record is nighttime when its potential radiation is below ``nighttime_threshold`` (W m-2).
+    """
     dnf = DaytimeNighttimeFlag(
         timestamp_index=timestamp_index,
-        nighttime_threshold=20,
+        nighttime_threshold=nighttime_threshold,
         lat=lat, lon=lon,
         utc_offset=utc_offset)
     flag_daytime = dnf.get_daytime_flag()

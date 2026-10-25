@@ -73,14 +73,20 @@ class StepwiseOutlierDetection:
             site_lon: float,
             utc_offset: int,
             idstr: str = None,
-            output_middle_timestamp: bool = True
+            output_middle_timestamp: bool = True,
+            nighttime_threshold: float = 20,
     ):
-        """Set up stepwise outlier detection. See the class docstring."""
+        """Set up stepwise outlier detection. See the class docstring.
+
+        ``nighttime_threshold`` is the potential radiation (W m-2) below which a record is
+        nighttime, for every test that treats day and night separately.
+        """
         self.dfin = dfin.copy()
         self.col = col
         self.site_lat = site_lat
         self.site_lon = site_lon
         self.utc_offset = utc_offset
+        self.nighttime_threshold = nighttime_threshold
         self.idstr = validate_id_string(idstr=idstr)
         # When False, the sanitized index keeps the input timestamp convention
         # (e.g. TIMESTAMP_END) instead of being shifted to the middle of the
@@ -138,6 +144,8 @@ class StepwiseOutlierDetection:
 
         *kwargs* go to the constructor, *calc_kwargs* to ``calc()``.
         """
+        if kwargs.get('lat') is not None:
+            kwargs.setdefault('nighttime_threshold', self.nighttime_threshold)
         flagtest = cls(series=self._series_hires_cleaned.copy(), **kwargs)
         flagtest.calc(**calc_kwargs)
         self._record_last(flagtest)
@@ -342,7 +350,9 @@ class StepwiseOutlierDetection:
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
                                   k: float = 1.4826, use_differencing: bool = True,
                                   separate_day_night: bool = True, showplot: bool = False,
-                                  verbose: bool = False, repeat: bool = True):
+                                  verbose: bool = False, repeat: bool = True,
+                                  by_time_of_day: bool = False, time_of_day_slots: int = 1,
+                                  min_records: int = 10):
         """Identify outliers in a sliding window based on the Hampel filter (global or separate day/night).
 
         Parameters
@@ -373,6 +383,15 @@ class StepwiseOutlierDetection:
             If True, daytime and nighttime records each get the median and MAD
             of the records of their own period in the window, and their own
             threshold. See ``Hampel``.
+        by_time_of_day : bool, default False
+            With ``use_differencing=False``: median and MAD from the records at the
+            same time of day (``time_of_day_slots`` steps on either side) in the
+            window, so the daily cycle does not widen the band. See ``Hampel``.
+        time_of_day_slots : int, default 1
+            Steps before and after a record's time of day that count as the same.
+        min_records : int, default 10
+            With ``by_time_of_day``, records with fewer values in their window are
+            not tested.
         showplot : bool, default False
             If True, display visualization of flagged outliers
         verbose : bool, default False
@@ -387,7 +406,8 @@ class StepwiseOutlierDetection:
             utc_offset=self.utc_offset if separate_day_night else None,
             use_differencing=use_differencing, separate_day_night=separate_day_night,
             window_length=window_length, n_sigma=n_sigma, n_sigma_daytime=n_sigma_daytime,
-            n_sigma_nighttime=n_sigma_nighttime,
+            n_sigma_nighttime=n_sigma_nighttime, by_time_of_day=by_time_of_day,
+            time_of_day_slots=time_of_day_slots, min_records=min_records,
             k=k, showplot=showplot, verbose=verbose)
 
     def flag_outliers_zscore_test(self,

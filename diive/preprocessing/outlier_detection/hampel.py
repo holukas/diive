@@ -17,6 +17,7 @@ the Median Absolute Deviation (MAD). Two modes are available:
 Both modes support:
   - Double-differencing (Papale et al. 2006 method) to remove trends
   - Raw value detection (if trends are not a concern)
+  - Raw value detection per time of day, which removes the daily cycle
   - Iterative filtering until all outliers removed or single-pass detection
 
 Quality flags:
@@ -51,6 +52,8 @@ class Hampel(FlagBase):
       between day and night)
 
     Optional double-differencing (Papale et al. 2006) removes trends before detection.
+    On the values, ``by_time_of_day=True`` judges each record against the records of
+    the same time of day, so the daily cycle does not widen the band.
     In both modes a record at the start or end of a run without gaps is
     compared with the line through its next two records. That comparison has
     the curvature sign of the central double difference, so a smooth curve
@@ -89,6 +92,11 @@ class Hampel(FlagBase):
         ...                          separate_day_night=False).run()
         >>> ham = dv.outliers.Hampel(series=s, window_length='7D', separate_day_night=False).run()
 
+        Values per time of day (13 days, the half-hour before and after):
+
+        >>> ham = dv.outliers.Hampel(series=s, window_length='13D', use_differencing=False,
+        ...                          by_time_of_day=True, lat=46.815, lon=9.856, utc_offset=1).run()
+
         See `examples/preprocessing/outlier_detection/outlier_hampel.py` for complete examples.
     """
 
@@ -99,6 +107,7 @@ class Hampel(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
+                 nighttime_threshold: float = 20,
                  window_length: int | str = 48 * 13,
                  n_sigma: float = 5.5,
                  n_sigma_daytime: float = None,
@@ -106,6 +115,9 @@ class Hampel(FlagBase):
                  k: float = 1.4826,
                  use_differencing: bool = True,
                  separate_day_night: bool = True,
+                 by_time_of_day: bool = False,
+                 time_of_day_slots: int = 1,
+                 min_records: int = 10,
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False,
@@ -130,6 +142,7 @@ class Hampel(FlagBase):
             lat (float): Latitude of the site (Required if ``separate_day_night=True``).
             lon (float): Longitude of the site (Required if ``separate_day_night=True``).
             utc_offset (int): UTC offset in hours (Required if ``separate_day_night=True``).
+            nighttime_threshold: Potential radiation (W m-2) below which a record is nighttime.
             window_length (int or str): The size of the sliding window centered on
                 the point, as a record count or as a time span such as ``'13D'``.
                 A time span is converted to records at the series' frequency
@@ -139,10 +152,12 @@ class Hampel(FlagBase):
                 sampling rate** typical of eddy-covariance data — matching the
                 Papale et al. 2006 spike-detection window. For other sampling
                 rates pass ``'13D'`` or scale the count (e.g. ``24 * 13`` for hourly).
-                The window rolls over the records present, so missing records
-                (gaps, and outliers removed by earlier iterations) do not count
-                and the window stretches across them: with 20 % of the records
-                missing, ``'13D'`` covers about 16 calendar days. With
+                On a time index with a regular step the window spans a fixed time,
+                ``window_length`` records long: missing records (gaps, and
+                outliers removed by earlier iterations) do not widen it, so next to
+                a long gap the window holds fewer records instead of reaching
+                across the gap into data weeks away. On an index without a regular
+                step the window is a count of the records present. With
                 ``separate_day_night=True`` the median and MAD of a daytime
                 record come from the daytime records in its window, those of a
                 nighttime record from the nighttime records.
@@ -188,6 +203,21 @@ class Hampel(FlagBase):
                 ``_double_differences`` first. If ``False``, one median, MAD and
                 threshold for all records, and double differences ignore the change
                 between day and night.
+            by_time_of_day (bool): If ``True`` (values only, ``use_differencing=False``),
+                the median and MAD of a record come from the records at the same time
+                of day: those within ``time_of_day_slots`` steps of its time of day, on
+                the days within half of ``window_length`` before and after its day
+                (``'13D'``: 13 days). Neighbouring slots across midnight come from the
+                day before or after. The daily cycle then no longer widens the band:
+                an early-morning record is judged against other early mornings, not
+                against the noon values. ``window_length`` must span whole days on an
+                index with a regular step. With ``separate_day_night=True`` daytime
+                and nighttime records keep their own ``n_sigma``.
+            time_of_day_slots (int): Number of steps before and after the record's time
+                of day that count as the same time of day. Default 1: with 30-min data
+                three half-hours, up to 39 records in a 13-day window.
+            min_records (int): With ``by_time_of_day=True``, a record whose window holds
+                fewer values is not tested. Default 10.
             idstr (str, optional): Identifier suffix added to output variable names.
             showplot (bool): If ``True``, displays a summary plot after calculation.
             verbose (bool): If ``True``, prints iteration statistics to the console.
@@ -212,6 +242,24 @@ class Hampel(FlagBase):
         self.verbose = verbose
         self.window_length = window_to_records(window_length, self.series, name='window_length',
                                                verbose=self.verbose)
+        # The time the window spans, so that gaps do not widen it (None: no regular step).
+        step = self._step(self.series.index)
+        self._window_span = step * self.window_length if step is not None else None
+        self.by_time_of_day = by_time_of_day
+        self.time_of_day_slots = int(time_of_day_slots)
+        self.min_records = int(min_records)
+        self._window_days = None
+        if by_time_of_day:
+            one_day = pd.Timedelta('1D')
+            if use_differencing:
+                raise ValueError("by_time_of_day=True judges values: set use_differencing=False.")
+            if (self._window_span is None or self._window_span < one_day
+                    or self._window_span % one_day != pd.Timedelta(0) or one_day % step != pd.Timedelta(0)):
+                raise ValueError("by_time_of_day=True needs a regular time index whose step divides a day "
+                                 f"and a window_length of whole days, got {window_length!r}.")
+            if self.time_of_day_slots < 0 or self.min_records < 1:
+                raise ValueError("time_of_day_slots must be >= 0 and min_records >= 1.")
+            self._window_days = int(self._window_span / one_day)
         self.n_sigma = n_sigma
         # Per-period overrides default to None and fall back to the global value,
         # so changing n_sigma alone still affects both periods.
@@ -237,7 +285,8 @@ class Hampel(FlagBase):
 
             self.flag_daytime, _, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(timestamp_index=self.series.index,
-                                               lat=lat, lon=lon, utc_offset=utc_offset))
+                                               lat=lat, lon=lon, utc_offset=utc_offset,
+                                               nighttime_threshold=nighttime_threshold))
         else:
             # Initialize empty/None to avoid attribute errors if accessed later
             self.is_daytime = None
@@ -285,21 +334,10 @@ class Hampel(FlagBase):
                 self.defaultplot(n_iterations=n_iterations)
 
     @staticmethod
-    def _input_segments(series: Series) -> Series:
-        """Number of the gap-free run each input record belongs to.
-
-        A run ends where the next record is missing, either as an absent
-        timestamp or as a missing value. Dropping missing records before
-        differencing would otherwise pair a record with a partner hours or days
-        away and make every gap edge look like a spike.
-
-        Returns an integer Series over the input index (one run when the index
-        is not a usable time axis).
-        """
-        index = series.index
+    def _step(index) -> pd.Timedelta | None:
+        """Regular time step of *index*, or None when it has none."""
         if not isinstance(index, DatetimeIndex) or len(index) < 3:
-            return pd.Series(0, index=index)
-
+            return None
         # A non-fixed offset (month/year start, business day, week) has no constant
         # duration and raises on `.nanos`; even `hasattr` propagates that error, so
         # the attempt itself is the test. The timestamps then supply the typical step.
@@ -312,6 +350,24 @@ class Hampel(FlagBase):
         if step is None:
             step = pd.Series(index).diff().median()
         if pd.isna(step) or step <= pd.Timedelta(0):
+            return None
+        return step
+
+    @staticmethod
+    def _input_segments(series: Series) -> Series:
+        """Number of the gap-free run each input record belongs to.
+
+        A run ends where the next record is missing, either as an absent
+        timestamp or as a missing value. Dropping missing records before
+        differencing would otherwise pair a record with a partner hours or days
+        away and make every gap edge look like a spike.
+
+        Returns an integer Series over the input index (one run when the index
+        is not a usable time axis).
+        """
+        index = series.index
+        step = Hampel._step(index)
+        if step is None:
             return pd.Series(0, index=index)
 
         # A neighbour is missing either because the timestamp itself is absent
@@ -507,6 +563,9 @@ class Hampel(FlagBase):
     def _rolling_median_mad(self, x: Series) -> tuple[Series, Series]:
         """Centred rolling median and MAD of *x*. NaN values do not count.
 
+        The window spans ``self._window_span`` when the series has a regular time
+        step, so a gap shortens it rather than widening it (see ``window_length``).
+
         A window in which more than half the values are identical has a MAD of
         exactly zero, and then the detection band has zero width: every value that
         differs from the local median at all becomes an outlier, however small the
@@ -517,8 +576,57 @@ class Hampel(FlagBase):
         routinely. Such records get a NaN MAD, so they are left unflagged (NaN
         limits compare False), and the count is reported rather than hidden.
         """
-        median = x.rolling(window=self.window_length, center=True, min_periods=1).median()
-        mad = (x - median).abs().rolling(window=self.window_length, center=True, min_periods=1).median()
+        window = self._window_span if self._window_span is not None else self.window_length
+        median = x.rolling(window=window, center=True, min_periods=1).median()
+        mad = (x - median).abs().rolling(window=window, center=True, min_periods=1).median()
+        degenerate = (mad == 0) & x.notna()
+        if degenerate.any():
+            self._n_degenerate_scale += int(degenerate.sum())
+        return median, mad.where(mad != 0)
+
+    def _time_of_day_median_mad(self, x: Series) -> tuple[Series, Series]:
+        """Median and MAD of each record of *x* from the records at the same time of day.
+
+        The values go into a day x time-of-day matrix. For each time of day the window
+        holds that column and ``time_of_day_slots`` columns on either side (across
+        midnight from the day before or after), on the ``self._window_days // 2`` days
+        before and after. Windows with fewer than ``min_records`` values give NaN, so the
+        record is not tested. A MAD of exactly zero is handled as in
+        ``_rolling_median_mad``.
+        """
+        from numpy.lib.stride_tricks import sliding_window_view
+        step = self._step(self.series.index)
+        per_day = int(pd.Timedelta('1D') / step)
+        day = x.index.normalize()
+        slot = np.asarray((x.index - day) // step, dtype=int)
+        days = pd.date_range(day.min(), day.max(), freq='D')
+        rows = days.get_indexer(day)
+        a = np.full((len(days), per_day), np.nan)
+        a[rows, slot] = x.to_numpy(dtype=float)
+
+        s, half = self.time_of_day_slots, self._window_days // 2
+        if s:
+            blank = np.full((1, per_day), np.nan)
+            before = np.vstack([blank, a[:-1]])[:, per_day - s:]  # last slots of the day before
+            after = np.vstack([a[1:], blank])[:, :s]               # first slots of the day after
+            a = np.hstack([before, a, after])
+        pad = np.full((half, a.shape[1]), np.nan)
+        a = np.vstack([pad, a, pad])
+
+        med = np.full((len(days), per_day), np.nan)
+        mad = np.full((len(days), per_day), np.nan)
+        for j in range(per_day):
+            win = sliding_window_view(a[:, j:j + 2 * s + 1], (2 * half + 1, 2 * s + 1))
+            win = win.reshape(len(days), -1)
+            enough = np.sum(~np.isnan(win), axis=1) >= self.min_records
+            if not enough.any():
+                continue
+            m = np.nanmedian(win[enough], axis=1)
+            med[enough, j] = m
+            mad[enough, j] = np.nanmedian(np.abs(win[enough] - m[:, None]), axis=1)
+
+        median = pd.Series(med[rows, slot], index=x.index)
+        mad = pd.Series(mad[rows, slot], index=x.index)
         degenerate = (mad == 0) & x.notna()
         if degenerate.any():
             self._n_degenerate_scale += int(degenerate.sum())
@@ -538,7 +646,18 @@ class Hampel(FlagBase):
         else:
             s_to_test = s
 
-        if self.separate_day_night:
+        if self.by_time_of_day:
+            # Median and MAD from the same time of day; per period only the threshold.
+            median, mad = self._time_of_day_median_mad(s_to_test)
+            n_sigma = self.n_sigma
+            if self.separate_day_night:
+                in_day = self.is_daytime.reindex(s_to_test.index, fill_value=False).to_numpy(dtype=bool)
+                n_sigma = pd.Series(np.where(in_day, self.n_sigma_daytime, self.n_sigma_nighttime),
+                                    index=s_to_test.index)
+            upper_bound = median + self.k * mad * n_sigma
+            lower_bound = median - self.k * mad * n_sigma
+            is_outlier = ((s_to_test > upper_bound) | (s_to_test < lower_bound)).fillna(False)
+        elif self.separate_day_night:
             # Median and MAD per period, as in ONEFlux qc_auto (Papale et al. 2006).
             # With shared statistics the quiet night (e.g. radiation near zero) set
             # the MAD and normal daytime variability looked like spikes (L239). The

@@ -84,6 +84,7 @@ class AbsoluteLimits(FlagBase):
                  lat: float = None,
                  lon: float = None,
                  utc_offset: int = None,
+                 nighttime_threshold: float = 20,
                  idstr: str = None,
                  showplot: bool = False,
                  verbose: bool = False,
@@ -113,6 +114,7 @@ class AbsoluteLimits(FlagBase):
                 Example: 9.790639
             utc_offset: UTC offset of timestamp_index (required for day/night mode).
                 Example: 1 for UTC+01:00
+            nighttime_threshold: Potential radiation (W m-2) below which a record is nighttime.
             idstr: Identifier, added as suffix to output variable names.
             showplot: Show plot with removed data points.
             verbose: More text output to console if True.
@@ -168,7 +170,8 @@ class AbsoluteLimits(FlagBase):
             self.flag_daytime, flag_nighttime, self.is_daytime, self.is_nighttime = (
                 create_daytime_nighttime_flags(
                     timestamp_index=self.series.index,
-                    lat=lat, lon=lon, utc_offset=utc_offset
+                    lat=lat, lon=lon, utc_offset=utc_offset,
+                    nighttime_threshold=nighttime_threshold
                 )
             )
         else:
