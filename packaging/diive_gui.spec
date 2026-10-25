@@ -68,6 +68,14 @@ hiddenimports += [
     "diive.qaqc",
     "diive.times",
     "diive.variables",
+    # Modules behind the top-level utilities (diive/__init__.py, _LAZY_ATTRIBUTES).
+    "diive.configs.exampledata",
+    "diive.core.dfun.frames",
+    "diive.core.dfun.stats",
+    "diive.core.io.filereader",
+    "diive.core.io.files",
+    "diive.core.utils.console",
+    "diive.io.binary.extract",
 ]
 
 # The GUI's menu tabs are registered by module path and imported on first open

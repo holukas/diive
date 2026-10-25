@@ -9,7 +9,9 @@ Part of the diive library: https://github.com/holukas/diive
 import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
-from scipy import stats as scipy_stats
+
+# scipy.stats is imported inside the three functions that use it: at module
+# level it costs ~0.45 s, which every importer of q25/q75 paid (GUI P7).
 
 from diive.core.funcs.funcs import zscore
 
@@ -139,6 +141,7 @@ def series_skewness(s: Series) -> float:
     s_clean = s.dropna()
     if len(s_clean) < 3:  # bias-corrected skewness is undefined below n=3
         return np.nan
+    from scipy import stats as scipy_stats
     return scipy_stats.skew(s_clean, bias=False)
 
 
@@ -153,6 +156,7 @@ def series_kurtosis(s: Series) -> float:
     s_clean = s.dropna()
     if len(s_clean) < 4:  # bias-corrected kurtosis is undefined below n=4
         return np.nan
+    from scipy import stats as scipy_stats
     return scipy_stats.kurtosis(s_clean, bias=False)
 
 
@@ -201,6 +205,7 @@ def outlier_count(s: Series, threshold: float = 3, method: str = 'zscore') -> in
     s_clean = s.dropna()
 
     if method == 'zscore':
+        from scipy import stats as scipy_stats
         z_scores = np.abs(scipy_stats.zscore(s_clean))
         return int((z_scores > threshold).sum())
 
