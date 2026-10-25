@@ -24,6 +24,110 @@ from diive.flux.postprocessingchain.levels._rerun import (
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
 
 
+def nighttime_uncertainty(
+        data: FluxLevelData,
+        outlier_detector: StepwiseOutlierDetection,
+        randunc_col: str,
+        ta: str,
+        vpd: str,
+        swin: str,
+        vpd_in_kpa: bool = True,
+        z_values: tuple = (2, 3),
+        verbose: int | bool | None = None,
+) -> pd.DataFrame:
+    """Random uncertainty of each record, for the negative-nighttime test of Level 3.2.
+
+    Three uncertainties per measured record, as columns of the returned frame:
+
+    - ``FS``: the uncertainty EddyPro reports for each half-hour (``randunc_col``, e.g.
+      ``FC_RANDUNC_HF``). It covers the sampling error of that half-hour's covariance only
+      (Finkelstein and Sims 2001), so it is small.
+    - ``PAS20``: the random uncertainty of FLUXNET2015 and ONEFlux (Pastorello et al. 2020,
+      :class:`~diive.flux.lowres.uncertainty.RandomUncertaintyPAS20`): the spread of measured
+      fluxes under similar conditions (air temperature, VPD, radiation) within days of each
+      record. It covers the whole random error.
+    - ``MAX``: the larger of the two for each record. A value is then called clearly below zero
+      only when neither uncertainty explains it.
+
+    PAS20 is computed from the series the detector holds now, so call this after the other
+    outlier tests have been accepted: outliers would otherwise widen it. Records without a value
+    get no uncertainty. A table compares, for each uncertainty and each ``z``, how many nighttime
+    records lie below ``-z`` times it.
+
+    Args:
+        data: Chain container, for the drivers and the EddyPro uncertainty in ``full_df``.
+        outlier_detector: The Level-3.2 detector, after the tests to run before this one.
+        randunc_col: Column of ``data.full_df`` with EddyPro's random uncertainty of the flux.
+        ta: Air temperature column of ``data.full_df`` (degC), complete.
+        vpd: VPD column of ``data.full_df``, complete; kPa unless ``vpd_in_kpa`` is False.
+        swin: Incoming shortwave radiation column of ``data.full_df`` (W m-2), complete.
+        vpd_in_kpa: Whether ``vpd`` is in kPa.
+        z_values: The ``z`` of the comparison table.
+        verbose: Verbosity for the console helpers.
+
+    Returns:
+        DataFrame with the columns ``FS``, ``PAS20`` and ``MAX`` on the series' index.
+
+    Example::
+
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_hampel_test(...); sod.addflag()
+        sigma = nighttime_uncertainty(data, sod, randunc_col='FC_RANDUNC_HF',
+                                      ta='TA_F', vpd='VPD_F', swin='SW_IN_F')
+        sod.flag_outliers_negative_night_test(uncertainty=sigma['MAX'], z=2, showplot=True)
+        sod.addflag()
+    """
+    from diive.flux.lowres.uncertainty import RandomUncertaintyPAS20
+    from diive.flux.postprocessingchain.reports import _print_report, _table
+
+    series = outlier_detector.series_hires_cleaned
+    full = data.full_df
+    for col in (randunc_col, ta, vpd, swin):
+        if col not in full.columns:
+            raise ValueError(f"{col!r} is not in data.full_df.")
+    frame = pd.DataFrame({'flux': series,
+                          # PAS20 takes a measured and a gap-filled flux; the test judges measured
+                          # records only, so both are the measured series, under two names.
+                          'flux_gf': series,
+                          'ta': full[ta].reindex(series.index),
+                          'vpd': full[vpd].reindex(series.index),
+                          'swin': full[swin].reindex(series.index)})
+    pas = RandomUncertaintyPAS20(df=frame, fluxcol='flux', fluxgapfilledcol='flux_gf', tacol='ta',
+                                 vpdcol='vpd', swincol='swin', vpd_in_kpa=vpd_in_kpa)
+    # PAS20 reports the time of each of its four methods; that is debug detail here.
+    from diive.core.utils.console import VERBOSE_DEBUG, VERBOSE_ERROR, _vlevel, get_verbosity, set_verbosity
+    previous = get_verbosity()
+    if _vlevel(verbose) < VERBOSE_DEBUG:
+        set_verbosity(VERBOSE_ERROR)
+    try:
+        pas.run()
+    finally:
+        set_verbosity(previous)
+    has = series.notna()
+    out = pd.DataFrame({'FS': full[randunc_col].reindex(series.index).where(has),
+                        'PAS20': pas.randunc_series.reindex(series.index).where(has)})
+    out['MAX'] = out[['FS', 'PAS20']].max(axis=1, skipna=False)
+
+    night = data.fpc_df['NIGHTTIME'].reindex(series.index) == 1
+    value = series[night & has]
+    table = _table()
+    table.add_column("uncertainty")
+    table.add_column("median at night", justify="right")
+    for z in z_values:
+        table.add_column(f"below -{z:g} sigma", justify="right")
+    for col in out.columns:
+        sigma = out.loc[value.index, col]
+        cells = [col, f"{sigma.median():.2f}"]
+        for z in z_values:
+            n = int((value < -z * sigma).sum())
+            cells.append(f"{n:,} ({100 * n / len(value):.1f} %)" if len(value) else "-")
+        table.add_row(*cells)
+    _print_report(f"Random uncertainty of the {len(value):,} nighttime records", table,
+                  ["FS: EddyPro, sampling error of each half-hour. PAS20: spread of similar "
+                   "measurements (ONEFlux). MAX: the larger of the two."], verbose=verbose)
+    return out
+
+
 def make_level32_detector(
         data: FluxLevelData,
 ) -> tuple[FluxLevelData, StepwiseOutlierDetection]:

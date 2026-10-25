@@ -676,6 +676,314 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
     plt.show()
 
 
+def _quality_classes(data, ustar_scenario: str | None) -> dict:
+    """The flux split into quality classes for one USTAR scenario, plus its gap-filled result.
+
+    ``best``: QCF 0 after Level 3.3, the highest quality. ``used``: the records the gap-filling
+    started from (QCF below the accepted limit, 0 and 1 by default). ``rejected``: every record
+    with a value that is not used, whatever test removed it. ``filled``: the gap-filled result of
+    the first L4.1 method that ran for this scenario.
+    """
+    used_all = data.levels.filteredseries_level33_qcf
+    if not used_all:
+        raise RuntimeError("run_level33_*() must be called first.")
+    scenario = ustar_scenario or next(iter(used_all))
+    if scenario not in used_all:
+        raise ValueError(f"USTAR scenario {scenario!r} not found. Available: {list(used_all)}")
+    used = used_all[scenario]
+    best = data.levels.filteredseries_level33_hq[scenario]
+    corrected = data.fpc_df[data.levels.flux_corrected_col or data.meta.fluxcol]
+    rejected = corrected.where(corrected.notna() & used.isna())
+    gf_cols = data.gapfilled_cols()
+    method = next((m for m, sc in gf_cols.items() if scenario in sc), None)
+    filled = data.fpc_df[gf_cols[method][scenario]] if method else None
+    return dict(scenario=scenario, best=best, used=used, qcf1=used.where(best.isna()),
+                rejected=rejected, filled=filled, method=method,
+                night=data.fpc_df['NIGHTTIME'] == 1, flux=data._flux_label())
+
+
+def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = '',
+                          showplot: bool = True) -> None:
+    """Heatmaps of the flux by quality class, and of the gap-filled result.
+
+    Four panels on one colour scale centred on zero: the highest-quality records (QCF 0), the
+    records the gap-filling used (QCF 0 and 1 by default), the records rejected by any level,
+    and the gap-filled result. Grey cells hold no value in that class.
+
+    Args:
+        data: Chain container after ``run_level33_*`` (the last panel needs ``run_level41_*``).
+        ustar_scenario: USTAR scenario to show. Defaults to the first.
+        units: Unit of the flux, for the colour bars.
+        showplot: Call ``plt.show()`` after drawing.
+    """
+    import matplotlib.pyplot as plt
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    from diive.core.plotting.styles import chainplots as cp
+
+    q = _quality_classes(data, ustar_scenario)
+    panels = [(q['best'], "Highest quality (QCF 0)"),
+              (q['used'], "Used for gap-filling"),
+              (q['rejected'], "Rejected"),]
+    if q['filled'] is not None:
+        panels.append((q['filled'], f"Gap-filled, {_label(q['method'])}"))
+    limit = cp.symmetric_limit(*[s for s, _ in panels])
+    fig = plt.figure(figsize=(4.4 * len(panels), 6.2), layout='constrained')
+    gs = fig.add_gridspec(1, len(panels))
+    first = None
+    for i, (series, title) in enumerate(panels):
+        ax = fig.add_subplot(gs[0, i], sharey=first)
+        first = first or ax
+        HeatmapDateTime(series=series, verbose=False).plot(
+            ax=ax, fig=fig, vmin=-limit, vmax=limit, cmap='RdBu_r', cb_extend='both',
+            cb_digits_after_comma='auto', cb_labelsize=8, zlabel=units or q['flux'],
+            color_bad=cp.NAN_COLOR, as_image=True, format_style=cp.heatmap_style(title))
+        if i:
+            plt.setp(ax.get_yticklabels(), visible=False)
+            ax.yaxis.get_label().set_visible(False)
+    n = len(q['used'])
+    counts = [f"QCF 0: {q['best'].count():,} ({100 * q['best'].count() / n:.1f} %)",
+              f"used: {q['used'].count():,} ({100 * q['used'].count() / n:.1f} %)",
+              f"rejected: {q['rejected'].count():,} ({100 * q['rejected'].count() / n:.1f} %)"]
+    cp.figure_title(fig, f"{q['flux']} by quality class, USTAR scenario {q['scenario']}",
+                    "   ".join(counts) + f"   of {n:,} half-hours. Grey: no value in that class.")
+    if showplot:
+        plt.show()
+
+
+def plot_quality_timeseries(data, ustar_scenario: str | None = None, units: str = '',
+                            showplot: bool = True) -> None:
+    """Time series of the flux by quality class, by day and by night, and the gap-filled result.
+
+    Three rows, each with its distribution beside it. Daytime and nighttime show the records of
+    QCF 0, QCF 1 and the rejected ones in three colours; the last row shows the gap-filled result,
+    measured and filled records apart. The y-axis spans the records the gap-filling used, with a
+    margin; rejected records beyond it are counted in the subtitle, not drawn.
+
+    Args:
+        data: Chain container after ``run_level33_*`` (the last row needs ``run_level41_*``).
+        ustar_scenario: USTAR scenario to show. Defaults to the first.
+        units: Unit of the flux, for the y-axis label.
+        showplot: Call ``plt.show()`` after drawing.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from diive.core.base.flagbase import _marginal_histogram
+    from diive.core.plotting.plotfuncs import nice_date_ticks
+    from diive.core.plotting.styles import chainplots as cp
+
+    q = _quality_classes(data, ustar_scenario)
+    night = q['night']
+    lo, hi = q['used'].quantile([0.0005, 0.9995])
+    pad = 0.15 * (hi - lo)
+    ylim = (lo - pad, hi + pad)
+    c0, c1, c2 = cp.QCF_COLORS
+    classes = [(q['rejected'], c2, 'rejected', 2), (q['qcf1'], c1, 'QCF 1', 3),
+               (q['best'], c0, 'QCF 0', 4)]
+    rows = [("Daytime", ~night), ("Nighttime", night)]
+    has_filled = q['filled'] is not None
+    n_rows = 3 if has_filled else 2
+
+    fig = plt.figure(figsize=(15, 3.6 * n_rows + 0.8), layout='constrained')
+    gs = fig.add_gridspec(n_rows, 2, width_ratios=[5, 1])
+    axes = []
+    for r, (label, mask) in enumerate(rows):
+        ax = fig.add_subplot(gs[r, 0], sharex=axes[0] if axes else None)
+        ax_h = fig.add_subplot(gs[r, 1], sharey=ax)
+        layers = []
+        for series, color, name, z in classes:
+            sel = series[mask].dropna()
+            ax.plot(sel.index, sel.to_numpy(), color=color, zorder=z,
+                    label=f"{name} ({len(sel):,})", **{**cp.POINTS, 'markersize': 3})
+            layers.append((sel.clip(*ylim), color, name))
+        _marginal_histogram(ax_h, layers)
+        ax.axhline(0, color=cp.INK, linewidth=0.7, alpha=0.5, zorder=1)
+        ax.set_ylim(ylim)
+        cp.style_axes(ax)
+        ax.set_ylabel(f"{q['flux']}{f' ({units})' if units else ''}")
+        cp.panel_label(ax, label)
+        ax.legend(loc='lower right', bbox_to_anchor=(1, 1), frameon=False, markerscale=3,
+                  fontsize=9, ncol=3, borderaxespad=0.2)
+        axes.append(ax)
+    if has_filled:
+        ax = fig.add_subplot(gs[2, 0], sharex=axes[0])
+        ax_h = fig.add_subplot(gs[2, 1], sharey=ax)
+        measured = q['filled'].where(q['used'].notna()).dropna()
+        filled_only = q['filled'].where(q['used'].isna()).dropna()
+        ax.plot(measured.index, measured.to_numpy(), color=cp.KEPT, zorder=2,
+                label=f"measured ({len(measured):,})", **cp.POINTS)
+        ax.plot(filled_only.index, filled_only.to_numpy(), color=cp.CLEANED, zorder=3,
+                label=f"filled ({len(filled_only):,})", **cp.POINTS)
+        _marginal_histogram(ax_h, [(measured.clip(*ylim), cp.KEPT, 'measured'),
+                                   (filled_only.clip(*ylim), cp.CLEANED, 'filled')])
+        ax.axhline(0, color=cp.INK, linewidth=0.7, alpha=0.5, zorder=1)
+        ax.set_ylim(ylim)
+        cp.style_axes(ax)
+        ax.set_ylabel(f"{q['flux']}{f' ({units})' if units else ''}")
+        cp.panel_label(ax, f"Gap-filled result, {_label(q['method'])}")
+        ax.legend(loc='lower right', bbox_to_anchor=(1, 1), frameon=False, markerscale=3,
+                  fontsize=9, ncol=2, borderaxespad=0.2)
+        axes.append(ax)
+    for ax in axes[:-1]:
+        ax.tick_params(axis='x', labelbottom=False)
+    nice_date_ticks(ax=axes[-1])
+
+    outside = int(((q['rejected'] < ylim[0]) | (q['rejected'] > ylim[1])).sum())
+    cp.figure_title(fig, f"{q['flux']} by quality class, USTAR scenario {q['scenario']}",
+                    f"The y-axis spans the records used for gap-filling; {outside:,} rejected "
+                    f"records lie outside it and are not drawn (the histograms add them at the "
+                    f"edges).")
+    if showplot:
+        plt.show()
+
+
+def _nighttime_frame(data, ustar_scenario, randunc_col):
+    q = _quality_classes(data, ustar_scenario)
+    if randunc_col not in data.full_df.columns:
+        raise ValueError(f"{randunc_col!r} is not in the input data. Pass the random uncertainty "
+                         f"column of the flux as randunc_col.")
+    nee = q['used'][q['night']].dropna()
+    sigma = data.full_df[randunc_col].reindex(nee.index)
+    keep = sigma.notna() & (sigma > 0)
+    return q, nee[keep], sigma[keep]
+
+
+def report_nighttime_negatives(data, randunc_col: str = 'FC_RANDUNC_HF',
+                               z_values: tuple = (1, 1.96, 3), gain: float = 1.0, units: str = '',
+                               verbose: int | bool | None = None) -> DataFrame:
+    """Report how far the negative nighttime records lie below zero, in random uncertainties.
+
+    At night there is no photosynthesis, so NEE is respiration and should not be negative. A
+    negative value can still be measurement noise around a small positive respiration. Dividing
+    each value by its random uncertainty tells the two apart: a value within ``z`` uncertainties
+    of zero is consistent with noise, one further below is not. One row per USTAR scenario and
+    ``z``, over the nighttime records the gap-filling used.
+
+    Args:
+        data: Chain container after ``run_level33_*``.
+        randunc_col: Column of ``data.full_df`` with the random uncertainty of the flux, in the
+            flux units (EddyPro: ``FC_RANDUNC_HF``).
+        z_values: Numbers of uncertainties to count below.
+        gain: Factor for the sums (``12.011 * 1e-6 * 1800`` for NEE in gC m-2).
+        units: Unit of the sums.
+        verbose: Verbosity for the console helpers.
+
+    Returns:
+        The table as a DataFrame.
+    """
+    rows = []
+    table = _table()
+    for col in ("USTAR", "night records", "negative", "below", "records", "%", "sum"):
+        table.add_column(col, justify="right" if col not in ("USTAR", "below") else "left")
+    for scenario in data.levels.filteredseries_level33_qcf:
+        _, nee, sigma = _nighttime_frame(data, scenario, randunc_col)
+        z = nee / sigma
+        neg = nee < 0
+        for k in z_values:
+            sel = z < -k
+            row = {'USTAR': scenario, 'night records': len(nee), 'negative': int(neg.sum()),
+                   'below': f"-{k} sigma", 'records': int(sel.sum()),
+                   'pct': 100 * sel.mean() if len(nee) else float('nan'),
+                   'sum': nee[sel].sum() * gain}
+            rows.append(row)
+            table.add_row(scenario, f"{len(nee):,}", f"{int(neg.sum()):,} ({100 * neg.mean():.1f} %)",
+                          row['below'], f"{row['records']:,}", f"{row['pct']:.1f}",
+                          f"{row['sum']:+,.1f}")
+        table.add_section()
+    _print_report(f"Negative nighttime records against their random uncertainty ({randunc_col})",
+                  table, [f"Records used for gap-filling only. Sum in {units or 'flux units'}: "
+                          f"what those records add to the total."], verbose=verbose)
+    return DataFrame(rows)
+
+
+def plot_nighttime_negatives(data, ustar_scenario: str | None = None,
+                             randunc_col: str = 'FC_RANDUNC_HF', z: float = 1.96,
+                             units: str = '', showplot: bool = True) -> None:
+    """Nighttime records against their random uncertainty: which negative values are plausible.
+
+    Three panels over the nighttime records the gap-filling used. Left: each value against its
+    random uncertainty, with the line ``-z`` uncertainties below zero; a negative value above the
+    line is consistent with noise, one below it is not. Middle: the values in units of their
+    uncertainty, with the same limit. Right: per month, the share of nighttime records that are
+    negative and the share that lie below the limit.
+
+    Args:
+        data: Chain container after ``run_level33_*``.
+        ustar_scenario: USTAR scenario to show. Defaults to the first.
+        randunc_col: Column of ``data.full_df`` with the random uncertainty of the flux.
+        z: Number of uncertainties below zero that the limit lies at.
+        units: Unit of the flux, for the axis labels.
+        showplot: Call ``plt.show()`` after drawing.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from diive.core.plotting.styles import chainplots as cp
+
+    q, nee, sigma = _nighttime_frame(data, ustar_scenario, randunc_col)
+    zs = nee / sigma
+    below = zs < -z
+    within = (nee < 0) & ~below
+    positive = nee >= 0
+    c0, c1, c2 = cp.QCF_COLORS
+    unit_txt = f" ({units})" if units else ""
+
+    fig = plt.figure(figsize=(15, 5.8), layout='constrained')
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.3, 1, 1.2])
+    ax_sc, ax_z, ax_m = (fig.add_subplot(gs[0, i]) for i in range(3))
+
+    for mask, color, label, zo in ((positive, cp.KEPT, 'positive', 2),
+                                   (within, c1, f'negative, within {z:g} sigma', 3),
+                                   (below, c2, f'negative, below -{z:g} sigma', 4)):
+        ax_sc.plot(sigma[mask], nee[mask], color=color, zorder=zo,
+                   label=f"{label} ({int(mask.sum()):,})", **{**cp.POINTS, 'markersize': 3.5})
+    xs = np.linspace(0, sigma.quantile(0.995), 50)
+    ax_sc.plot(xs, -z * xs, color=c2, linewidth=1.2, linestyle=(0, (4, 3)), zorder=5,
+               label=f"-{z:g} x uncertainty")
+    ax_sc.axhline(0, color=cp.INK, linewidth=0.7, alpha=0.5)
+    ax_sc.set_xlim(0, sigma.quantile(0.995))
+    ax_sc.set_ylim(nee.quantile(0.002) * 1.1 if nee.quantile(0.002) < 0 else -1,
+                   nee.quantile(0.995))
+    ax_sc.set_xlabel(f"random uncertainty{unit_txt}")
+    ax_sc.set_ylabel(f"nighttime {q['flux']}{unit_txt}")
+    cp.style_axes(ax_sc, grid_axis='both')
+    cp.panel_label(ax_sc, "Value against its uncertainty")
+    ax_sc.legend(loc='upper left', frameon=False, fontsize=8.5, markerscale=3)
+
+    zclip = zs.clip(-15, 30)
+    edges = np.arange(-15, 30.5, 0.5)
+    ax_z.hist([zclip[positive], zclip[within], zclip[below]], bins=edges, stacked=True,
+              color=[cp.KEPT, c1, c2], edgecolor='white', linewidth=0.3)
+    ax_z.axvline(-z, color=c2, linewidth=1.2, linestyle=(0, (4, 3)))
+    ax_z.axvline(0, color=cp.INK, linewidth=0.7, alpha=0.5)
+    ax_z.set_yscale('log')
+    ax_z.set_xlabel("value / uncertainty")
+    ax_z.set_ylabel("records")
+    cp.style_axes(ax_z)
+    cp.panel_label(ax_z, "Value in units of its uncertainty")
+
+    months = nee.index.to_period('M')
+    share_neg = (nee < 0).groupby(months).mean() * 100
+    share_below = below.groupby(months).mean() * 100
+    x = share_neg.index.to_timestamp() + pd.Timedelta(days=14)
+    ax_m.bar(x, share_neg.to_numpy(), width=24, color=c1, label='negative')
+    ax_m.bar(x, share_below.to_numpy(), width=24, color=c2, label=f'below -{z:g} sigma')
+    ax_m.set_ylabel('% of nighttime records')
+    cp.style_axes(ax_m)
+    cp.panel_label(ax_m, "Per month")
+    ax_m.legend(loc='upper right', frameon=False, fontsize=8.5)
+    from diive.core.plotting.plotfuncs import nice_date_ticks
+    nice_date_ticks(ax=ax_m)
+
+    n = len(nee)
+    cp.figure_title(
+        fig, f"Negative nighttime {q['flux']}, USTAR scenario {q['scenario']}",
+        f"{n:,} nighttime records used for gap-filling: {int((nee < 0).sum()):,} negative "
+        f"({100 * (nee < 0).mean():.1f} %), {int(below.sum()):,} of them below -{z:g} times their "
+        f"random uncertainty ({100 * below.mean():.1f} %). Median uncertainty "
+        f"{sigma.median():.2f}, median value {nee.median():.2f}.")
+    if showplot:
+        plt.show()
+
+
 def plot_mds_gapfilling_qualities(data) -> None:
     """Plot the MDS fill-quality overview for every USTAR scenario.
 

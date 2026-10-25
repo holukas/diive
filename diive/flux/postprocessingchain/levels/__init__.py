@@ -25,7 +25,9 @@ from diive.flux.postprocessingchain.levels.level31 import (
     level31_storage_col,
     run_level31,
 )
-from diive.flux.postprocessingchain.levels.level32 import make_level32_detector, run_level32
+from diive.flux.postprocessingchain.levels.level32 import (
+    make_level32_detector, nighttime_uncertainty, run_level32,
+)
 from diive.flux.postprocessingchain.levels.level33 import (
     run_level33_constant_ustar,
     run_level33_ustar_detection,
@@ -56,6 +58,7 @@ __all__ = [
     'run_level31',
     'level31_storage_col',
     'make_level32_detector',
+    'nighttime_uncertainty',
     'run_level32',
     'run_level33_constant_ustar',
     'run_level33_ustar_detection',

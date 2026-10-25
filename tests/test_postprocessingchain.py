@@ -1057,6 +1057,48 @@ class TestChainReports(unittest.TestCase):
         plot_mds_gapfilling_qualities(self.data)
         plt.close('all')
 
+    def test_quality_classes_split_the_records(self):
+        """QCF 0 lies inside the used records, and used and rejected never share a record."""
+        from diive.flux.postprocessingchain.reports import _quality_classes
+        q = _quality_classes(self.data, 'CUT_50')
+        self.assertTrue((q['best'].notna() <= q['used'].notna()).all())
+        self.assertFalse((q['used'].notna() & q['rejected'].notna()).any())
+        self.assertEqual(int(q['qcf1'].count()), int(q['used'].count() - q['best'].count()))
+
+    def test_quality_plots_draw_one_figure_each(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.postprocessingchain import (plot_nighttime_negatives, plot_quality_heatmaps,
+                                                    plot_quality_timeseries)
+        for fn in (plot_quality_heatmaps, plot_quality_timeseries, plot_nighttime_negatives):
+            plt.close('all')
+            fn(self.data, showplot=False)
+            self.assertEqual(len(plt.get_fignums()), 1, msg=fn.__name__)
+        plt.close('all')
+
+    def test_report_nighttime_negatives_counts_below_the_limit(self):
+        from diive.flux.postprocessingchain import report_nighttime_negatives
+        table = report_nighttime_negatives(self.data, z_values=(1.96,), verbose=0)
+        used = self.data.levels.filteredseries_level33_qcf['CUT_50']
+        night = self.data.fpc_df['NIGHTTIME'] == 1
+        nee = used[night].dropna()
+        sigma = self.data.full_df['FC_RANDUNC_HF'].reindex(nee.index)
+        keep = sigma.notna() & (sigma > 0)
+        expected = int((nee[keep] / sigma[keep] < -1.96).sum())
+        self.assertEqual(int(table.loc[0, 'records']), expected)
+        self.assertEqual(int(table.loc[0, 'night records']), int(keep.sum()))
+
+    def test_nighttime_uncertainty_gives_three_uncertainties(self):
+        from diive.flux.postprocessingchain import make_level32_detector, nighttime_uncertainty
+        data, sod = make_level32_detector(self.data)
+        sigma = nighttime_uncertainty(data, sod, randunc_col='FC_RANDUNC_HF', ta='TA_1_1_1',
+                                      vpd='VPD_kPa', swin='SW_IN_1_1_1', verbose=0)
+        self.assertEqual(list(sigma.columns), ['FS', 'PAS20', 'MAX'])
+        both = sigma.dropna()
+        self.assertGreater(len(both), 0)
+        self.assertTrue((both['MAX'] >= both['FS']).all() and (both['MAX'] >= both['PAS20']).all())
+        # Only records with a value get an uncertainty.
+        self.assertFalse(sigma['FS'][sod.series_hires_cleaned.isna()].notna().any())
+
 
 def _eddypro_input():
     """EddyPro example data without the columns init_flux_data computes."""
