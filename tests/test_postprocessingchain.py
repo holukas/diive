@@ -1007,6 +1007,26 @@ class TestChainReports(unittest.TestCase):
             out = self._capture(fn, self.data)
             self.assertIn('MDS', out, msg=f"{fn.__name__} said nothing about MDS")
 
+    def test_report_annual_sums_matches_the_gap_filled_series(self):
+        from diive.flux.postprocessingchain import report_annual_sums
+        gain = 12.011 * 1e-6 * 1800
+        out = self._capture(report_annual_sums, self.data, gain=gain, units='gC m-2')
+        sums = report_annual_sums(self.data, gain=gain, verbose=0)
+        col = self.data.gapfilled_cols()['mds']['CUT_50']
+        series = self.data.fpc_df[col]
+        expected = series.multiply(gain).groupby(series.index.year).sum(min_count=1)
+        self.assertTrue(sums[col].equals(expected))
+        self.assertIn('Annual sums (gC m-2)', out)
+        self.assertIn(f"{expected.iloc[0]:,.0f}", out)
+
+    def test_merged_df_summary_counts_columns_per_level(self):
+        out = self._capture(self.data.merged_df)
+        new_cols = [c for c in self.data.fpc_df.columns if c not in self.data.full_df.columns]
+        self.assertIn(f"chain: {len(new_cols)} (", out)
+        self.assertIn('L4.1: ', out)
+        # The full column list is a debug detail, not part of the default output.
+        self.assertNotIn(self.data.gapfilled_cols()['mds']['CUT_50'], out)
+
     def test_report_gapfilling_model_scores_prints_a_table(self):
         from diive.flux.postprocessingchain import report_gapfilling_model_scores
         out = self._capture(report_gapfilling_model_scores, self.data)

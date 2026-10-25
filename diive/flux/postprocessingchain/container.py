@@ -10,6 +10,8 @@ Part of the diive library: https://github.com/holukas/diive
 from __future__ import annotations
 
 import dataclasses
+import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -1141,37 +1143,31 @@ class FluxLevelData:
                 f"Available: {all_scenarios}"
             )
 
-        _COLORS = {
-            'rf':  '#2196F3',  # blue
-            'xgb': '#FF9800',  # orange
-            'mds': '#4CAF50',  # green
-        }
-        _LABELS = {
-            'rf':  'Random Forest',
-            'xgb': 'XGBoost',
-            'mds': 'MDS',
-        }
+        import diive.core.plotting.styles.chainplots as cp
+
+        _COLORS = {'rf': cp.SCENARIO_COLORS[1], 'xgb': cp.CLEANED, 'mds': '#26A69A'}
+        _LABELS = {'rf': 'Random Forest', 'xgb': 'XGBoost', 'mds': 'MDS'}
 
         # Two-phase: draw into a caller-supplied ax (GUI embedding) or own a
         # fresh figure. own_fig gates the layout/show steps the host handles.
         own_fig = ax is None
         if own_fig:
-            fig, ax = plt.subplots(figsize=(14, 5))
+            fig, ax = plt.subplots(figsize=(14, 5.5), layout='constrained')
         elif fig is None:
             fig = ax.figure
-        unit_str = f' ({units})' if units else ''
+        unit_str = f' {units}' if units else ''
+        ends = []  # (x, y, colour, text): labelled after all lines are drawn
 
         # Measured-only reference (L3.3 QCF series; gaps = 0 contribution)
         if show_measured:
             meas = self.levels.filteredseries_level33_qcf.get(ustar_scenario)
             if meas is not None:
                 meas_cumul = (meas * conv_factor).fillna(0).cumsum()
-                final = meas_cumul.iloc[-1]
-                legend_label = (f"Measured only  ({final:+.1f}{unit_str})"
-                                if units else f"Measured only  ({final:+.1f})")
-                ax.plot(meas_cumul.index, meas_cumul.values,
-                        color='#9E9E9E', linewidth=1.2, linestyle='--',
-                        alpha=0.8, label=legend_label, zorder=2)
+                ax.plot(meas_cumul.index, meas_cumul.values, color=cp.KEPT, linewidth=1.2,
+                        linestyle=(0, (4, 3)), label="measured records only, gaps counted as zero",
+                        zorder=2)
+                ends.append((meas_cumul.index[-1], meas_cumul.iloc[-1], cp.MUTED,
+                             f"{meas_cumul.iloc[-1]:,.0f}"))
 
         # One line per gap-filling method
         import warnings
@@ -1198,26 +1194,30 @@ class FluxLevelData:
                     stacklevel=2,
                 )
             cumul = (s * conv_factor).fillna(0).cumsum()
-            final = cumul.iloc[-1]
-            base_label = _LABELS.get(method_key, method_key.upper())
-            legend_label = (f"{base_label}  ({final:+.1f}{unit_str})"
-                            if units else f"{base_label}  ({final:+.1f})")
-            color = _COLORS.get(method_key, '#455A64')
-            ax.plot(cumul.index, cumul.values,
-                    color=color, linewidth=1.8, label=legend_label, zorder=3)
+            color = _COLORS.get(method_key, cp.INK)
+            ax.plot(cumul.index, cumul.values, color=color, linewidth=2.2,
+                    label=f"gap-filled, {_LABELS.get(method_key, method_key.upper())}", zorder=3)
+            ends.append((cumul.index[-1], cumul.iloc[-1], color, f"{cumul.iloc[-1]:,.0f}"))
 
-        ax.axhline(0, color='#455A64', linewidth=0.8, linestyle=':', alpha=0.6)
-        y_label = f'Cumulative flux{unit_str}'
-        ax.set_ylabel(y_label)
-        ax.legend(loc='best', fontsize=9, framealpha=0.92)
-        ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.4)
+        ax.axhline(0, color=cp.INK, linewidth=0.8, alpha=0.5, zorder=1)
+        for x, y, color, text in ends:
+            ax.plot(x, y, 'o', color=color, markersize=6, zorder=4)
+            ax.annotate(text, (x, y), xytext=(8, 0), textcoords='offset points', va='center',
+                        fontsize=10, fontweight='bold', color=color)
+        ax.set_ylabel(f"Cumulative {self._flux_label()}{f' ({units})' if units else ''}")
+        cp.style_axes(ax)
+        ax.margins(x=0.06)
+        ax.legend(loc='best', frameon=False, fontsize=9)
+        from diive.core.plotting.plotfuncs import nice_date_ticks
+        nice_date_ticks(ax=ax)
 
-        auto_title = (f"Cumulative gap-filled flux  --  "
-                      f"{self.meta.fluxcol}  |  USTAR scenario: {ustar_scenario}")
-        ax.set_title(title or auto_title, fontsize=11)
-
+        auto_title = f"Cumulative {self._flux_label()}, USTAR scenario {ustar_scenario}"
         if own_fig:
-            fig.tight_layout()
+            cp.figure_title(fig, title or auto_title,
+                            f"Sum over {cumul.index[0]:%Y-%m-%d} to {cumul.index[-1]:%Y-%m-%d}"
+                            f"{f', in {units}' if units else ''}")
+        else:
+            ax.set_title(title or auto_title, fontsize=11, loc='left', color=cp.INK)
 
         if saveplot:
             from diive.core.plotting.plotfuncs import save_fig
@@ -1231,7 +1231,7 @@ class FluxLevelData:
             ustar_scenario: str | None = None,
             vmin: float | None = None,
             vmax: float | None = None,
-            cmap: str = 'RdYlBu_r',
+            cmap: str | None = None,
             units: str = '',
             title: str | None = None,
             saveplot: bool = False,
@@ -1241,9 +1241,10 @@ class FluxLevelData:
     ) -> None:
         """Multi-panel heatmap: measured flux + one panel per gap-filling method.
 
-        Shows the L3.3 QCF-filtered (pre-gap-filling) series in the top panel,
+        Shows the L3.3 QCF-filtered (pre-gap-filling) series in the first panel,
         followed by one heatmap per gap-filling method that has been run (RF,
-        XGBoost, MDS).  All panels share the same colour scale so differences
+        XGBoost, MDS). When only one method has run, a last panel shows only the
+        records it filled. All panels share the same colour scale so differences
         between methods are visually comparable.
 
         Call this after at least one ``run_level41_*`` function has completed.
@@ -1251,11 +1252,13 @@ class FluxLevelData:
         Args:
             ustar_scenario: USTAR scenario label (e.g. ``'CUT_50'``).  Defaults
                 to the first available scenario.
-            vmin: Minimum colour value.  Auto-computed (2nd percentile of all
-                series) when ``None``.
-            vmax: Maximum colour value.  Auto-computed (98th percentile) when
-                ``None``.
-            cmap: Matplotlib colourmap.  Defaults to ``'RdYlBu_r'``.
+            vmin: Minimum colour value. When ``None`` and the flux crosses zero, the
+                scale is centred on zero at the 99th percentile of the absolute values;
+                otherwise the 2nd percentile of all series.
+            vmax: Maximum colour value, set the same way (98th percentile when the flux
+                does not cross zero).
+            cmap: Matplotlib colourmap. Defaults to ``'RdBu_r'`` (blue for negative
+                values, uptake for NEE, red for positive ones).
             units: Unit string shown on each colourbar (e.g. ``'umol m-2 s-1'``).
             title: Figure suptitle.  Auto-generated when ``None``.
             saveplot: Save the figure to disk.  Defaults to ``False``.
@@ -1327,52 +1330,79 @@ class FluxLevelData:
         from diive.core.plotting.heatmap_datetime import HeatmapDateTime
         from diive.core.plotting.styles.format import FormatStyle
 
+        import diive.core.plotting.styles.chainplots as cp
+
         _LABELS = {'rf': 'Random Forest', 'xgb': 'XGBoost', 'mds': 'MDS'}
 
-        # Build panel list: (series, subtitle)
+        # Panels: the measured series, then each method's gap-filled series. With a single
+        # method a third panel shows only the records it filled, so the reader sees where
+        # the model, and not the instrument, produced the values.
         panels = []
         meas = self.levels.filteredseries_level33_qcf.get(ustar_scenario)
         if meas is not None:
-            panels.append((meas, f"Before gap-filling  ({ustar_scenario})"))
+            panels.append((meas, "Measured"))
+        filled = []
         for method_key, scen_cols in cols.items():
             if ustar_scenario not in scen_cols:
                 continue
-            gf_col = scen_cols[ustar_scenario]
+            gf = self.fpc_df[scen_cols[ustar_scenario]]
             label = _LABELS.get(method_key, method_key.upper())
-            panels.append((self.fpc_df[gf_col], f"{label}  ({ustar_scenario})"))
+            panels.append((gf, f"Gap-filled, {label}"))
+            filled.append((gf, label))
+        if meas is not None and len(filled) == 1:
+            gf, label = filled[0]
+            panels.append((gf.where(meas.isna()), f"Filled records only, {label}"))
 
         if not panels:
             return
 
-        # Shared colour scale across all panels
+        # One colour scale for all panels. A flux that crosses zero gets a scale centred on
+        # zero (the 99th percentile of |values|), so uptake and release read as two colours.
         _vmin, _vmax = vmin, vmax
         if _vmin is None or _vmax is None:
             combined = pd.concat([s for s, _ in panels]).dropna()
-            if _vmin is None:
-                _vmin = float(np.nanpercentile(combined, 2))
-            if _vmax is None:
-                _vmax = float(np.nanpercentile(combined, 98))
+            if combined.min() < 0 < combined.max():
+                limit = cp.symmetric_limit(combined)
+                _vmin = -limit if _vmin is None else _vmin
+                _vmax = limit if _vmax is None else _vmax
+            else:
+                _vmin = float(np.nanpercentile(combined, 2)) if _vmin is None else _vmin
+                _vmax = float(np.nanpercentile(combined, 98)) if _vmax is None else _vmax
+        cmap = cmap or 'RdBu_r'
 
         n = len(panels)
-        zlabel = units or self.meta.fluxcol
+        zlabel = units or self._flux_label()
         # Two-phase: render into a caller-supplied figure (GUI embedding,
         # cleared first like RidgeLinePlot) or own a fresh one.
         own_fig = fig is None
         if own_fig:
-            fig = plt.figure(figsize=(n * 5.5, 5), constrained_layout=True)
+            fig = plt.figure(figsize=(n * 4.6, 6), layout='constrained')
         else:
             fig.clear()
         gs = gridspec.GridSpec(1, n, figure=fig)
 
+        first_ax = None
         for i, (series, subtitle) in enumerate(panels):
-            ax = fig.add_subplot(gs[0, i])
+            ax = fig.add_subplot(gs[0, i], sharey=first_ax)
+            first_ax = first_ax or ax
             hm = HeatmapDateTime(series=series, verbose=False)
-            hm.plot(ax=ax, fig=fig, format_style=FormatStyle(title=subtitle),
-                    vmin=_vmin, vmax=_vmax, cmap=cmap, zlabel=zlabel)
+            hm.plot(ax=ax, fig=fig, format_style=cp.heatmap_style(subtitle), vmin=_vmin, vmax=_vmax,
+                    cmap=cmap, zlabel=zlabel, cb_extend='both', cb_digits_after_comma='auto',
+                    cb_labelsize=8, color_bad=cp.NAN_COLOR, as_image=True)
+            if i:
+                plt.setp(ax.get_yticklabels(), visible=False)
+                ax.yaxis.get_label().set_visible(False)
 
-        auto_title = (f"Gap-filled flux heatmaps  --  "
-                      f"{self.meta.fluxcol}  |  USTAR scenario: {ustar_scenario}")
-        fig.suptitle(title or auto_title, fontsize=12, fontweight='bold')
+        auto_title = f"{self._flux_label()} before and after gap-filling, USTAR scenario {ustar_scenario}"
+        if own_fig:
+            subtitle = None
+            if meas is not None:
+                n_all, n_meas = len(meas), int(meas.notna().sum())
+                subtitle = (f"{n_meas:,} of {n_all:,} records measured "
+                            f"({100 * n_meas / n_all:.1f} %), the rest filled. Grey: no value.")
+            cp.figure_title(fig, title or auto_title, subtitle)
+        else:
+            fig.suptitle(title or auto_title, fontsize=12, fontweight='bold')
 
         if saveplot:
             from diive.core.plotting.plotfuncs import save_fig
@@ -1490,15 +1520,39 @@ class FluxLevelData:
             df = data.merged_df()
             dv.save_parquet(data=df, filename='chain_results', outpath='.')
         """
-        from diive.core.utils.console import info
+        from diive.core.utils.console import detail, info
 
         new_cols = [c for c in self.fpc_df.columns if c not in self.full_df.columns]
-        info("New variables from the flux post-processing chain:", verbose=verbose)
+        # One line per level instead of one per column: a full chain adds dozens of columns,
+        # and the list itself is available at debug verbosity.
+        levels = Counter(self._column_level(c) for c in new_cols)
+        order = ['L2', 'L3.1', 'L3.2', 'L3.3', 'L4.1', 'L4.2', 'other']
+        breakdown = ", ".join(f"{lvl}: {levels[lvl]}" for lvl in order if lvl in levels)
+        info(f"New variables from the flux post-processing chain: {len(new_cols)} ({breakdown})",
+             verbose=verbose)
         for c in new_cols:
-            info(f"  {c}", verbose=verbose)
+            detail(c, verbose=verbose)
         info("No variables in the input data were overwritten, only new variables added.",
              verbose=verbose)
         return pd.concat([self.full_df, self.fpc_df[new_cols]], axis=1)
+
+    def _flux_label(self) -> str:
+        """Name of the flux for plot titles: 'NEE' after the storage term is added, else the input."""
+        corrected = self.levels.flux_corrected_col
+        return str(corrected).split('_')[0] if corrected else self.meta.fluxcol
+
+    @staticmethod
+    def _column_level(col: str) -> str:
+        """The chain level a produced column belongs to, for the merged_df() summary."""
+        name = str(col)
+        if any(tag in name for tag in ('_NT_OF', '_NT_RP', '_DT_OF', '_DT_RP')):
+            return 'L4.2'
+        if re.search(r'_gf(XG|RF|MDS)', name):
+            return 'L4.1'
+        for level in ('L3.3', 'L3.2', 'L3.1', 'L2'):
+            if f'_{level}' in name:
+                return level
+        return 'other'
 
     def partitioned_cols(self) -> dict[str, dict[str, list[str]]]:
         """

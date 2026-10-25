@@ -150,6 +150,7 @@ from diive.flux.postprocessingchain.reports import (
     plot_feature_ranks_per_year,
     plot_gapfilled_cumulative,
     plot_mds_gapfilling_qualities,
+    report_annual_sums,
     report_gapfilling_feature_importances,
     report_gapfilling_model_scores,
     report_gapfilling_poolyears,
@@ -209,6 +210,7 @@ __all__ = [
     'run_level42_ustar_reference',
     # Reporting over a finished chain
     'report_gapfilling_variables',
+    'report_annual_sums',
     'report_gapfilling_model_scores',
     'report_traintest_model_scores',
     'report_traintest_details',
