@@ -162,6 +162,7 @@ from diive.flux.postprocessingchain.reports import (
     report_gapfilling_poolyears,
     report_gapfilling_variables,
     report_gaps,
+    report_model_overview,
     report_nighttime_negatives,
     report_traintest_details,
     report_traintest_model_scores,
@@ -235,6 +236,7 @@ __all__ = [
     'plot_nighttime_negatives',
     'report_gapfilling_input',
     'report_gaps',
+    'report_model_overview',
     'report_nighttime_negatives',
     # Level classes (for type-checking downstream)
     'FluxQualityFlagsEddyPro',

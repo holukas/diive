@@ -342,6 +342,7 @@ def report_gapfilling_model_scores(data, outpath: str | None = None,
 
 
 def report_gapfilling_feature_importances(data, outpath: str | None = None, top_n: int = 10,
+                                          ustar_scenario: str | None = None,
                                           verbose: int | bool | None = None) -> None:
     """Report the strongest SHAP feature importances of the ML gap-fillers.
 
@@ -353,10 +354,14 @@ def report_gapfilling_feature_importances(data, outpath: str | None = None, top_
         data: Chain container after at least one ``run_level41_*``.
         outpath: Directory to also write one CSV per method and scenario.
         top_n: Number of features shown in each table.
+        ustar_scenario: Report only this USTAR scenario, e.g. to give each table its own
+            heading in a notebook. Default: all scenarios.
         verbose: Verbosity for the console helpers.
     """
     unavailable = []
     for method, scenario, inst in _iter_level41(data):
+        if ustar_scenario is not None and scenario != ustar_scenario:
+            continue
         importances = _optional(inst, 'feature_importance_per_year')
         if importances is None:
             unavailable.append(f"{_label(method)} ({scenario})")
@@ -387,6 +392,91 @@ def report_gapfilling_feature_importances(data, outpath: str | None = None, top_
     if unavailable:
         notes.append(f"Not available for {', '.join(unavailable)} (no model trained).")
     _print_report("", None, notes, verbose=verbose)
+
+
+def report_model_overview(data, verbose: int | bool | None = None) -> DataFrame:
+    """Report how each gap-filling model was built and how well it did, one row per year.
+
+    For each ML method, USTAR scenario and year: the years the model was trained on, the
+    number of features, the training and test records, the number of trees (with early
+    stopping: the number it chose, and the maximum), the records the final model was fitted
+    on, the test scores, and how the target year's gaps were filled (by the model or, where a
+    driver was missing, by the fallback model on timestamp features). The notes describe the
+    procedure and list the hyperparameters. MDS trains no model and is left out.
+
+    Args:
+        data: Chain container after at least one ``run_level41_rf`` or ``run_level41_xgb``.
+        verbose: Verbosity for the console helpers.
+
+    Returns:
+        DataFrame with one row per method, scenario and year.
+    """
+    rows = []
+    params = {}
+    for method, scenario, inst in _iter_level41(data):
+        yearly = _optional(inst, 'results_yearly_')
+        if yearly is None:
+            continue
+        pools = _optional(inst, 'yearpools') or {}
+        for year, m in yearly.items():
+            details = m.traintest_details_
+            n_max = m.kwargs.get('n_estimators')
+            flag = m.gapfilling_df_[m.target_gapfilled_flag_col]
+            in_year = flag.index.year == int(year)
+            rows.append({
+                'method': _label(method), 'USTAR': scenario, 'year': year,
+                'trained on': _year_span(pools[year]['poolyears']) if year in pools else '-',
+                'features': len(details['X_names']),
+                'train': len(details['train_df']), 'test': len(details['test_df']),
+                'trees': m._n_trees if m._n_trees is not None else n_max, 'max trees': n_max,
+                'final fit': len(m.model_df.dropna()),
+                'test R2': m.scores_traintest_.get('r2'), 'test RMSE': m.scores_traintest_.get('rmse'),
+                'measured': int((flag[in_year] == 0).sum()),
+                'filled': int((flag[in_year] == 1).sum()),
+                'fallback': int((flag[in_year] == 2).sum()),
+            })
+            params.setdefault(_label(method), {k: v for k, v in m.kwargs.items() if v is not None})
+    out = DataFrame(rows)
+    if out.empty:
+        _print_report("Gap-filling models", None, ["No ML gap-filling model was trained."],
+                      verbose=verbose)
+        return out
+
+    table = _table()
+    show_method = out['method'].nunique() > 1
+    cols = (['method'] if show_method else []) + ['USTAR', 'year', 'trained on']
+    for col in cols:
+        table.add_column(col.replace(' ', '\n'), no_wrap=True)
+    for col in ('features', 'train', 'test', 'trees', 'final\nfit', 'test\nR²', 'test\nRMSE',
+                'filled', 'fall-\nback'):
+        table.add_column(col, justify="right", no_wrap=True)
+    previous = None
+    for _, r in out.iterrows():
+        if previous is not None and r['USTAR'] != previous:
+            table.add_section()
+        previous = r['USTAR']
+        trees = f"{r['trees']}" if r['trees'] == r['max trees'] else f"{r['trees']}/{r['max trees']}"
+        table.add_row(*([r['method']] if show_method else []), r['USTAR'], str(r['year']),
+                      r['trained on'], str(r['features']), f"{r['train']:,}", f"{r['test']:,}",
+                      trees, f"{r['final fit']:,}", f"{r['test R2']:.3f}", f"{r['test RMSE']:.2f}",
+                      f"{r['filled']:,}", f"{r['fallback']:,}")
+    notes = [
+        "Each year has its own model, trained on that year and its neighbours ('trained on').",
+        "train / test: a random 75 / 25 % split of the complete records; the test scores come from "
+        "the 25 %, which the model did not see.",
+        "trees: with early stopping, the number it chose on 10 % of the training records, "
+        "out of the maximum; at the maximum, more trees might still help.",
+        "final fit: the gaps are filled by a model refitted on all complete records with that "
+        "number of trees. filled / fallback: gaps of the model year filled by this model, or by "
+        "the fallback model on timestamp features where a driver was missing.",
+    ]
+    if out['trees'].eq(out['max trees']).any() and out['max trees'].notna().all():
+        n_cap = int(out['trees'].eq(out['max trees']).sum())
+        notes.append(f"{n_cap} model(s) used all trees: early stopping did not stop them.")
+    for label, p in params.items():
+        notes.append(f"{label}: " + ", ".join(f"{k}={v}" for k, v in sorted(p.items())))
+    _print_report("Gap-filling models", table, notes, verbose=verbose)
+    return out
 
 
 def report_gapfilling_poolyears(data, verbose: int | bool | None = None) -> None:

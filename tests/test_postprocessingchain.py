@@ -1376,10 +1376,14 @@ class TestStorageScreening(unittest.TestCase):
         self.assertLessEqual(len(sc.storage_outliers_), 3)
         self.assertEqual(r.loc[spike, sc.flag_isgapfilled], 2)
         self.assertEqual(r.loc[df.index[100], sc.flag_isgapfilled], 1)
-        # The run gets its own mean: the spike is gone, the sum of the run is kept.
-        run = sc.storage_outliers_
-        self.assertAlmostEqual(r.loc[run, sc.gapfilled_strgcol].sum(), r.loc[run, 'SC_SINGLE'].sum(), places=9)
-        self.assertLess(r.loc[spike, sc.gapfilled_strgcol], 60.0 / len(run) + 2)
+        # The block (spikes and one record on either side) gets its own mean: the spike is
+        # spread out, the sum of the block is kept.
+        block = sc.storage_replaced_
+        self.assertTrue(set(sc.storage_outliers_) <= set(block))
+        self.assertEqual(len(block), len(sc.storage_outliers_) + 2)
+        self.assertAlmostEqual(r.loc[block, sc.gapfilled_strgcol].sum(), r.loc[block, 'SC_SINGLE'].sum(), places=9)
+        self.assertLess(r.loc[spike, sc.gapfilled_strgcol], 60.0 / len(block) + 2)
+        self.assertTrue((r.loc[block, sc.flag_isgapfilled] == 2).all())
         self.assertEqual(r.loc[spike, 'SC_SINGLE'], 60.0)  # the measured value is kept
         # Every measured flux keeps a storage term.
         self.assertEqual(int(r['NEE_L3.1'].notna().sum()), int(df['FC'].notna().sum()))
@@ -1394,7 +1398,8 @@ class TestStorageScreening(unittest.TestCase):
                                                       screen_storage_term=True)
         sc.storage_correction()
         s = sc.screening_summary()
-        self.assertEqual(s['removed'], len(sc.storage_outliers_))
+        self.assertEqual(s['spikes'], len(sc.storage_outliers_))
+        self.assertEqual(s['replaced'], len(sc.storage_replaced_))
         r = sc.results
         # Runs keep their sums, so the screening does not change the storage sum.
         self.assertAlmostEqual(s['sum_unscreened'], s['sum_used'], places=9)
@@ -1403,6 +1408,20 @@ class TestStorageScreening(unittest.TestCase):
             self.assertEqual(len(fig.axes), 3)
         finally:
             plt.close('all')
+
+    def test_single_spike_is_spread_over_three_records(self):
+        """A spike flagged alone still changes: it shares its value with its neighbours."""
+        import pandas as pd
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df, spike = self._df()
+        sc = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                      screen_storage_term=True)
+        sc.storage_outliers_ = pd.DatetimeIndex([spike])  # as if the filter flagged it alone
+        sc._results = df[['FC', 'SC_SINGLE']].copy()
+        means = sc._screened_block_means()
+        self.assertEqual(len(means), 3)
+        self.assertAlmostEqual(float(means.iloc[0]), float(df['SC_SINGLE'].loc[means.index].mean()))
+        self.assertLess(float(means.loc[spike]), 25)
 
     def test_long_runs_stay_as_measured(self):
         """A noisy block is not a spike: it is kept, not filled with one value."""
@@ -1442,6 +1461,56 @@ class TestStorageScreening(unittest.TestCase):
         data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
         data31 = run_level31(data, screen_storage_term=True)
         self.assertIn(spike, data31.levels.level31.storage_outliers_)
+
+
+
+class TestModelOverview(unittest.TestCase):
+    """report_model_overview describes each year's XGBoost model."""
+
+    @classmethod
+    def setUpClass(cls):
+        import matplotlib
+        matplotlib.use('Agg')
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        from diive.flux.postprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar, run_level41_xgb)
+        df = _eddypro_input()
+        data = init_flux_data(df=df, fluxcol='FC', site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        data = run_level33_constant_ustar(data, thresholds=[0.1, 0.2], threshold_labels=['CUT_16', 'CUT_84'],
+                                          showplot=False, verbose=False)
+        engineer = FeatureEngineer(target_col='_target_', features_lag=[-1, 1], vectorize_timestamps=True,
+                                   verbose=0)
+        cls.data = run_level41_xgb(data, features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'],
+                                   engineer=engineer, n_estimators=60, learning_rate=0.3,
+                                   early_stopping_rounds=5, random_state=42, verbose=0)
+
+    def test_one_row_per_scenario_and_year(self):
+        from diive.flux.postprocessingchain import report_model_overview
+        out = report_model_overview(self.data, verbose=0)
+        self.assertEqual(list(out['USTAR']), ['CUT_16', 'CUT_84'])
+        for _, row in out.iterrows():
+            inst = self.data.levels.level41_xgb[row['USTAR']].results_yearly_[row['year']]
+            self.assertEqual(row['trees'], inst._n_trees)
+            self.assertLessEqual(row['trees'], 60)
+            self.assertEqual(row['train'] + row['test'], row['final fit'])
+            self.assertEqual(row['measured'] + row['filled'] + row['fallback'],
+                             int((inst.gapfilling_df_.index.year == int(row['year'])).sum()))
+
+    def test_feature_importances_for_one_scenario(self):
+        from diive.core.utils.console import console
+        from diive.flux.postprocessingchain import report_gapfilling_feature_importances
+        with console.capture() as cap:
+            report_gapfilling_feature_importances(self.data, ustar_scenario='CUT_84', verbose=True)
+        text = cap.get()
+        self.assertIn('CUT_84', text)
+        self.assertNotIn('CUT_16', text)
 
 
 if __name__ == '__main__':
