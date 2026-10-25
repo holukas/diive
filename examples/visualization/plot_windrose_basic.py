@@ -50,7 +50,7 @@ rose = dv.plotting.WindRosePlot(
 style = dv.plotting.FormatStyle(title='Mean CO2 flux by wind direction (CH-CHA)')
 rose.plot(
     format_style=style,
-    cmap='RdBu_r',  # Styling: blue = uptake, red = release
+    cmap='RdYlBu_r',  # Styling: blue = uptake, red = release
     cb_label='Mean CO2 flux',
     # cb_digits_after_comma defaults to None -> integer colorbar labels here,
     # since the flux ticks (-25, -20, ... 5) need no decimals.

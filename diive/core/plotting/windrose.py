@@ -91,7 +91,7 @@ class WindRosePlot:
         >>> flux = pd.Series(np.sin(np.arange(360.)), name='co2_flux')
         >>> rose = dv.plotting.WindRosePlot(series=flux, wind_dir=pd.Series(np.arange(360.)),
         ...                                 agg='mean', n_sectors=16)
-        >>> ax = rose.plot(cmap='RdBu_r', cb_label='Mean CO2 flux')  # then rose.results
+        >>> ax = rose.plot(cmap='RdYlBu_r', cb_label='Mean CO2 flux')  # then rose.results
 
     See Also:
         examples/visualization/plot_windrose_basic.py

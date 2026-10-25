@@ -1087,6 +1087,37 @@ class TestChainReports(unittest.TestCase):
         self.assertEqual(int(table.loc[0, 'records']), expected)
         self.assertEqual(int(table.loc[0, 'night records']), int(keep.sum()))
 
+    def test_gapfilling_input_counts_add_up(self):
+        from diive.flux.postprocessingchain import report_gapfilling_input
+        out = report_gapfilling_input(self.data, verbose=0)
+        self.assertEqual(list(out.index), list(self.data.levels.filteredseries_level33_qcf))
+        for scenario, row in out.iterrows():
+            self.assertEqual(row['removed by tests and outliers'] + row['removed by USTAR']
+                             + row['used for gap-filling'], row['measured'])
+            self.assertEqual(row['QCF 0'] + row['QCF 1'], row['used for gap-filling'])
+            self.assertEqual(row['used by day'] + row['used by night'], row['used for gap-filling'])
+            used = self.data.levels.filteredseries_level33_qcf[scenario]
+            self.assertEqual(row['used for gap-filling'], int(used.count()))
+            self.assertEqual(row['QCF 0'], int(self.data.levels.filteredseries_level33_hq[scenario].count()))
+
+    def test_report_gaps(self):
+        from diive.flux.postprocessingchain import report_gaps
+        out = report_gaps(self.data, verbose=0)
+        used = self.data.levels.filteredseries_level33_qcf['CUT_50']
+        self.assertAlmostEqual(out.loc['CUT_50', 'missing %'], round(100 * used.isna().mean(), 1))
+        self.assertGreater(out.loc['CUT_50', 'gaps'], 0)
+
+    def test_plot_gapfilling_input_draws_two_rows(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.postprocessingchain import plot_gapfilling_input
+        try:
+            plot_gapfilling_input(self.data, units='umol m-2 s-1', showplot=False)
+            fig = plt.gcf()
+            panels = [ax for ax in fig.axes if ax.images]
+            self.assertEqual(len(panels), 2 * len(self.data.levels.filteredseries_level33_qcf))
+        finally:
+            plt.close('all')
+
     def test_nighttime_uncertainty_gives_three_uncertainties(self):
         from diive.flux.postprocessingchain import make_level32_detector, nighttime_uncertainty
         data, sod = make_level32_detector(self.data)
@@ -1098,6 +1129,91 @@ class TestChainReports(unittest.TestCase):
         self.assertTrue((both['MAX'] >= both['FS']).all() and (both['MAX'] >= both['PAS20']).all())
         # Only records with a value get an uncertainty.
         self.assertFalse(sigma['FS'][sod.series_hires_cleaned.isna()].notna().any())
+
+    def test_nighttime_uncertainty_falls_back_where_fs_is_missing(self):
+        from dataclasses import replace
+        import pandas as pd
+        from diive.flux.postprocessingchain import make_level32_detector, nighttime_uncertainty
+        full = self.data.full_df.copy()
+        full.iloc[:500, full.columns.get_loc('FC_RANDUNC_HF')] = float('nan')
+        data, sod = make_level32_detector(replace(self.data, full_df=full))
+        sigma = nighttime_uncertainty(data, sod, randunc_col='FC_RANDUNC_HF', ta='TA_1_1_1',
+                                      vpd='VPD_kPa', swin='SW_IN_1_1_1', verbose=0)
+        no_fs = sigma['FS'].isna() & sigma['PAS20'].notna()
+        self.assertGreater(int(no_fs.sum()), 0)
+        pd.testing.assert_series_equal(sigma.loc[no_fs, 'MAX'], sigma.loc[no_fs, 'PAS20'],
+                                       check_names=False)
+
+
+class TestLevel41SharedFeatures(unittest.TestCase):
+    """With reduce_features, all USTAR scenarios use the features any of them selected."""
+
+    @classmethod
+    def setUpClass(cls):
+        import matplotlib
+        matplotlib.use('Agg')
+        from diive.flux.postprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar)
+        df = _eddypro_input()
+        data = init_flux_data(df=df, fluxcol='FC', site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        cls.data = run_level33_constant_ustar(data, thresholds=[0.1, 0.2],
+                                              threshold_labels=['CUT_16', 'CUT_84'],
+                                              showplot=False, verbose=False)
+
+    def _run(self, shared):
+        import pandas as pd
+        from diive.flux.postprocessingchain.levels.level41 import _run_level41_ml
+        selections = iter([['a'], ['b']])
+        made = []
+
+        class Engineer:
+            def fit_transform(self, df):
+                return pd.DataFrame({'a': 1.0, 'b': 2.0}, index=df.index)
+
+        class Model:
+            def __init__(self, input_df, target_col, verbose=0, **kw):
+                self.input_df, self.target_col, self.used = input_df, target_col, None
+                made.append(self)
+
+            def create_yearpools(self):
+                pass
+
+            def initialize_yearly_models(self):
+                pass
+
+            def reduce_features_across_years(self):
+                self.features_reduced_across_years = next(selections)
+
+            def use_features(self, features):
+                self.used = list(features)
+
+            def fillgaps(self):
+                name = f'{self.target_col}_gfFAKE'
+                self.gapfilled_ = self.input_df[self.target_col].fillna(0).rename(name)
+                self.gapfilling_df_ = pd.DataFrame({
+                    name: self.gapfilled_,
+                    f'FLAG_{name}_ISFILLED': self.input_df[self.target_col].isna().astype(int)})
+
+        _run_level41_ml(self.data, model_factory=Model, features=['TA_1_1_1'], engineer=Engineer(),
+                        reduce_features=True, verbose=0, model_kwargs={}, results_attr='level41_xgb',
+                        shared_features=shared)
+        return made
+
+    def test_scenarios_share_the_union_of_their_features(self):
+        made = self._run(shared=True)
+        self.assertEqual(len(made), 2)
+        self.assertEqual([m.used for m in made], [['a', 'b'], ['a', 'b']])
+
+    def test_each_scenario_keeps_its_own_selection_when_not_shared(self):
+        made = self._run(shared=False)
+        self.assertEqual([m.used for m in made], [None, None])
 
 
 def _eddypro_input():
@@ -1230,6 +1346,103 @@ class TestFluxProcessingChainAlias(unittest.TestCase):
         self.assertIs(run_level2, new.run_level2)
         from diive.flux.fluxprocessingchain.container import FluxLevelData
         self.assertIs(FluxLevelData, new.FluxLevelData)
+
+
+class TestStorageScreening(unittest.TestCase):
+    """screen_storage_term removes spikes from the storage term and fills them."""
+
+    @staticmethod
+    def _df():
+        import numpy as np
+        import pandas as pd
+        rng = np.random.default_rng(5)
+        index = pd.date_range('2022-07-01 00:15', periods=48 * 30, freq='30min', name='TIMESTAMP_MIDDLE')
+        df = pd.DataFrame({'FC': rng.normal(-5, 2, len(index)),
+                           'SC_SINGLE': rng.normal(0, 0.5, len(index))}, index=index)
+        spike = index[700]
+        df.loc[spike, 'SC_SINGLE'] = 60.0
+        df.loc[index[100], 'SC_SINGLE'] = np.nan  # an ordinary gap
+        return df, spike
+
+    def test_spike_is_removed_and_filled(self):
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df, spike = self._df()
+        sc = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                      screen_storage_term=True)
+        sc.storage_correction()
+        r = sc.results
+        # The double differences also take the spike's two neighbours; they are filled too.
+        self.assertIn(spike, sc.storage_outliers_)
+        self.assertLessEqual(len(sc.storage_outliers_), 3)
+        self.assertEqual(r.loc[spike, sc.flag_isgapfilled], 2)
+        self.assertEqual(r.loc[df.index[100], sc.flag_isgapfilled], 1)
+        # The run gets its own mean: the spike is gone, the sum of the run is kept.
+        run = sc.storage_outliers_
+        self.assertAlmostEqual(r.loc[run, sc.gapfilled_strgcol].sum(), r.loc[run, 'SC_SINGLE'].sum(), places=9)
+        self.assertLess(r.loc[spike, sc.gapfilled_strgcol], 60.0 / len(run) + 2)
+        self.assertEqual(r.loc[spike, 'SC_SINGLE'], 60.0)  # the measured value is kept
+        # Every measured flux keeps a storage term.
+        self.assertEqual(int(r['NEE_L3.1'].notna().sum()), int(df['FC'].notna().sum()))
+
+    def test_screening_summary_and_plot(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df, spike = self._df()
+        sc = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                      screen_storage_term=True)
+        sc.storage_correction()
+        s = sc.screening_summary()
+        self.assertEqual(s['removed'], len(sc.storage_outliers_))
+        r = sc.results
+        # Runs keep their sums, so the screening does not change the storage sum.
+        self.assertAlmostEqual(s['sum_unscreened'], s['sum_used'], places=9)
+        try:
+            fig = sc.plot_screening(showplot=False)
+            self.assertEqual(len(fig.axes), 3)
+        finally:
+            plt.close('all')
+
+    def test_long_runs_stay_as_measured(self):
+        """A noisy block is not a spike: it is kept, not filled with one value."""
+        import numpy as np
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df, spike = self._df()
+        block = df.index[900:920]
+        df.loc[block, 'SC_SINGLE'] = np.tile([40.0, -40.0], 10)
+        sc = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                      screen_storage_term=True)
+        sc.storage_correction()
+        self.assertIn(spike, sc.storage_outliers_)
+        self.assertFalse(sc.storage_outliers_.isin(block).any())
+
+    def test_without_screening_the_spike_stays(self):
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df, spike = self._df()
+        sc = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2')
+        sc.storage_correction()
+        self.assertEqual(sc.results.loc[spike, sc.gapfilled_strgcol], 60.0)
+
+    def test_screening_needs_gapfilling(self):
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df, _ = self._df()
+        with self.assertRaises(ValueError):
+            FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                    gapfill_storage_term=False, screen_storage_term=True)
+
+    def test_run_level31_passes_it_on(self):
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.postprocessingchain import init_flux_data, run_level2, run_level31
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        spike = df.index[df['FC'].notna() & df['SC_SINGLE'].notna()][300]
+        df.loc[spike, 'SC_SINGLE'] = 500.0
+        data = init_flux_data(df=df, fluxcol='FC', site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data31 = run_level31(data, screen_storage_term=True)
+        self.assertIn(spike, data31.levels.level31.storage_outliers_)
+
 
 if __name__ == '__main__':
     unittest.main()

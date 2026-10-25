@@ -508,7 +508,7 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
     first, last = start_year or years.min(), end_year or years.max()
     df = df.loc[(years >= first) & (years <= last)]
     df = df.mask(np.isinf(df.to_numpy(dtype=float, na_value=np.nan))) * gain
-    flux = data._flux_label()
+    flux = data._flux_varname()
     unit_txt = f" ({units})" if units else ""
 
     if not per_year:
@@ -699,7 +699,163 @@ def _quality_classes(data, ustar_scenario: str | None) -> dict:
     filled = data.fpc_df[gf_cols[method][scenario]] if method else None
     return dict(scenario=scenario, best=best, used=used, qcf1=used.where(best.isna()),
                 rejected=rejected, filled=filled, method=method,
-                night=data.fpc_df['NIGHTTIME'] == 1, flux=data._flux_label())
+                night=data.fpc_df['NIGHTTIME'] == 1, flux=data._flux_varname(scenario))
+
+
+def _gapfilling_input(data) -> dict:
+    """Per USTAR scenario: the records the gap-filling uses and the highest-quality records."""
+    used_all = data.levels.filteredseries_level33_qcf
+    if not used_all:
+        raise RuntimeError("run_level33_*() must be called first.")
+    measured = data.fpc_df[data.levels.flux_corrected_col or data.meta.fluxcol].notna()
+    passed = data.levels.filteredseries_level32_qcf
+    passed = passed.notna() if passed is not None else measured
+    return dict(used=used_all, best=data.levels.filteredseries_level33_hq, measured=measured,
+                passed=passed, night=data.fpc_df['NIGHTTIME'] == 1)
+
+
+def report_gapfilling_input(data, verbose: int | bool | None = None) -> DataFrame:
+    """Report what the gap-filling starts from, for each USTAR scenario.
+
+    After Level 3.3 every measured record that failed a test or the USTAR filter is removed. The
+    table counts, per scenario, the measured records, the records removed by the quality tests and
+    the outlier detection (Levels 2 to 3.2), the records removed by the USTAR filter, and the records
+    left: those the gap-filling uses, split into the highest-quality records (QCF 0) and the records
+    with QCF 1, and into day and night. Which QCF classes are used is set by
+    ``daytime_accept_qcf_below`` and ``nighttime_accept_qcf_below`` of ``init_flux_data``. The
+    highest-quality records are the measured flux for analyses that do not use gap-filled values.
+
+    Args:
+        data: Chain container after ``run_level33_*``.
+        verbose: Verbosity for the console helpers.
+
+    Returns:
+        DataFrame with one row per USTAR scenario and the counts as columns.
+    """
+    g = _gapfilling_input(data)
+    n = len(g['measured'])
+    rows = {}
+    for scenario, used in g['used'].items():
+        used, best = used.notna(), g['best'][scenario].notna()
+        rows[scenario] = {
+            'measured': int(g['measured'].sum()),
+            'removed by tests and outliers': int((g['measured'] & ~g['passed']).sum()),
+            'removed by USTAR': int((g['passed'] & ~used).sum()),
+            'used for gap-filling': int(used.sum()),
+            'QCF 0': int(best.sum()),
+            'QCF 1': int((used & ~best).sum()),
+            'used by day': int((used & ~g['night']).sum()),
+            'used by night': int((used & g['night']).sum()),
+        }
+    out = DataFrame(rows).T
+    out.index.name = 'USTAR'
+
+    table = _table()
+    table.add_column("USTAR")
+    headers = {'removed by tests and outliers': 'removed:\ntests', 'removed by USTAR': 'removed:\nUSTAR',
+               'used for gap-filling': 'used', 'QCF 0': 'used:\nQCF 0', 'QCF 1': 'used:\nQCF 1',
+               'used by day': 'used:\nday', 'used by night': 'used:\nnight'}
+    for col in out.columns:
+        table.add_column(headers.get(col, col), justify="right", no_wrap=True)
+    for scenario, row in out.iterrows():
+        table.add_row(scenario, *[f"{row[c]:,}\n{100 * row[c] / n:.0f}%" for c in out.columns])
+    m = data.meta
+    notes = [f"Records, and their share of all {n:,} records of the period.",
+             "removed: tests = quality tests and outlier detection (Levels 2 to 3.2).",
+             f"used = records for gap-filling: QCF below {m.daytime_accept_qcf_below} by day and below "
+             f"{m.nighttime_accept_qcf_below} by night. QCF 0 is the highest quality, the measured flux "
+             f"for analyses without gap-filled values."]
+    _print_report("Records for gap-filling", table, notes, verbose=verbose)
+    return out
+
+
+def report_gaps(data, long_gap_days: float = 1, verbose: int | bool | None = None) -> DataFrame:
+    """Report the gaps the gap-filling has to fill, for each USTAR scenario.
+
+    Args:
+        data: Chain container after ``run_level33_*``.
+        long_gap_days: A gap of at least this many days counts as long.
+        verbose: Verbosity for the console helpers.
+
+    Returns:
+        DataFrame with one row per USTAR scenario.
+    """
+    from diive.analysis import GapStats
+    used_all = data.levels.filteredseries_level33_qcf
+    if not used_all:
+        raise RuntimeError("run_level33_*() must be called first.")
+    per_day = pd.Timedelta('1D') / data.fpc_df.index.to_series().diff().median()
+    rows = {}
+    for scenario, series in used_all.items():
+        gs = GapStats(series, long_gap_records=int(round(long_gap_days * per_day)))
+        sm = gs.summary
+        rows[scenario] = {
+            'missing %': round(100 * series.isna().mean(), 1),
+            'gaps': len(gs.results),
+            'long gaps': sm['n_long_gaps'],
+            'longest gap (days)': round(gs.results['GAP_LENGTH'].max() / per_day, 1)
+            if len(gs.results) else 0.0,
+            'worst month': pd.Timestamp(2000, sm['worst_month'], 1).strftime('%b'),
+            'worst month missing %': round(sm['worst_month_missing_pct'], 1),
+        }
+    out = DataFrame(rows).T
+    out.index.name = 'USTAR'
+    table = _table()
+    table.add_column("USTAR")
+    for col in out.columns:
+        table.add_column(col, justify="right")
+    for scenario, row in out.iterrows():
+        table.add_row(scenario, *[str(v) for v in row])
+    _print_report("Gaps to fill", table,
+                  [f"A long gap lasts at least {long_gap_days:g} day{'s' if long_gap_days != 1 else ''}."],
+                  verbose=verbose)
+    return out
+
+
+def plot_gapfilling_input(data, units: str = '', showplot: bool = True) -> None:
+    """Heatmaps of the records the gap-filling uses and of the highest-quality records.
+
+    One column per USTAR scenario. The top row shows the records the gap-filling uses, the bottom
+    row the highest-quality records (QCF 0) among them, on one colour scale centred on zero. Grey
+    cells hold no value.
+
+    Args:
+        data: Chain container after ``run_level33_*``.
+        units: Unit of the flux, for the colour bars.
+        showplot: Call ``plt.show()`` after drawing.
+    """
+    import matplotlib.pyplot as plt
+    from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+    from diive.core.plotting.styles import chainplots as cp
+
+    g = _gapfilling_input(data)
+    scenarios = list(g['used'])
+    n = len(g['measured'])
+    rows = [(g['used'], "used for gap-filling"), (g['best'], "highest quality (QCF 0)")]
+    limit = cp.symmetric_limit(*[r[0][s] for r in rows for s in scenarios])
+    fig = plt.figure(figsize=(4.4 * len(scenarios), 12), layout='constrained')
+    gs = fig.add_gridspec(2, len(scenarios))
+    first = None
+    for i, (series_by_scenario, label) in enumerate(rows):
+        for j, scenario in enumerate(scenarios):
+            series = series_by_scenario[scenario]
+            ax = fig.add_subplot(gs[i, j], sharex=first, sharey=first)
+            first = first or ax
+            title = f"{scenario}: {label}\n{series.count():,} records ({100 * series.count() / n:.0f}%)"
+            HeatmapDateTime(series=series, verbose=False).plot(
+                ax=ax, fig=fig, vmin=-limit, vmax=limit, cmap=cp.HEATMAP_CMAP, cb_extend='both',
+                cb_digits_after_comma='auto', cb_labelsize=8, zlabel=units or 'flux',
+                color_bad=cp.NAN_COLOR, as_image=True, format_style=cp.heatmap_style(title))
+            if j:
+                plt.setp(ax.get_yticklabels(), visible=False)
+                ax.yaxis.get_label().set_visible(False)
+    m = data.meta
+    cp.figure_title(fig, "Records for gap-filling, per USTAR scenario",
+                    f"Top: records the gap-filling uses (QCF below {m.daytime_accept_qcf_below} by day, "
+                    f"below {m.nighttime_accept_qcf_below} by night). Bottom: highest quality (QCF 0). "
+                    f"Shares of all {n:,} records. Grey: no value.")
+    if showplot:
+        plt.show()
 
 
 def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = '',
@@ -734,7 +890,7 @@ def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = 
         ax = fig.add_subplot(gs[0, i], sharey=first)
         first = first or ax
         HeatmapDateTime(series=series, verbose=False).plot(
-            ax=ax, fig=fig, vmin=-limit, vmax=limit, cmap='RdBu_r', cb_extend='both',
+            ax=ax, fig=fig, vmin=-limit, vmax=limit, cmap=cp.HEATMAP_CMAP, cb_extend='both',
             cb_digits_after_comma='auto', cb_labelsize=8, zlabel=units or q['flux'],
             color_bad=cp.NAN_COLOR, as_image=True, format_style=cp.heatmap_style(title))
         if i:

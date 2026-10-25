@@ -131,7 +131,7 @@ dv.plotting.HeatmapDateTime(
     vmin=-10,  # Minimum color value
     vmax=10,  # Maximum color value
     show_values=False,  # Don't show cell values
-    cmap='RdBu_r',  # Colormap
+    cmap='RdYlBu_r',  # Colormap
     format_style=panel_style.merged(title="NEE (CO₂ flux)")
 )
 

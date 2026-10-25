@@ -49,7 +49,7 @@ hm.plot(
     format_style=style.merged(title="NEE flux - Vertical (dates on y-axis)"),
     vmin=-10,  # Minimum color value
     vmax=10,  # Maximum color value
-    cmap='RdBu_r',  # Colormap
+    cmap='RdYlBu_r',  # Colormap
     zlabel=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
     show_values=False  # Don't overlay cell values
 )
@@ -73,7 +73,7 @@ hm.plot(
     format_style=style.merged(title="NEE flux - Horizontal (dates on x-axis)"),
     vmin=-10,  # Minimum color value
     vmax=10,  # Maximum color value
-    cmap='RdBu_r',  # Colormap
+    cmap='RdYlBu_r',  # Colormap
     zlabel=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
     show_values=False  # Don't overlay cell values
 )

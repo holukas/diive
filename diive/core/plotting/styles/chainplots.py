@@ -106,6 +106,8 @@ def zscore_axis(ax, series: Series, which: str = 'y') -> None:
 #: Colours of the overall quality flag: 0 passed, 1 passed with a warning, 2 rejected.
 QCF_COLORS = ['#26A69A', amber(600), red(500)]
 NAN_COLOR = bluegray(50)
+# Default colormap of heatmaps, fluxes included: blue for low values, red for high ones.
+HEATMAP_CMAP = 'RdYlBu_r'
 
 
 def symmetric_limit(*series: Series, q: float = 0.99) -> float | None:

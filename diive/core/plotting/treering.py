@@ -39,7 +39,7 @@ class TreeRingPlot:
         >>> import diive as dv, pandas as pd, numpy as np
         >>> idx = pd.date_range('2020-01-01', periods=1096, freq='D')
         >>> tr = dv.plotting.TreeRingPlot(pd.DataFrame({'TA': np.arange(1096.)}, index=idx), 'TA')
-        >>> tr.plot(cmap='RdBu_r', vmin=-20, vmax=20, cb_label='Air temperature (deg C)')
+        >>> tr.plot(cmap='RdYlBu_r', vmin=-20, vmax=20, cb_label='Air temperature (deg C)')
 
     See Also:
         examples/visualization/plot_treering_temperature.py
@@ -158,7 +158,7 @@ class TreeRingPlot:
              format_style: FormatStyle = None,
              figsize: tuple = (10, 10),
              figdpi: int = 100,
-             cmap: str = 'RdBu_r',
+             cmap: str = 'RdYlBu_r',
              vmin: float = None,
              vmax: float = None,
              show_month_labels: bool = True,
@@ -183,7 +183,7 @@ class TreeRingPlot:
                 so the cartesian spines/ticks/grid of ``FormatStyle.apply`` do not).
             figsize: Figure size in inches (default (10, 10))
             figdpi: Figure DPI (default 100)
-            cmap: Colormap name (default 'RdBu_r', blue=low, red=high)
+            cmap: Colormap name (default 'RdYlBu_r', blue=low, red=high)
             vmin: Minimum color scale value. If the data contains values below vmin,
                 the colorbar is extended with a downward arrow automatically.
                 Defaults to data minimum.

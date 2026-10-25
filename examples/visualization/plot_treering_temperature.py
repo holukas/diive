@@ -53,7 +53,7 @@ style = dv.plotting.FormatStyle(
 tr.plot(
     format_style=style,
     figsize=(10, 10),  # Styling: figure size
-    cmap='RdBu_r',  # Styling: blue=cold, red=warm
+    cmap='RdYlBu_r',  # Styling: blue=cold, red=warm
     # vmin=-15,  # Styling: clips data below -23 -> downward arrow added
     # vmax=15,  # Styling: clips data above +28 -> upward arrow added
     show_month_labels=True,  # Styling: month names around the ring

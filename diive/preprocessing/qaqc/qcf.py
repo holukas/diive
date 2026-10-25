@@ -756,10 +756,10 @@ class FlagQCF:
         vmin, vmax = (-limit, limit) if limit else (None, None)
         common = dict(color_bad=cp.NAN_COLOR, cb_labelsize=8)
         HeatmapDateTime(series=flags[self.series_name]).plot(
-            ax=ax_before, vmin=vmin, vmax=vmax, cmap='RdBu_r', cb_extend='both',
+            ax=ax_before, vmin=vmin, vmax=vmax, cmap=cp.HEATMAP_CMAP, cb_extend='both',
             cb_digits_after_comma='auto', format_style=cp.heatmap_style("Before the tests"), **common)
         HeatmapDateTime(series=flags[self.filteredseriescol]).plot(
-            ax=ax_after, vmin=vmin, vmax=vmax, cmap='RdBu_r', cb_extend='both',
+            ax=ax_after, vmin=vmin, vmax=vmax, cmap=cp.HEATMAP_CMAP, cb_extend='both',
             cb_digits_after_comma='auto', format_style=cp.heatmap_style("After the tests"), **common)
         HeatmapDateTime(series=flags[self.sumflagscol]).plot(
             ax=ax_flagsum, cmap='YlOrRd', cb_digits_after_comma=0,

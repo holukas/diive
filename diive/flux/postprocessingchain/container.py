@@ -1204,14 +1204,14 @@ class FluxLevelData:
             ax.plot(x, y, 'o', color=color, markersize=6, zorder=4)
             ax.annotate(text, (x, y), xytext=(8, 0), textcoords='offset points', va='center',
                         fontsize=10, fontweight='bold', color=color)
-        ax.set_ylabel(f"Cumulative {self._flux_label()}{f' ({units})' if units else ''}")
+        ax.set_ylabel(f"Cumulative {self._flux_varname(ustar_scenario)}{f' ({units})' if units else ''}")
         cp.style_axes(ax)
         ax.margins(x=0.06)
         ax.legend(loc='best', frameon=False, fontsize=9)
         from diive.core.plotting.plotfuncs import nice_date_ticks
         nice_date_ticks(ax=ax)
 
-        auto_title = f"Cumulative {self._flux_label()}, USTAR scenario {ustar_scenario}"
+        auto_title = f"Cumulative {self._flux_varname(ustar_scenario)}, USTAR scenario {ustar_scenario}"
         if own_fig:
             cp.figure_title(fig, title or auto_title,
                             f"Sum over {cumul.index[0]:%Y-%m-%d} to {cumul.index[-1]:%Y-%m-%d}"
@@ -1257,8 +1257,8 @@ class FluxLevelData:
                 otherwise the 2nd percentile of all series.
             vmax: Maximum colour value, set the same way (98th percentile when the flux
                 does not cross zero).
-            cmap: Matplotlib colourmap. Defaults to ``'RdBu_r'`` (blue for negative
-                values, uptake for NEE, red for positive ones).
+            cmap: Matplotlib colourmap. Defaults to ``'RdYlBu_r'``, the diive heatmap
+                default (blue for low values, uptake for NEE, red for high ones).
             units: Unit string shown on each colourbar (e.g. ``'umol m-2 s-1'``).
             title: Figure suptitle.  Auto-generated when ``None``.
             saveplot: Save the figure to disk.  Defaults to ``False``.
@@ -1368,10 +1368,10 @@ class FluxLevelData:
             else:
                 _vmin = float(np.nanpercentile(combined, 2)) if _vmin is None else _vmin
                 _vmax = float(np.nanpercentile(combined, 98)) if _vmax is None else _vmax
-        cmap = cmap or 'RdBu_r'
+        cmap = cmap or cp.HEATMAP_CMAP
 
         n = len(panels)
-        zlabel = units or self._flux_label()
+        zlabel = units or self._flux_varname(ustar_scenario)
         # Two-phase: render into a caller-supplied figure (GUI embedding,
         # cleared first like RidgeLinePlot) or own a fresh one.
         own_fig = fig is None
@@ -1393,7 +1393,7 @@ class FluxLevelData:
                 plt.setp(ax.get_yticklabels(), visible=False)
                 ax.yaxis.get_label().set_visible(False)
 
-        auto_title = f"{self._flux_label()} before and after gap-filling, USTAR scenario {ustar_scenario}"
+        auto_title = f"{self._flux_varname(ustar_scenario)} before and after gap-filling, USTAR scenario {ustar_scenario}"
         if own_fig:
             subtitle = None
             if meas is not None:
@@ -1536,10 +1536,13 @@ class FluxLevelData:
              verbose=verbose)
         return pd.concat([self.full_df, self.fpc_df[new_cols]], axis=1)
 
-    def _flux_label(self) -> str:
-        """Name of the flux for plot titles: 'NEE' after the storage term is added, else the input."""
-        corrected = self.levels.flux_corrected_col
-        return str(corrected).split('_')[0] if corrected else self.meta.fluxcol
+    def _flux_varname(self, ustar_scenario: str | None = None) -> str:
+        """Variable name of the flux for plot titles: the Level-3.3 series of the USTAR scenario,
+        else the flux with the storage term, else the input flux."""
+        used = self.levels.filteredseries_level33_qcf
+        if ustar_scenario in used:
+            return str(used[ustar_scenario].name)
+        return str(self.levels.flux_corrected_col or self.meta.fluxcol)
 
     @staticmethod
     def _column_level(col: str) -> str:

@@ -1060,7 +1060,7 @@ class PlotSettingsPanel(QScrollArea):
         self.tr_cmap = QComboBox()
         self.tr_cmap.setEditable(True)
         self.tr_cmap.addItems(_COLORMAPS)
-        self.tr_cmap.setCurrentText("RdBu_r")  # TreeRingPlot.plot default
+        self.tr_cmap.setCurrentText("RdYlBu_r")  # TreeRingPlot.plot default
         self.tr_cmap.currentTextChanged.connect(self.changed)
         form.addRow("Colormap", self.tr_cmap)
         self.tr_reverse_cmap = self._check("Reverse colormap", form)
@@ -1779,7 +1779,7 @@ class PlotSettingsPanel(QScrollArea):
                 # which renderer: 'filled' (plot) or 'line' (plot_line)
                 "style": _TREERING_STYLES[self.tr_style.currentText()],
                 # shared plot()/plot_line() params
-                "cmap": self._reverse_cmap(self.tr_cmap.currentText().strip() or "RdBu_r",
+                "cmap": self._reverse_cmap(self.tr_cmap.currentText().strip() or "RdYlBu_r",
                                            self.tr_reverse_cmap.isChecked()),
                 "vmin": self._float_or_none(self.tr_vmin.text()),
                 "vmax": self._float_or_none(self.tr_vmax.text()),
