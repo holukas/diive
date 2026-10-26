@@ -181,7 +181,24 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   when one method has run and uses a colour scale centred on zero. `plot_cumulative_comparison`
   and `plot_gapfilled_cumulative` label each line with its total, and the per-year view draws the
   scenarios side by side in one figure. `plot_feature_ranks_per_year` draws one panel per scenario,
-  coloured by the driver each feature comes from: bars for one year, ranks for several.
+  with names coloured by the driver each feature comes from: bars for one year, and for several a
+  table of the rank in each year (ranks below `top_n` in grey). MDS, which has no features, is
+  skipped without a message.
+- **Chain report tables:** a table wider than the console is printed at its own width instead of
+  having its cells cut to `2.7…`. The SHAP importances show two decimals.
+- **Storage term next to analyser gaps:** `FluxStorageCorrectionSinglePointEddyPro` and
+  `run_level31` take a `concentration_col` (e.g. `'CO2_MOLAR_DENSITY'`). After a gap in the
+  concentration, the storage values are discarded until the concentration is back within 3 robust
+  standard deviations of its median at the same time of day (±7 days), and before a gap where it
+  had drifted out of that band; they are gap-filled (flag 3). An analyser restarting after a signal
+  loss reads far off and returns over hours: the return was counted as storage, the jump into the
+  gap was not, and at CH-LAE this added up to −150 gC m-2 over ten years. Settings in
+  `restart_screening`; `storage_restarts_` and `storage_discarded_` list what was found, and
+  `screening_summary` and `plot_screening` report it.
+- **Hampel plot title:** names what was tested (values or double differences, per time of day or
+  not), so two Hampel tests on one series can be told apart.
+- **Outlier overview:** `showplot_overview` puts its legend below the figure, where a second legend
+  row no longer covers the label of the first panel.
 
 ### Deprecated
 
@@ -191,6 +208,10 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   `detection_mode` and `detection_kwargs`.
 
 ### Fixed
+
+- **Random uncertainty method summary:** `RandomUncertaintyPAS20.report_method_summary` counted
+  every record a method tried, also where it found too few values, so the shares added up to more
+  than 100 %. It now counts the method that provided each value, from the new `randunc_method`.
 
 - **Feature rank plot:** `showplot_feature_ranks_per_year` no longer warns about a marker defined
   twice.
