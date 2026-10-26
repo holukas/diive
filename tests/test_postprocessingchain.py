@@ -1487,9 +1487,14 @@ class TestModelOverview(unittest.TestCase):
                                           showplot=False, verbose=False)
         engineer = FeatureEngineer(target_col='_target_', features_lag=[-1, 1], vectorize_timestamps=True,
                                    verbose=0)
-        cls.data = run_level41_xgb(data, features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'],
-                                   engineer=engineer, n_estimators=60, learning_rate=0.3,
-                                   early_stopping_rounds=5, random_state=42, verbose=0)
+        data = run_level41_xgb(data, features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'],
+                               engineer=engineer, n_estimators=60, learning_rate=0.3,
+                               early_stopping_rounds=5, random_state=42, verbose=0)
+        import warnings
+        from diive.flux.postprocessingchain import run_level41_mds
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            cls.data = run_level41_mds(data, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa')
 
     def test_one_row_per_scenario_and_year(self):
         from diive.flux.postprocessingchain import report_model_overview
@@ -1502,6 +1507,38 @@ class TestModelOverview(unittest.TestCase):
             self.assertEqual(row['train'] + row['test'], row['final fit'])
             self.assertEqual(row['measured'] + row['filled'] + row['fallback'],
                              int((inst.gapfilling_df_.index.year == int(row['year'])).sum()))
+
+    def test_gapfilling_comparison_adds_up(self):
+        from diive.flux.postprocessingchain import report_gapfilling_comparison
+        out = report_gapfilling_comparison(self.data, methods=('mds', 'xgb'), verbose=0)
+        self.assertEqual(list(out.index), ['CUT_16', 'CUT_84'])
+        gf = self.data.gapfilled_cols()
+        for sc, r in out.iterrows():
+            a, b = self.data.fpc_df[gf['mds'][sc]], self.data.fpc_df[gf['xgb'][sc]]
+            self.assertAlmostEqual(r['sum XGBoost'] - r['sum MDS'], r['difference'], places=6)
+            self.assertAlmostEqual(float(b.sum() - a.sum()), r['difference'], places=6)
+            self.assertAlmostEqual(r['from day gaps'] + r['from night gaps'], r['difference'], places=6)
+            self.assertAlmostEqual(sum(r[f'gaps {c}'] for c in ('1', '2-12', '13-48', '>48')),
+                                   r['difference'], places=6)
+            self.assertGreater(r['test records'], 0)
+
+    def test_gapfilling_comparison_plot(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.postprocessingchain import plot_gapfilling_comparison
+        try:
+            fig = plot_gapfilling_comparison(self.data, showplot=False)
+            self.assertEqual(len([ax for ax in fig.axes if ax.get_label() != '<colorbar>']), 4)
+        finally:
+            plt.close('all')
+
+    def test_quality_plots_take_the_method(self):
+        from diive.flux.postprocessingchain.reports import _quality_classes
+        q = _quality_classes(self.data, 'CUT_16', method='xgb')
+        self.assertEqual(q['method'], 'xgb')
+        self.assertEqual(q['filled'].name, self.data.gapfilled_cols()['xgb']['CUT_16'])
+        self.assertEqual(_quality_classes(self.data, 'CUT_16')['method'], 'mds')  # first that ran
+        with self.assertRaises(ValueError):
+            _quality_classes(self.data, 'CUT_16', method='rf')
 
     def test_feature_importances_for_one_scenario(self):
         from diive.core.utils.console import console

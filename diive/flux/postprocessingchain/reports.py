@@ -337,6 +337,9 @@ def report_gapfilling_model_scores(data, outpath: str | None = None,
     _report_scores(data, 'scores_', "In-sample scores",
                    ["Model predictions against every measured record, training records "
                     "included, so optimistic for the ML methods.",
+                    "MDS predicts each measured record without using it, so its scores are "
+                    "out-of-sample and not comparable with those of the ML methods; "
+                    "report_gapfilling_comparison scores both on the same held-out records.",
                     "Errors are in the units of the flux."],
                    'gapfilling_model_scores', outpath, verbose)
 
@@ -535,19 +538,35 @@ def gapfilled_variables(data) -> DataFrame:
 def _gapfilled_series(data) -> list:
     """``(column, label, colour)`` for every gap-filled column, in chain order.
 
-    With one method the USTAR scenarios get the ordered colours (light CUT_16 to dark CUT_84),
-    so their order reads off the colour; with several methods every series gets its own.
+    The USTAR scenarios get ordered shades (light CUT_16 to dark CUT_84), so their order reads off
+    the colour. With several methods each method has its own hue.
     """
     from diive.core.plotting.styles import chainplots as cp
     out = []
     methods = data.gapfilled_cols()
     for method, scenarios in methods.items():
+        shades = (cp.METHOD_COLORS.get(method, cp.SCENARIO_COLORS) if len(methods) > 1
+                  else cp.SCENARIO_COLORS)
         for i, (scenario, col) in enumerate(scenarios.items()):
             label = scenario if len(methods) == 1 else f"{_label(method)} {scenario}"
-            out.append([col, label, None])
-    for i, row in enumerate(out):
-        row[2] = cp.SCENARIO_COLORS[i % len(cp.SCENARIO_COLORS)]
-    return [tuple(r) for r in out]
+            out.append((col, label, shades[i % len(shades)]))
+    return out
+
+
+def _series_method(data, col) -> str | None:
+    """The L4.1 method that produced gap-filled column *col*."""
+    return next((m for m, sc in data.gapfilled_cols().items() if col in sc.values()), None)
+
+
+def _spread_labels(values: list, min_gap: float) -> list:
+    """Positions for end labels: the values, pushed apart to at least *min_gap*."""
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    pos = list(values)
+    for k in range(1, len(order)):
+        i, j = order[k - 1], order[k]
+        if pos[j] - pos[i] < min_gap:
+            pos[j] = pos[i] + min_gap
+    return pos
 
 
 def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
@@ -603,28 +622,43 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
 
     if not per_year:
         fig, ax = plt.subplots(figsize=(14, 6), layout='constrained')
-        totals = []
+        ends = []
         for col, label, color in series_info:
             cum = df[col].cumsum()
             ax.plot(cum.index, cum.to_numpy(), color=color, linewidth=2.2, label=label, zorder=3)
             valid = cum.dropna()
             if valid.empty:
                 continue
-            totals.append(valid.iloc[-1])
+            ends.append((valid.index[-1], valid.iloc[-1], color, col))
             ax.plot(valid.index[-1], valid.iloc[-1], 'o', color=color, markersize=6, zorder=4)
-            ax.annotate(f"{valid.iloc[-1]:,.0f}", (valid.index[-1], valid.iloc[-1]), xytext=(8, 0),
-                        textcoords='offset points', va='center', fontsize=10, fontweight='bold',
-                        color=color)
+        if ends:
+            lo, hi = ax.get_ylim()
+            ypos = _spread_labels([e[1] for e in ends], min_gap=0.035 * (hi - lo))
+            for (x, y, color, _), yl in zip(ends, ypos):
+                ax.annotate(f"{y:,.0f}", (x, yl), xytext=(8, 0), textcoords='offset points',
+                            va='center', fontsize=10, fontweight='bold', color=color,
+                            annotation_clip=False)
         ax.axhline(0, color=cp.INK, linewidth=0.8, alpha=0.5, zorder=1)
         ax.set_ylabel(f"Cumulative {flux}{unit_txt}")
         cp.style_axes(ax)
-        ax.margins(x=0.06)
-        ax.legend(loc='best', frameon=False, fontsize=9, title='USTAR scenario', title_fontsize=9)
+        ax.margins(x=0.08)
+        n_methods = len(data.gapfilled_cols())
+        ax.legend(loc='best', frameon=False, fontsize=9, title_fontsize=9,
+                  title='method and USTAR scenario' if n_methods > 1 else 'USTAR scenario')
         nice_date_ticks(ax=ax)
         subtitle = f"{df.index[0]:%Y-%m-%d} to {df.index[-1]:%Y-%m-%d}"
-        if len(totals) > 1:
-            subtitle += (f". The totals differ by {max(totals) - min(totals):,.0f}"
-                         f"{f' {units}' if units else ''} between the lowest and the highest.")
+        u = f' {units}' if units else ''
+        if n_methods > 1:
+            by_method = {}
+            for _, y, _, col in ends:
+                by_method.setdefault(_series_method(data, col), []).append(y)
+            subtitle += ". Range over the USTAR scenarios: " + ", ".join(
+                f"{_label(m)} {max(v) - min(v):,.0f}{u}" for m, v in by_method.items())
+            subtitle += ". See plot_gapfilling_comparison for the difference between the methods."
+        elif len(ends) > 1:
+            totals = [e[1] for e in ends]
+            subtitle += (f". The totals differ by {max(totals) - min(totals):,.0f}{u} between "
+                         f"the lowest and the highest.")
         cp.figure_title(fig, f"Cumulative {flux} of every gap-filled series", subtitle)
     else:
         n = len(series_info)
@@ -637,9 +671,11 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
             cum_df = doy_cumulatives_per_year(df[col].rename(col))
             cum_df = cum_df.loc[:, cum_df.notna().any()]
             year_list = list(cum_df.columns)
-            # Years from light to dark, so the most recent year is the darkest line.
-            shades = plt.get_cmap('Blues')(np.linspace(0.35, 1.0, len(year_list))
-                                           if len(year_list) > 1 else [0.85])
+            # Years from light to dark, so the most recent year is the darkest line. Each method
+            # keeps its hue.
+            cmap = cp.METHOD_CMAPS.get(_series_method(data, col), 'Blues')
+            shades = plt.get_cmap(cmap)(np.linspace(0.35, 1.0, len(year_list))
+                                        if len(year_list) > 1 else [0.85])
             if show_reference and len(year_list) > 1:
                 ref = doy_mean_cumulative(cumulatives_per_year_df=cum_df,
                                           excl_years_from_reference=excl_years_from_reference)
@@ -666,6 +702,259 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
                         "comparable with full years.")
     if showplot:
         plt.show()
+
+
+def _gap_lengths(measured: "pd.Series") -> "pd.Series":
+    """Length in records of the gap each missing record belongs to (NaN where measured)."""
+    gap = measured.isna()
+    gap_id = (gap != gap.shift()).cumsum()
+    length = gap.groupby(gap_id).transform('size')
+    return length.where(gap)
+
+
+def _comparison_frame(data, ustar_scenario: str, methods: tuple) -> DataFrame:
+    """Filled values of two methods at the gaps of one USTAR scenario, with context columns."""
+    a, b = methods
+    gf, ngf = data.gapfilled_cols(), data.nongapfilled_cols()
+    for m in methods:
+        if ustar_scenario not in gf.get(m, {}):
+            raise ValueError(f"Method {m!r} has no gap-filled series for {ustar_scenario!r}. "
+                             f"Methods that ran: {list(gf)}")
+    measured = data.fpc_df[ngf[a][ustar_scenario]]
+    df = DataFrame({'a': data.fpc_df[gf[a][ustar_scenario]], 'b': data.fpc_df[gf[b][ustar_scenario]],
+                    'measured': measured, 'night': data.fpc_df['NIGHTTIME'] == 1,
+                    'gap_length': _gap_lengths(measured)})
+    df['gap'] = measured.isna() & df['a'].notna() & df['b'].notna()
+    return df
+
+
+def _same_record_skill(data, ustar_scenario: str, methods: tuple) -> dict | None:
+    """Scores of both methods on the held-out test records of the ML method.
+
+    MDS predicts each measured record without using it (leave one out), so its predictions at
+    the ML test records are out-of-sample as well. Returns None if neither method is MDS or the
+    ML method kept no test records.
+    """
+    import numpy as np
+    if 'mds' not in methods:
+        return None
+    ml = next(m for m in methods if m != 'mds')
+    mds = data.levels.level41_mds[ustar_scenario]
+    ml_inst = getattr(data.levels, f'level41_{ml}')[ustar_scenario]
+    yearly = _optional(ml_inst, 'results_yearly_')
+    if not yearly:
+        return None
+    obs, p_ml, p_mds = [], [], []
+    mds_pred = mds.gapfilling_df_['.PREDICTIONS']
+    for year, m in yearly.items():
+        d = m.traintest_details_
+        test = d['test_df']
+        if test.empty:
+            continue
+        in_year = test.index.year == int(year)
+        test = test[in_year]
+        pred = d['model'].predict(test.drop(columns=m.target_col).to_numpy())
+        obs.append(test[m.target_col].to_numpy())
+        p_ml.append(pred)
+        p_mds.append(mds_pred.reindex(test.index).to_numpy())
+    if not obs:
+        return None
+    obs, p_ml, p_mds = (np.concatenate(x) for x in (obs, p_ml, p_mds))
+    ok = ~np.isnan(p_mds) & ~np.isnan(obs)
+
+    def score(p):
+        e = p[ok] - obs[ok]
+        return {'r2': 1 - np.sum(e ** 2) / np.sum((obs[ok] - obs[ok].mean()) ** 2),
+                'rmse': float(np.sqrt(np.mean(e ** 2))), 'bias': float(np.mean(e))}
+
+    return {'n': int(ok.sum()), 'mds': score(p_mds), ml: score(p_ml)}
+
+
+def report_gapfilling_comparison(data, methods: tuple = ('mds', 'xgb'), gain: float = 1.0,
+                                 units: str = '', verbose: int | bool | None = None) -> DataFrame:
+    """Compare the gap-filled results of two methods, for each USTAR scenario.
+
+    Both methods fill the same gaps, so their difference comes from the filled values alone. The
+    table gives, per scenario, the sum of each method and their difference (second minus first),
+    the part of the difference from daytime and from nighttime gaps, the part from gaps of
+    different lengths, and the scores of both methods on the same held-out records (the test
+    records of the ML method, which MDS also predicts without using them). Sums are times
+    ``gain``.
+
+    Args:
+        data: Chain container after both methods ran (e.g. ``run_level41_mds`` and
+            ``run_level41_xgb``).
+        methods: The two methods, e.g. ``('mds', 'xgb')``. The difference is second minus first.
+        gain: Factor for the sums, e.g. ``12.011e-6 * 1800`` for gC m-2 from 30-min CO2 fluxes.
+        units: Unit of the sums.
+        verbose: Verbosity for the console helpers.
+
+    Returns:
+        DataFrame with one row per USTAR scenario.
+    """
+    a, b = methods
+    gf = data.gapfilled_cols()
+    scenarios = [sc for sc in gf.get(a, {}) if sc in gf.get(b, {})]
+    classes = [(1, 1, '1'), (2, 12, '2-12'), (13, 48, '13-48'), (49, None, '>48')]
+    rows = {}
+    for sc in scenarios:
+        d = _comparison_frame(data, sc, methods)
+        diff = (d['b'] - d['a']).where(d['gap']) * gain
+        row = {f'sum {_label(a)}': float(d['a'].sum() * gain), f'sum {_label(b)}': float(d['b'].sum() * gain),
+               'difference': float(diff.sum()),
+               'from day gaps': float(diff[~d['night']].sum()), 'from night gaps': float(diff[d['night']].sum())}
+        for lo, hi, label in classes:
+            sel = (d['gap_length'] >= lo) & ((d['gap_length'] <= hi) if hi else True)
+            row[f'gaps {label}'] = float(diff[sel].sum())
+        skill = _same_record_skill(data, sc, methods)
+        if skill:
+            row['test records'] = skill['n']
+            for m in methods:
+                row[f'R2 {_label(m)}'] = skill[m]['r2']
+                row[f'RMSE {_label(m)}'] = skill[m]['rmse']
+        rows[sc] = row
+    out = DataFrame(rows).T
+    out.index.name = 'USTAR'
+
+    u = f" ({units})" if units else ""
+    table = _table()
+    table.add_column("USTAR")
+    for col in (f'sum {_label(a)}', f'sum {_label(b)}', 'difference', 'from day gaps',
+                'from night gaps', 'gaps 1', 'gaps 2-12', 'gaps 13-48', 'gaps >48'):
+        table.add_column(col.replace(' ', '\n', 1), justify="right", no_wrap=True)
+    for sc, r in out.iterrows():
+        table.add_row(sc, *[f"{r[c]:,.0f}" for c in (f'sum {_label(a)}', f'sum {_label(b)}', 'difference',
+                                                       'from day gaps', 'from night gaps', 'gaps 1',
+                                                       'gaps 2-12', 'gaps 13-48', 'gaps >48')])
+    notes = [f"Sums{u}. difference = {_label(b)} - {_label(a)} over the filled gaps, split into "
+             f"daytime and nighttime gaps and by gap length in records."]
+    if 'test records' in out.columns:
+        for sc, r in out.iterrows():
+            notes.append(f"{sc}, same {int(r['test records']):,} held-out records: "
+                         + ", ".join(f"{_label(m)} R² {r[f'R2 {_label(m)}']:.2f} "
+                                     f"RMSE {r[f'RMSE {_label(m)}']:.2f}" for m in methods))
+        notes.append("Held-out records are random single half-hours, so these scores describe short "
+                     "gaps; the sums depend more on the long ones.")
+    _print_report(f"Gap-filling methods compared: {_label(a)} and {_label(b)}", table, notes,
+                  verbose=verbose)
+    return out
+
+
+def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods: tuple = ('mds', 'xgb'),
+                               gain: float = 1.0, units: str = '', flux_units: str = '',
+                               showplot: bool = True):
+    """Show where two gap-filling methods disagree, in four panels.
+
+    1. Filled values of both methods at the same gaps, by day and by night, with the 1:1 line:
+       a cloud off the line is a bias, a wide cloud is scatter.
+    2. Mean difference (second minus first) by month and hour of the day: where in the daily and
+       seasonal cycle the methods differ.
+    3. Contribution of each month to the difference of the sums, daytime and nighttime gaps apart.
+    4. Cumulative difference over the record for every USTAR scenario, with the range of the
+       scenarios of each method for comparison.
+
+    Args:
+        data: Chain container after both methods ran.
+        ustar_scenario: Scenario of panels 1 to 3. Defaults to the middle scenario.
+        methods: The two methods; the difference is second minus first.
+        gain: Factor for sums (panels 3 and 4), e.g. ``12.011e-6 * 1800`` for gC m-2.
+        units: Unit of the sums.
+        flux_units: Unit of the flux (panels 1 and 2).
+        showplot: Call ``plt.show()`` after drawing.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from diive.core.plotting.plotfuncs import nice_date_ticks
+    from diive.core.plotting.styles import chainplots as cp
+
+    a, b = methods
+    la, lb = _label(a), _label(b)
+    gf = data.gapfilled_cols()
+    scenarios = [sc for sc in gf.get(a, {}) if sc in gf.get(b, {})]
+    if not scenarios:
+        raise ValueError(f"Methods {methods} have no scenario in common. Methods that ran: {list(gf)}")
+    scenario = ustar_scenario or scenarios[len(scenarios) // 2]
+    d = _comparison_frame(data, scenario, methods)
+    g = d[d['gap']]
+    fu = f" ({flux_units})" if flux_units else ""
+    u = f" {units}" if units else ""
+
+    fig = plt.figure(facecolor='white', figsize=(16, 10.5), layout='constrained')
+    gs = fig.add_gridspec(2, 2)
+    ax_sc, ax_mh, ax_mo, ax_cum = (fig.add_subplot(gs[i, j]) for i, j in ((0, 0), (0, 1), (1, 0), (1, 1)))
+
+    for mask, color, label in ((~g['night'], cp.DAY, 'day'), (g['night'], cp.NIGHT, 'night')):
+        x, y = g.loc[mask, 'a'], g.loc[mask, 'b']
+        if len(x) > 2:
+            r = np.corrcoef(x, y)[0, 1]
+            label = f"{label}: {len(x):,} gaps, mean {lb} - {la} {np.mean(y - x):+.2f}, r {r:.2f}"
+        ax_sc.plot(x, y, color=color, label=label, **{**cp.POINTS, 'markersize': 3, 'alpha': 0.5})
+    lim = np.nanpercentile(np.abs(g[['a', 'b']].to_numpy()), 99.5) * 1.05 if len(g) else 1
+    ax_sc.plot([-lim, lim], [-lim, lim], color=cp.INK, linewidth=0.8, linestyle=(0, (4, 3)))
+    ax_sc.set_xlim(-lim, lim)
+    ax_sc.set_ylim(-lim, lim)
+    ax_sc.set_xlabel(f"filled by {la}{fu}")
+    ax_sc.set_ylabel(f"filled by {lb}{fu}")
+    cp.style_axes(ax_sc, grid_axis='both')
+    cp.panel_label(ax_sc, f"Filled values at the same gaps, {scenario}")
+    ax_sc.legend(loc='upper left', frameon=False, fontsize=8.5, markerscale=3)
+
+    diff = (g['b'] - g['a'])
+    hour = g.index.hour + g.index.minute / 60
+    mh = diff.groupby([g.index.month, hour]).mean().unstack()
+    mh = mh.reindex(index=range(1, 13))
+    vmax = np.nanpercentile(np.abs(mh.to_numpy()), 98) if mh.notna().any().any() else 1
+    im = ax_mh.pcolormesh(np.r_[mh.columns.to_numpy(), mh.columns.to_numpy()[-1] + 0.5] - 0.25,
+                          np.arange(0.5, 13.5), mh.to_numpy(), cmap=cp.HEATMAP_CMAP,
+                          vmin=-vmax, vmax=vmax, shading='flat')
+    cb = fig.colorbar(im, ax=ax_mh, extend='both')
+    cb.set_label(f"mean {lb} - {la}{fu}")
+    ax_mh.set_yticks(range(1, 13), ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+                                    'Oct', 'Nov', 'Dec'])
+    ax_mh.invert_yaxis()
+    ax_mh.set_xticks(range(0, 25, 3))
+    ax_mh.set_xlabel('hour of the day')
+    cp.style_axes(ax_mh, grid_axis='none')
+    cp.panel_label(ax_mh, "Mean difference at the gaps, by month and hour")
+
+    contrib = (diff * gain).groupby([g.index.to_period('M'), g['night']]).sum().unstack(fill_value=0)
+    contrib = contrib.reindex(columns=[False, True], fill_value=0)
+    x = contrib.index.to_timestamp() + pd.Timedelta(days=14)
+    ax_mo.bar(x, contrib[False].to_numpy(), width=12, color=cp.DAY, label='day gaps', align='edge')
+    ax_mo.bar(x + pd.Timedelta(days=12), contrib[True].to_numpy(), width=12, color=cp.NIGHT,
+              label='night gaps', align='edge')
+    ax_mo.axhline(0, color=cp.INK, linewidth=0.7)
+    ax_mo.set_ylabel(f"{lb} - {la}{f' ({units})' if units else ''}")
+    cp.style_axes(ax_mo)
+    cp.panel_label(ax_mo, f"Contribution of each month to the difference, {scenario}")
+    ax_mo.legend(loc='best', frameon=False, fontsize=8.5)
+    nice_date_ticks(ax=ax_mo)
+
+    totals = {}
+    shades = cp.METHOD_COLORS.get(b, cp.SCENARIO_COLORS)
+    for i, sc in enumerate(scenarios):
+        ds = _comparison_frame(data, sc, methods)
+        cum = ((ds['b'] - ds['a']).where(ds['gap']).fillna(0) * gain).cumsum()
+        ax_cum.plot(cum.index, cum.to_numpy(), color=cp.SCENARIO_COLORS[i % len(cp.SCENARIO_COLORS)],
+                    linewidth=2, label=f"{sc}: {cum.iloc[-1]:+,.0f}{u}")
+        totals[sc] = (ds['a'].sum() * gain, ds['b'].sum() * gain)
+    ax_cum.axhline(0, color=cp.INK, linewidth=0.7)
+    ax_cum.set_ylabel(f"cumulative {lb} - {la}{f' ({units})' if units else ''}")
+    cp.style_axes(ax_cum)
+    cp.panel_label(ax_cum, "Cumulative difference, every USTAR scenario")
+    ax_cum.legend(loc='best', frameon=False, fontsize=8.5)
+    nice_date_ticks(ax=ax_cum)
+
+    spread_a = max(t[0] for t in totals.values()) - min(t[0] for t in totals.values())
+    spread_b = max(t[1] for t in totals.values()) - min(t[1] for t in totals.values())
+    d_sc = totals[scenario][1] - totals[scenario][0]
+    cp.figure_title(fig, f"Gap-filling methods compared: {la} and {lb}",
+                    f"{scenario}: {la} {totals[scenario][0]:,.0f}{u}, {lb} {totals[scenario][1]:,.0f}{u}, "
+                    f"difference {d_sc:+,.0f}{u}. Range over the USTAR scenarios: {la} {spread_a:,.0f}{u}, "
+                    f"{lb} {spread_b:,.0f}{u}. Both methods fill the same {int(d['gap'].sum()):,} gaps.")
+    if showplot:
+        plt.show()
+    return fig
 
 
 def _driver_groups(features, drivers: list) -> dict:
@@ -766,13 +1055,13 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
     plt.show()
 
 
-def _quality_classes(data, ustar_scenario: str | None) -> dict:
+def _quality_classes(data, ustar_scenario: str | None, method: str | None = None) -> dict:
     """The flux split into quality classes for one USTAR scenario, plus its gap-filled result.
 
     ``best``: QCF 0 after Level 3.3, the highest quality. ``used``: the records the gap-filling
     started from (QCF below the accepted limit, 0 and 1 by default). ``rejected``: every record
     with a value that is not used, whatever test removed it. ``filled``: the gap-filled result of
-    the first L4.1 method that ran for this scenario.
+    *method* ('mds', 'rf', 'xgb'), or of the first L4.1 method that ran for this scenario.
     """
     used_all = data.levels.filteredseries_level33_qcf
     if not used_all:
@@ -785,7 +1074,10 @@ def _quality_classes(data, ustar_scenario: str | None) -> dict:
     corrected = data.fpc_df[data.levels.flux_corrected_col or data.meta.fluxcol]
     rejected = corrected.where(corrected.notna() & used.isna())
     gf_cols = data.gapfilled_cols()
-    method = next((m for m, sc in gf_cols.items() if scenario in sc), None)
+    if method is not None and scenario not in gf_cols.get(method, {}):
+        raise ValueError(f"No gap-filled series of method {method!r} for scenario {scenario!r}. "
+                         f"Available methods: {[m for m, sc in gf_cols.items() if scenario in sc]}")
+    method = method or next((m for m, sc in gf_cols.items() if scenario in sc), None)
     filled = data.fpc_df[gf_cols[method][scenario]] if method else None
     return dict(scenario=scenario, best=best, used=used, qcf1=used.where(best.isna()),
                 rejected=rejected, filled=filled, method=method,
@@ -949,7 +1241,7 @@ def plot_gapfilling_input(data, units: str = '', showplot: bool = True) -> None:
 
 
 def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = '',
-                          showplot: bool = True) -> None:
+                          method: str | None = None, showplot: bool = True) -> None:
     """Heatmaps of the flux by quality class, and of the gap-filled result.
 
     Four panels on one colour scale centred on zero: the highest-quality records (QCF 0), the
@@ -960,13 +1252,15 @@ def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = 
         data: Chain container after ``run_level33_*`` (the last panel needs ``run_level41_*``).
         ustar_scenario: USTAR scenario to show. Defaults to the first.
         units: Unit of the flux, for the colour bars.
+        method: Gap-filling method of the last panel ('mds', 'rf', 'xgb'). Defaults to the
+            first that ran.
         showplot: Call ``plt.show()`` after drawing.
     """
     import matplotlib.pyplot as plt
     from diive.core.plotting.heatmap_datetime import HeatmapDateTime
     from diive.core.plotting.styles import chainplots as cp
 
-    q = _quality_classes(data, ustar_scenario)
+    q = _quality_classes(data, ustar_scenario, method=method)
     panels = [(q['best'], "Highest quality (QCF 0)"),
               (q['used'], "Used for gap-filling"),
               (q['rejected'], "Rejected"),]
@@ -997,7 +1291,7 @@ def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = 
 
 
 def plot_quality_timeseries(data, ustar_scenario: str | None = None, units: str = '',
-                            showplot: bool = True) -> None:
+                            method: str | None = None, showplot: bool = True) -> None:
     """Time series of the flux by quality class, by day and by night, and the gap-filled result.
 
     Three rows, each with its distribution beside it. Daytime and nighttime show the records of
@@ -1009,6 +1303,8 @@ def plot_quality_timeseries(data, ustar_scenario: str | None = None, units: str 
         data: Chain container after ``run_level33_*`` (the last row needs ``run_level41_*``).
         ustar_scenario: USTAR scenario to show. Defaults to the first.
         units: Unit of the flux, for the y-axis label.
+        method: Gap-filling method of the last row ('mds', 'rf', 'xgb'). Defaults to the first
+            that ran.
         showplot: Call ``plt.show()`` after drawing.
     """
     import matplotlib.pyplot as plt
@@ -1017,7 +1313,7 @@ def plot_quality_timeseries(data, ustar_scenario: str | None = None, units: str 
     from diive.core.plotting.plotfuncs import nice_date_ticks
     from diive.core.plotting.styles import chainplots as cp
 
-    q = _quality_classes(data, ustar_scenario)
+    q = _quality_classes(data, ustar_scenario, method=method)
     night = q['night']
     lo, hi = q['used'].quantile([0.0005, 0.9995])
     pad = 0.15 * (hi - lo)

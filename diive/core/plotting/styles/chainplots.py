@@ -12,7 +12,7 @@ import numpy as np
 from pandas import Series
 
 from diive.core.plotting.styles._material_design_colors import (
-    amber, blue, bluegray, indigo, red,
+    amber, blue, bluegray, deeporange, indigo, red, teal,
 )
 
 INK = bluegray(900)          # titles, axis labels
@@ -27,6 +27,13 @@ NIGHT = indigo(500)
 #: Ordered colours for a few ordered scenarios (USTAR CUT_16 < CUT_50 < CUT_84, ...):
 #: one hue from light to dark, so the order reads off the colour.
 SCENARIO_COLORS = [blue(300), blue(600), indigo(900), bluegray(500), amber(700)]
+
+#: One hue per gap-filling method, light to dark for its ordered scenarios, and a colormap of the
+#: same hue for its years.
+METHOD_COLORS = {'mds': [deeporange(200), deeporange(500), deeporange(900)],
+                 'xgb': [blue(300), blue(600), indigo(900)],
+                 'rf': [teal(200), teal(500), teal(900)]}
+METHOD_CMAPS = {'mds': 'Oranges', 'xgb': 'Blues', 'rf': 'Greens'}
 
 #: One colour per outlier test in overview plots, in the order the tests ran.
 TEST_COLORS = [red(600), '#FB8C00', '#8E24AA', blue(600), '#00897B', '#6D4C41', '#D81B60']
@@ -46,7 +53,8 @@ def style_axes(ax, grid_axis: str = 'y') -> None:
     for side in ('left', 'bottom'):
         ax.spines[side].set_color(bluegray(300))
     ax.tick_params(colors=MUTED, labelcolor=INK, labelsize=9, length=3)
-    ax.grid(axis=grid_axis, color=GRID, linewidth=0.8)
+    if grid_axis != 'none':
+        ax.grid(axis=grid_axis, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     ax.xaxis.label.set_color(INK)
     ax.yaxis.label.set_color(INK)
