@@ -5,9 +5,12 @@
 
 ## [0.93.0] - unreleased
 
-USTAR threshold detection now reproduces ONEFlux and REddyProc. The new `UstarThresholdDetection`
-selects the method with `mode`, and the flux post-processing chain detects thresholds as ONEFlux by
-default. Thresholds detected in the chain change: look for entries marked "changes results".
+USTAR thresholds are now detected as ONEFlux and REddyProc do, and the flux post-processing chain
+selects the REF of NEE, GPP and RECO as ONEFlux does. Several changes alter results and are marked
+"changes results": the chain's USTAR thresholds, machine-learning gap-filling that refits on all
+records, MDS in ONEFlux mode that removes long gaps, and the Hampel window. Outlier detection adds a
+negative nighttime test, storage term screening and a time-of-day Hampel mode, the chain reports
+compare gap-filling methods, and `import diive`, many plots and the GUI are faster.
 
 ### Added
 
@@ -131,14 +134,12 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   not count and the window reached across long gaps into data weeks away. A single pass over
   complete data gives the same flags as before. With `repeat=True`, records removed in earlier
   passes no longer widen the window either, so later passes can flag a few more.
-
 - **MDS in ONEFlux mode removes long gaps (changes results):** with `mode='oneflux'`, gap-filled
   values in long gaps are set missing again, as in the FLUXNET product of ONEFlux since 2025. This
   applies to gaps where more than 15 days in a row are filled with the lowest quality, and 15 days
   next to the measured data stay filled. The NEE REF selection and NEE partitioning still use all
   filled values, as in ONEFlux, and GPP and RECO are set missing in the same records. The modes
   `'diive'` and `'reddyproc'` are unchanged.
-
 - **Moving point method (changes results):** `UstarMovingPointDetection` now gives the same
   thresholds as the compiled ONEFlux code, also in its rules for short records and in its bootstrap.
 - **USTAR detection in the chain (changes results):** `run_level33_ustar_detection` and `run_chain`
