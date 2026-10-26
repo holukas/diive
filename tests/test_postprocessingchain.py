@@ -1463,6 +1463,93 @@ class TestStorageScreening(unittest.TestCase):
         self.assertIn(spike, data31.levels.level31.storage_outliers_)
 
 
+class TestStorageRestarts(unittest.TestCase):
+    """concentration_col discards the storage term where the analyser is off next to a gap."""
+
+    H = 40.0  # m, storage column height of the synthetic site
+
+    def _df(self):
+        """30 days of a concentration with a daily cycle and its single-point storage term.
+
+        At record 700 the analyser restarts after a 6-record gap, reading 15 mmol m-3 high,
+        and returns to the real concentration over 6 records. Before the gap at record 1000
+        it drifts 12 mmol m-3 up over 4 records. As in EddyPro, the first storage value after
+        a gap is missing.
+        """
+        import numpy as np
+        import pandas as pd
+        rng = np.random.default_rng(3)
+        index = pd.date_range('2022-07-01 00:15', periods=48 * 30, freq='30min', name='TIMESTAMP_MIDDLE')
+        hour = index.hour + index.minute / 60
+        real = 16.5 + 0.8 * np.cos(2 * np.pi * (hour - 5) / 24) + rng.normal(0, 0.05, len(index))
+        conc = pd.Series(real, index=index)
+        conc.iloc[694:700] = np.nan
+        conc.iloc[700:706] += 15 * np.exp(-np.arange(6) / 1.5)
+        conc.iloc[996:1000] += [3, 6, 9, 12]
+        conc.iloc[1000:1003] = np.nan
+        strg = self.H * conc.diff() * 1000 / 1800
+        df = pd.DataFrame({'FC': rng.normal(-5, 2, len(index)), 'SC_SINGLE': strg,
+                           'CO2_MOLAR_DENSITY': conc}, index=index)
+        return df
+
+    def _run(self, **kwargs):
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df = self._df()
+        sc = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                      concentration_col='CO2_MOLAR_DENSITY', **kwargs)
+        sc.storage_correction()
+        return df, sc
+
+    def test_transient_after_restart_is_discarded_and_filled(self):
+        df, sc = self._run()
+        r = sc.results
+        after = df.index[701:706]  # the first record after the gap has no storage value
+        self.assertIn(df.index[700], sc.storage_restarts_)
+        self.assertTrue(set(after) <= set(sc.storage_discarded_))
+        self.assertTrue((r.loc[after, sc.flag_isgapfilled] == 3).all())
+        self.assertTrue((r.loc[after, sc.gapfilled_strgcol].abs() < 5).all())
+        self.assertTrue((r.loc[after, 'SC_SINGLE'] < -20).any())  # the measured values are kept
+        # Normal records stay as measured; every measured flux keeps a storage term.
+        self.assertTrue((r.iloc[300:600][sc.flag_isgapfilled] == 0).all())
+        self.assertEqual(int(r['NEE_L3.1'].notna().sum()), int(df['FC'].notna().sum()))
+
+    def test_drift_before_a_gap_is_discarded(self):
+        df, sc = self._run()
+        self.assertTrue(set(df.index[996:1000]) <= set(sc.storage_discarded_))
+        _, sc_off = self._run(restart_screening={'before_gaps': False})
+        self.assertFalse(sc_off.storage_discarded_.isin(df.index[996:1000]).any())
+
+    def test_storage_sum_is_balanced_again(self):
+        df, sc = self._run()
+        s = sc.screening_summary()
+        self.assertEqual(s['discarded'], len(sc.storage_discarded_))
+        self.assertGreater(s['restarts'], 0)
+        # Measured: the one-sided return after the restart and the drift before the gap.
+        self.assertLess(abs(s['sum_used']), 0.2 * abs(s['sum_unscreened']))
+
+    def test_plot_and_report(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        _, sc = self._run()
+        sc.report()
+        try:
+            self.assertEqual(len(sc.plot_screening(showplot=False).axes), 3)
+        finally:
+            plt.close('all')
+
+    def test_needs_the_column_and_gapfilling(self):
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df = self._df()
+        with self.assertRaises(KeyError):
+            FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                    concentration_col='CO2_X')
+        with self.assertRaises(ValueError):
+            FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                    gapfill_storage_term=False,
+                                                    concentration_col='CO2_MOLAR_DENSITY')
+
+
 
 class TestModelOverview(unittest.TestCase):
     """report_model_overview describes each year's XGBoost model."""

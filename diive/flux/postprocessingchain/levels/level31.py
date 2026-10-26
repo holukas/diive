@@ -57,6 +57,8 @@ def run_level31(
         strgcol: str | None = None,
         screen_storage_term: bool = False,
         storage_screening: dict | None = None,
+        concentration_col: str | None = None,
+        restart_screening: dict | None = None,
 ) -> FluxLevelData:
     """
     Level-3.1: Apply single-point storage correction and compute the L3.1 QCF.
@@ -82,7 +84,8 @@ def run_level31(
     that ``FluxStorageCorrectionSinglePointEddyPro`` emits when
     ``gapfill_storage_term=True`` is **informational only** (0 = storage was
     measured, 1 = storage was gap-filled with a rolling median, 2 = the screening
-    replaced a spike block by its mean); it does
+    replaced a spike block by its mean, 3 = discarded after an analyser restart
+    and gap-filled); it does
     *not* end in ``_TEST`` and is therefore deliberately ignored by
     ``FlagQCF``. Whether a record's storage term was measured or filled is
     not a quality criterion — users who care about provenance read the
@@ -117,6 +120,14 @@ def run_level31(
         storage_screening: Settings that replace the defaults of the screening, e.g.
             ``{'n_sigma': 7}`` or ``{'max_run': 5}``. See
             ``FluxStorageCorrectionSinglePointEddyPro``.
+        concentration_col: The concentration the storage term is calculated from (e.g.
+            ``'CO2_MOLAR_DENSITY'``). When given, the storage values after each gap in the
+            concentration are discarded until the analyser has recovered, and filled (flag 3).
+            An analyser that restarts after a signal loss can read far from the real
+            concentration and return to it over hours; the return would count as a one-sided
+            storage flux. Needs ``gapfill_storage_term=True``. Default None.
+        restart_screening: Settings that replace the defaults of the restart screening, e.g.
+            ``{'n_sigma': 4}``. See ``FluxStorageCorrectionSinglePointEddyPro``.
 
     Returns:
         Updated FluxLevelData; see the field list above for what is populated.
@@ -145,6 +156,8 @@ def run_level31(
         strgcol=strgcol,
         screen_storage_term=screen_storage_term,
         storage_screening=storage_screening,
+        concentration_col=concentration_col,
+        restart_screening=restart_screening,
     )
     level31.storage_correction()
 

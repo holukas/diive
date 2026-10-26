@@ -43,7 +43,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  set_storage_to_zero: bool = False,
                  strgcol: str | None = None,
                  screen_storage_term: bool = False,
-                 storage_screening: dict | None = None):
+                 storage_screening: dict | None = None,
+                 concentration_col: str | None = None,
+                 restart_screening: dict | None = None):
         """Initialize the storage corrector.
 
         Args:
@@ -88,16 +90,40 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 ``{'n_sigma': 7}``, ``{'repeat': True}`` or ``{'max_run': 5}``. The others go
                 to the Hampel filter, see
                 :class:`~diive.preprocessing.outlier_detection.hampel.Hampel`.
+            concentration_col: The concentration the storage term is calculated from (e.g.
+                ``'CO2_MOLAR_DENSITY'``). When given, the storage values after each gap in the
+                concentration are discarded until the analyser has recovered, and filled like
+                missing values. After a signal loss an analyser can restart with readings far
+                from the real concentration that return to it over hours. The storage term is
+                the change in concentration, so the return counts as a large storage flux of one
+                sign, while the jump at the restart falls into the gap and is never counted: over
+                years these one-sided returns add up to a large false sum. A record counts as
+                recovered when its concentration is within ``n_sigma`` (3) robust standard
+                deviations of the median concentration at the same time of day over
+                ``window_days`` (7) days on either side; the storage values up to and including
+                the first recovered record are discarded, at most ``max_records`` (48). The same
+                holds before a gap (``before_gaps``, True): an analyser losing its signal can
+                drift away from the real concentration, and the jump back falls into the gap, so
+                the records before the gap that are not within the band are discarded too. A
+                gap is at least ``min_gap`` (1) missing records. Needs
+                ``gapfill_storage_term=True``. Default None (no restart screening).
+            restart_screening: Settings that replace the defaults above, e.g.
+                ``{'n_sigma': 4, 'max_records': 24}`` or ``{'before_gaps': False}``.
 
         Attributes:
             results: DataFrame with corrected flux and gap-filling info.
             flux_corrected_col: Name of the corrected flux column.
             gapfilled_strgcol: Name of the gap-filled storage column (if enabled).
             flag_isgapfilled: Flag column (0=original, 1=gap-filled because missing,
-                2=replaced by the screening with the mean of its block).
+                2=replaced by the screening with the mean of its block, 3=discarded after an
+                analyser restart and gap-filled).
             storage_outliers_: Timestamps of the spikes the screening found.
             storage_replaced_: Timestamps of the values it replaced: the spikes and one
                 record on either side.
+            storage_restarts_: Timestamps of the first record after each gap whose
+                concentration had not recovered (a restart with a transient).
+            storage_discarded_: Timestamps of the measured storage values discarded after
+                the restarts.
         """
         self.df = df.copy()
         self.fluxcol = fluxcol
@@ -149,6 +175,19 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self.storage_outliers_ = pd.DatetimeIndex([])
         self.storage_replaced_ = pd.DatetimeIndex([])
 
+        if concentration_col is not None and not set_storage_to_zero:
+            if concentration_col not in df.columns:
+                raise KeyError(f"concentration_col={concentration_col!r} not found in df.")
+            if not gapfill_storage_term:
+                raise ValueError("concentration_col needs gapfill_storage_term=True: the discarded "
+                                 "storage values must be filled, or their flux records are lost.")
+        self.concentration_col = None if set_storage_to_zero else concentration_col
+        self.restart_screening = {'min_gap': 1, 'window_days': 7, 'n_sigma': 3.0,
+                                  'max_records': 48, 'before_gaps': True,
+                                  **(restart_screening or {})}
+        self.storage_restarts_ = pd.DatetimeIndex([])
+        self.storage_discarded_ = pd.DatetimeIndex([])
+
         # Name of gapfilled storage column and its flag
         self.gapfilled_strgcol = None
         # self.gapfilled_strgcol = f"{self.strgcol}_gfRF{self.idstr}"
@@ -193,6 +232,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
         self._results = self.df[cols].copy()
 
         if not self.set_storage_to_zero:
+            if self.concentration_col is not None:
+                self._screen_restarts()
             if self.screen_storage_term:
                 self._screen_storage_term()
             # Gap-fill storage term
@@ -257,6 +298,10 @@ class FluxStorageCorrectionSinglePointEddyPro:
             n_screened = int((fluxavailable[self.flag_isgapfilled] == 2).sum())
             if self.screen_storage_term:
                 info(f"Screening: {n_screened:,} storage spike(s) at measured fluxes removed and filled")
+            if self.concentration_col is not None:
+                n_discarded = int((fluxavailable[self.flag_isgapfilled] == 3).sum())
+                info(f"Restarts: {n_discarded:,} storage value(s) at measured fluxes discarded "
+                     f"after {len(self.storage_restarts_):,} analyser restart(s) and filled")
             info(f"Output corrected flux: {n_flux_corrected:,}  ({n_isorig} original + {n_isfilled} gap-filled)")
 
             # Statistics if gap-filled values exist
@@ -289,7 +334,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         values.
         """
         from diive.preprocessing.outlier_detection.hampel import Hampel
-        strg = self._results[self.strgcol]
+        strg = self._measured_storage()
         if strg.notna().sum() < 3:
             return
         ham = Hampel(series=strg.copy(), **self.storage_screening)
@@ -304,6 +349,83 @@ class FluxStorageCorrectionSinglePointEddyPro:
              f"({100 * len(self.storage_outliers_) / max(strg.notna().sum(), 1):.2f} % of the "
              f"measured storage values)")
 
+    def _measured_storage(self) -> pd.Series:
+        """The measured storage term without the values discarded after analyser restarts."""
+        strg = self._results[self.strgcol]
+        return strg.where(~strg.index.isin(self.storage_discarded_))
+
+    def _screen_restarts(self) -> None:
+        """Find the storage values after a gap in the concentration, until the analyser recovered,
+        and (``before_gaps``) those before a gap where it had drifted away.
+
+        ``_gapfill_storage_term`` fills them (flag 3); the original storage column in the
+        results keeps the measured values.
+        """
+        import numpy as np
+        s = self.restart_screening
+        strg = self._results[self.strgcol]
+        conc = self.df[self.concentration_col].reindex(strg.index).astype(float)
+        ref, scale = self._time_of_day_reference(conc, int(s['window_days']))
+        # Without a reference (too few days) the record cannot be judged and counts as recovered.
+        recovered = ((conc - ref).abs() <= s['n_sigma'] * scale) | ref.isna() | scale.isna()
+
+        missing = conc.isna()
+        run_id = (missing != missing.shift()).cumsum()
+        run_len = missing.groupby(run_id).transform('size')
+        gap_end = (~missing & missing.shift(1, fill_value=False)
+                   & (run_len.shift(1, fill_value=0) >= s['min_gap']))
+
+        miss, ok = missing.to_numpy(), recovered.to_numpy()
+        discard = np.zeros(len(conc), dtype=bool)
+        # Before a gap: an analyser losing its signal can drift away from the real concentration;
+        # the drift is counted, the jump back falls into the gap. Its records are discarded too.
+        gap_start = (~missing & missing.shift(-1, fill_value=False)
+                     & (run_len.shift(-1, fill_value=0) >= s['min_gap']))
+        if s['before_gaps']:
+            for end in np.flatnonzero(gap_start.to_numpy()):
+                for i in range(end, max(end - int(s['max_records']), -1), -1):
+                    if miss[i] or ok[i]:
+                        break
+                    discard[i] = True
+        restarts, n_capped = [], 0
+        for start in np.flatnonzero(gap_end.to_numpy()):
+            if not ok[start]:
+                restarts.append(start)
+            for i in range(start, min(start + int(s['max_records']), len(conc))):
+                if miss[i]:
+                    break
+                # The storage value of the first recovered record still uses the concentration
+                # before it, so it is discarded too.
+                discard[i] = True
+                if ok[i]:
+                    break
+            else:  # neither recovered nor another gap within max_records
+                n_capped += 1
+        discard &= strg.notna().to_numpy()
+        self.storage_restarts_ = strg.index[restarts]
+        self.storage_discarded_ = strg.index[discard]
+        info(f"Storage term {self.strgcol}: {len(self.storage_restarts_):,} analyser restart(s) "
+             f"after a gap in {self.concentration_col}; {len(self.storage_discarded_):,} storage "
+             f"value(s) discarded where the concentration was off next to a gap")
+        if n_capped:
+            warn(f"Storage term {self.strgcol}: after {n_capped} restart(s) the concentration had "
+                 f"not recovered within {s['max_records']} records; the screening stopped there.")
+
+    @staticmethod
+    def _time_of_day_reference(conc: pd.Series, window_days: int) -> tuple[pd.Series, pd.Series]:
+        """Median and robust standard deviation (1.4826 MAD) of the concentration at the same
+        time of day, over ``window_days`` days on either side."""
+        day = conc.index.normalize()
+        tod = conc.index - day
+        mat = pd.Series(conc.to_numpy(), index=pd.MultiIndex.from_arrays([day, tod])).unstack()
+        mat = mat.reindex(pd.date_range(mat.index.min(), mat.index.max(), freq='D'))
+        roll = dict(window=2 * window_days + 1, center=True, min_periods=3)
+        med = mat.rolling(**roll).median()
+        mad = (mat - med).abs().rolling(**roll).median() * 1.4826
+        rows, cols = med.index.get_indexer(day), med.columns.get_indexer(tod)
+        return (pd.Series(med.to_numpy()[rows, cols], index=conc.index),
+                pd.Series(mad.to_numpy()[rows, cols], index=conc.index))
+
     def screening_summary(self, gain: float = 1.0) -> dict:
         """Numbers that show whether the screened and filled storage term still makes sense.
 
@@ -312,6 +434,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
 
         - ``spikes``: number of spikes the screening found at measured fluxes.
         - ``replaced``: number of values replaced there (the spikes and their neighbours).
+        - ``restarts``, ``discarded``: number of analyser restarts with a transient, and of
+          storage values discarded after them at measured fluxes (with a ``concentration_col``).
         - ``spikes_negative``: share of the spikes below zero. Real storage spikes have both
           signs; a large negative share in the morning hints at the real morning release being
           cut.
@@ -322,7 +446,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
         - ``daily_abs_median_unscreened``, ``daily_abs_median_used``: median of the absolute
           daily sums, times ``gain``. Lower means the daily balance improved.
 
-        Needs ``screen_storage_term=True`` and a finished ``storage_correction()``.
+        Needs ``screen_storage_term=True`` or a ``concentration_col``, and a finished
+        ``storage_correction()``.
         """
         d = self._screening_frame()
         spikes = d['spike']
@@ -332,6 +457,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
         return {
             'spikes': int(spikes.sum()),
             'replaced': int(d['replaced'].sum()),
+            'restarts': len(self.storage_restarts_),
+            'discarded': int(d['discarded'].sum()),
             'spikes_negative': float((d.loc[spikes, 'unscreened'] < 0).mean()) if spikes.any() else float('nan'),
             'sum_unscreened': float(d['unscreened'].sum() * gain),
             'sum_used': float(d['used'].sum() * gain),
@@ -340,16 +467,20 @@ class FluxStorageCorrectionSinglePointEddyPro:
         }
 
     def _screening_frame(self) -> DataFrame:
-        """Storage term at the records with a measured flux: unscreened, used, replaced, spikes."""
-        if not self.screen_storage_term or self.gapfilled_strgcol is None:
-            raise RuntimeError("Needs screen_storage_term=True and storage_correction() first.")
+        """Storage term at the records with a measured flux: unscreened, used, replaced, discarded
+        after a restart, spikes."""
+        screened = self.screen_storage_term or self.concentration_col is not None
+        if not screened or self.gapfilled_strgcol is None:
+            raise RuntimeError("Needs screen_storage_term=True or a concentration_col, and "
+                               "storage_correction() first.")
         r = self.results
         r = r[r[self.fluxcol].notna()]
-        replaced = r[self.flag_isgapfilled] == 2
-        # Without screening the replaced records would carry their measured value.
-        unscreened = r[self.gapfilled_strgcol].where(~replaced, r[self.strgcol])
+        flag = r[self.flag_isgapfilled]
+        # Without screening the replaced and discarded records would carry their measured value.
+        unscreened = r[self.gapfilled_strgcol].where(flag < 2, r[self.strgcol])
         return DataFrame({'unscreened': unscreened, 'used': r[self.gapfilled_strgcol],
-                          'replaced': replaced, 'spike': r.index.isin(self.storage_outliers_)})
+                          'replaced': flag == 2, 'discarded': flag == 3,
+                          'spike': r.index.isin(self.storage_outliers_)})
 
     def plot_screening(self, gain: float = 1.0, units: str = '', showplot: bool = True):
         """Check the screened and filled storage term in three panels.
@@ -420,13 +551,20 @@ class FluxStorageCorrectionSinglePointEddyPro:
         nice_date_ticks(ax=ax_cum)
 
         u = f" {units}" if units else ""
+        parts = []
+        if self.concentration_col is not None:
+            parts.append(f"{summary['restarts']:,} analyser restarts: {summary['discarded']:,} values "
+                         f"discarded and filled")
+        if self.screen_storage_term:
+            negative = (f" ({100 * summary['spikes_negative']:.0f} % negative)"
+                        if summary['spikes'] else "")
+            parts.append(f"{summary['spikes']:,} spikes{negative}: {summary['replaced']:,} values "
+                         f"replaced by their block mean")
         cp.figure_title(
             fig, f"Storage term screening: {self.strgcol}",
-            f"{summary['spikes']:,} spikes at measured fluxes, {100 * summary['spikes_negative']:.0f} % "
-            f"negative; {summary['replaced']:,} values replaced by the mean of their block. "
-            f"Sum without screening "
-            f"{summary['sum_unscreened']:,.1f}{u}, used {summary['sum_used']:,.1f}{u}. Median absolute "
-            f"daily sum {summary['daily_abs_median_unscreened']:.2f} -> {summary['daily_abs_median_used']:.2f}{u}.")
+            ". ".join(parts) + f". Sum {summary['sum_unscreened']:,.1f} -> {summary['sum_used']:,.1f}{u}, "
+            f"median absolute daily sum {summary['daily_abs_median_unscreened']:.2f} -> "
+            f"{summary['daily_abs_median_used']:.2f}{u}. At measured fluxes.")
         self._fig = fig
         if showplot:
             plt.show()
@@ -442,7 +580,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         term, next to each other or, with a central difference, one record apart; both lie in
         one block, which then becomes values near zero.
         """
-        strg = self.results[self.strgcol]
+        strg = self._measured_storage()
         flagged = pd.Series(strg.index.isin(self.storage_outliers_), index=strg.index)
         block = (flagged | flagged.shift(1, fill_value=False) | flagged.shift(-1, fill_value=False))
         block &= strg.notna()
@@ -469,7 +607,7 @@ class FluxStorageCorrectionSinglePointEddyPro:
         # storage. Each spike block gets the mean of its measured values (flag 2): the storage
         # term is the change in concentration, so the sum over the block is the real
         # concentration change across it, and keeping it keeps the balance.
-        strg_series = self.results[self.strgcol].copy()
+        strg_series = self._measured_storage()  # values discarded after restarts are gaps
         replacement = self._screened_block_means()
         self.storage_replaced_ = replacement.index
         strg_series[self.storage_replaced_] = replacement
@@ -523,6 +661,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  f"gap-filled by rolling median (fewer than 3 valid storage values within "
                  f"reach); set to 0 so every flux value still carries a storage term.")
 
+        # Filled like missing values, but marked: a measured value was discarded after a restart.
+        gapfilled_df.loc[gapfilled_df.index.isin(self.storage_discarded_), self.flag_isgapfilled] = 3
         gapfilled_df = gapfilled_df[[self.gapfilled_strgcol, self.flag_isgapfilled]].copy()
 
         return gapfilled_df
