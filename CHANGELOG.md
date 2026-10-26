@@ -186,6 +186,13 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   skipped without a message.
 - **Chain report tables:** a table wider than the console is printed at its own width instead of
   having its cells cut to `2.7…`. The SHAP importances show two decimals.
+- **Pooled night spread for the negative nighttime test:** `nighttime_uncertainty` returns a
+  fourth column, `POOLED`: the robust spread (1.4826 MAD) of all nighttime values within
+  `pooled_days` (15) days on either side. PAS20 is the spread of similar fluxes, so in a short noisy
+  stretch, e.g. while an analyser fails, bad night values widen their own uncertainty and pass the
+  test; a month of nights hardly moves the pooled spread. At CH-LAE, night values of −41, −20 and
+  −13 µmol m-2 s-1 in December passed with MAX and are caught with `POOLED` at z = 4. The plot
+  of the negative nighttime test labels its uncertainty axis with the name of the series it got.
 - **Storage term next to analyser gaps:** `FluxStorageCorrectionSinglePointEddyPro` and
   `run_level31` take a `concentration_col` (e.g. `'CO2_MOLAR_DENSITY'`). After a gap in the
   concentration, the storage values are discarded until the concentration is back within 3 robust

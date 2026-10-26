@@ -33,11 +33,12 @@ def nighttime_uncertainty(
         swin: str,
         vpd_in_kpa: bool = True,
         z_values: tuple = (2, 3),
+        pooled_days: int = 15,
         verbose: int | bool | None = None,
 ) -> pd.DataFrame:
     """Random uncertainty of each record, for the negative-nighttime test of Level 3.2.
 
-    Three uncertainties per measured record, as columns of the returned frame:
+    Four uncertainties per measured record, as columns of the returned frame:
 
     - ``FS``: the uncertainty EddyPro reports for each half-hour (``randunc_col``, e.g.
       ``FC_RANDUNC_HF``). It covers the sampling error of that half-hour's covariance only
@@ -49,9 +50,16 @@ def nighttime_uncertainty(
       records, so PAS20 is a generous estimate of the random error.
     - ``MAX``: the larger of the two for each record, or the one available where the other is
       missing. A value is then called clearly below zero only when neither uncertainty explains it.
+    - ``POOLED``: the robust spread (1.4826 times the median absolute deviation) of all nighttime
+      values within ``pooled_days`` days on either side, at nighttime records only. It holds the
+      real night-to-night variation of respiration besides the random error, so it is larger than
+      the noise. Unlike FS and PAS20 it does not grow with a few bad records: PAS20 is the spread
+      of similar fluxes, so in a short noisy stretch, e.g. while an analyser fails, the bad values
+      widen their own uncertainty and pass the test; in a month of nights they hardly move the
+      median.
 
-    PAS20 is computed from the series the detector holds now, so call this after the other
-    outlier tests have been accepted: outliers would otherwise widen it. Records without a value
+    PAS20 and POOLED are computed from the series the detector holds now, so call this after the
+    other outlier tests have been accepted: outliers would otherwise widen them. Records without a value
     get no uncertainty, and a nighttime record without either uncertainty is not tested; the
     table reports how many there are. It compares, for each uncertainty and each ``z``, how many
     nighttime records lie below ``-z`` times it.
@@ -65,10 +73,11 @@ def nighttime_uncertainty(
         swin: Incoming shortwave radiation column of ``data.full_df`` (W m-2), complete.
         vpd_in_kpa: Whether ``vpd`` is in kPa.
         z_values: The ``z`` of the comparison table.
+        pooled_days: Days on either side of each record for ``POOLED``.
         verbose: Verbosity for the console helpers.
 
     Returns:
-        DataFrame with the columns ``FS``, ``PAS20`` and ``MAX`` on the series' index.
+        DataFrame with the columns ``FS``, ``PAS20``, ``MAX`` and ``POOLED`` on the series' index.
 
     Example::
 
@@ -112,6 +121,10 @@ def nighttime_uncertainty(
 
     night = data.fpc_df['NIGHTTIME'].reindex(series.index) == 1
     value = series[night & has]
+    # A time window, so missing records do not stretch it; at least 20 nights' values.
+    roll = dict(window=f'{2 * pooled_days + 1}D', center=True, min_periods=20)
+    median = value.rolling(**roll).median()
+    out['POOLED'] = (1.4826 * (value - median).abs().rolling(**roll).median()).reindex(series.index)
     table = _table()
     table.add_column("uncertainty")
     table.add_column("median at night", justify="right")
@@ -125,7 +138,8 @@ def nighttime_uncertainty(
             cells.append(f"{n:,} ({100 * n / len(value):.1f} %)" if len(value) else "-")
         table.add_row(*cells)
     notes = ["FS: EddyPro, sampling error of each half-hour. PAS20: spread of similar "
-             "measurements (ONEFlux), a generous estimate. MAX: the larger of the two."]
+             "measurements (ONEFlux), a generous estimate. MAX: the larger of the two. "
+             f"POOLED: spread of all nighttime values within {pooled_days} days on either side."]
     for col in out.columns:
         n_missing = int(out.loc[value.index, col].isna().sum())
         if n_missing:

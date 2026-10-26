@@ -1118,12 +1118,12 @@ class TestChainReports(unittest.TestCase):
         finally:
             plt.close('all')
 
-    def test_nighttime_uncertainty_gives_three_uncertainties(self):
+    def test_nighttime_uncertainty_gives_four_uncertainties(self):
         from diive.flux.postprocessingchain import make_level32_detector, nighttime_uncertainty
         data, sod = make_level32_detector(self.data)
         sigma = nighttime_uncertainty(data, sod, randunc_col='FC_RANDUNC_HF', ta='TA_1_1_1',
                                       vpd='VPD_kPa', swin='SW_IN_1_1_1', verbose=0)
-        self.assertEqual(list(sigma.columns), ['FS', 'PAS20', 'MAX'])
+        self.assertEqual(list(sigma.columns), ['FS', 'PAS20', 'MAX', 'POOLED'])
         both = sigma.dropna()
         self.assertGreater(len(both), 0)
         self.assertTrue((both['MAX'] >= both['FS']).all() and (both['MAX'] >= both['PAS20']).all())
@@ -1143,6 +1143,35 @@ class TestChainReports(unittest.TestCase):
         self.assertGreater(int(no_fs.sum()), 0)
         pd.testing.assert_series_equal(sigma.loc[no_fs, 'MAX'], sigma.loc[no_fs, 'PAS20'],
                                        check_names=False)
+
+    def test_pooled_night_spread_is_not_widened_by_a_few_bad_values(self):
+        """POOLED: robust spread of all night values within 15 days, at night records only. A few
+        bad night values barely change it, so they fall far below -4 times it."""
+        from dataclasses import replace
+        import numpy as np
+        import pandas as pd
+        from diive.flux.postprocessingchain import make_level32_detector, nighttime_uncertainty
+        args = dict(randunc_col='FC_RANDUNC_HF', ta='TA_1_1_1', vpd='VPD_kPa', swin='SW_IN_1_1_1',
+                    verbose=0)
+        data, sod = make_level32_detector(self.data)
+        clean = nighttime_uncertainty(data, sod, **args)['POOLED']
+        night = self.data.fpc_df['NIGHTTIME'] == 1
+        self.assertFalse(clean[~night.reindex(clean.index, fill_value=False)].notna().any())
+        # The value against a manual computation, at one night record in the middle.
+        series = sod.series_hires_cleaned
+        values = series[night.reindex(series.index, fill_value=False) & series.notna()]
+        t = values.index[len(values) // 2]
+        window = values[t - pd.Timedelta(days=15):t + pd.Timedelta(days=15)]
+        expected = 1.4826 * np.median(np.abs(window - window.median()))
+        self.assertAlmostEqual(float(clean[t]), float(expected), places=9)
+
+        bad = values.index[len(values) // 2: len(values) // 2 + 3]
+        df = self.data.fpc_df.copy()
+        df.loc[bad, sod.series_hires_cleaned.name] = -40.0
+        data_bad, sod_bad = make_level32_detector(replace(self.data, fpc_df=df))
+        pooled = nighttime_uncertainty(data_bad, sod_bad, **args)['POOLED']
+        self.assertLess(float((pooled[bad] / clean[bad]).max()), 1.2)
+        self.assertTrue((-40.0 < -4 * pooled[bad]).all())
 
 
 class TestLevel41SharedFeatures(unittest.TestCase):

@@ -60,8 +60,10 @@ class NegativeNighttime(FlagBase):
         Args:
             series: Flux in which nighttime values clearly below zero are flagged, e.g. NEE.
             uncertainty: Random uncertainty of each record, in the units of ``series`` and on its
-                index, e.g. EddyPro's ``FC_RANDUNC_HF``, the PAS20 random uncertainty, or the
-                larger of the two. A nighttime record without an uncertainty is not tested.
+                index, e.g. EddyPro's ``FC_RANDUNC_HF``, the PAS20 random uncertainty, the
+                larger of the two, or the pooled spread of nighttime values (``POOLED`` of
+                ``nighttime_uncertainty``). A nighttime record without an uncertainty is not
+                tested. Its name labels the plot.
             lat: Latitude of the site, to tell day from night.
             lon: Longitude of the site.
             utc_offset: UTC offset of the timestamps in hours.
@@ -77,6 +79,7 @@ class NegativeNighttime(FlagBase):
         if z <= 0:
             raise ValueError(f"z must be positive, got {z}.")
         self.uncertainty = uncertainty.reindex(self.series.index).astype(float)
+        self.uncertainty_name = uncertainty.name
         self.z = z
         self.level_window = level_window
         self.showplot = showplot
@@ -178,7 +181,8 @@ class NegativeNighttime(FlagBase):
         ax_sc.set_xlim(0, xmax)
         low = df['value'].quantile(0.002)
         ax_sc.set_ylim(min(low * 1.1, -1), df['value'].quantile(0.995))
-        ax_sc.set_xlabel('random uncertainty')
+        ax_sc.set_xlabel(f"uncertainty ({self.uncertainty_name})" if self.uncertainty_name
+                         else 'uncertainty')
         ax_sc.set_ylabel(f'nighttime {name}')
         cp.style_axes(ax_sc, grid_axis='both')
         cp.panel_label(ax_sc, "Value against its uncertainty")
