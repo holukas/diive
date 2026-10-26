@@ -88,6 +88,25 @@ def test_random_uncertainty_plot_draws_the_scatter():
         plt.close(fig)
 
 
+def test_randunc_method_counts_each_record_once():
+    # Every method records its window count also where it fails, so counting those
+    # gave shares above 100 %. Each record with an uncertainty has exactly one method.
+    ru = dv.flux.RandomUncertaintyPAS20(
+        _subset(), 'NEE_CUT_REF_orig', 'NEE_CUT_REF_f', 'Tair_f', 'VPD_f', 'Rg_f')
+    ru.run()
+    res = ru.randunc_results
+    used = ru.randunc_method
+    assert used.notna().sum() == ru.randunc_series.notna().sum()
+    assert set(used.dropna().unique()) <= {1, 2, 3, 4}
+    # Method 1 only where it found enough values (more than 5); measured records only.
+    m1 = used == 1
+    assert (res.loc[m1, 'WINDOW_N_VALS_METHOD1'] >= 6).all()
+    assert res.loc[m1, ru.fluxcol].notna().all()
+    # A record method 1 failed on is counted for a later method, not for method 1.
+    failed1 = res['WINDOW_N_VALS_METHOD1'].notna() & (res['WINDOW_N_VALS_METHOD1'] < 6)
+    assert not (used[failed1] == 1).any()
+
+
 def _joint_subset():
     """A month with a measured NEE, its gap-filled REF and the 16th/84th USTAR
     percentile scenario fluxes — the joint-uncertainty inputs."""

@@ -188,6 +188,20 @@ class RandomUncertaintyPAS20:
         """Return the calculated random uncertainty as series"""
         return self.randunc_results[self.randunccol]
 
+    @property
+    def randunc_method(self) -> Series:
+        """The method (1 to 4) that provided each record's random uncertainty, NaN where none did.
+
+        Every method sets its ``WINDOW_N_VALS_METHOD*`` count also where it found too few
+        values, and the next method then tries the record, so the method that provided the
+        value is the last one that tried it.
+        """
+        used = pd.Series(np.nan, index=self.randunc_results.index, name='RANDUNC_METHOD')
+        for m in (4, 3, 2, 1):
+            tried = self.randunc_results[f'WINDOW_N_VALS_METHOD{m}'].notna()
+            used = used.where(used.notna() | ~tried, m)
+        return used.where(self.randunc_series.notna())
+
     def run(self, progress_callback=None):
         """Run the 4-method hierarchical uncertainty quantification.
 
@@ -326,10 +340,9 @@ class RandomUncertaintyPAS20:
         n_gapfilled = self.randunc_results[self.fluxgapfilledcol].notna().sum() - n_measured
 
         # Count records where each method provided the uncertainty
-        method1_count = self.randunc_results['WINDOW_N_VALS_METHOD1'].notna().sum()
-        method2_count = self.randunc_results['WINDOW_N_VALS_METHOD2'].notna().sum()
-        method3_count = self.randunc_results['WINDOW_N_VALS_METHOD3'].notna().sum()
-        method4_count = self.randunc_results['WINDOW_N_VALS_METHOD4'].notna().sum()
+        used = self.randunc_method
+        method1_count, method2_count, method3_count, method4_count = (
+            int((used == m).sum()) for m in (1, 2, 3, 4))
 
         # Statistics
         mean_unc = self.randunc_series.mean()
