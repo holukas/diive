@@ -1496,6 +1496,33 @@ class TestModelOverview(unittest.TestCase):
             warnings.simplefilter('ignore')
             cls.data = run_level41_mds(data, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa')
 
+    def test_feature_ranks_skip_mds(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.postprocessingchain import plot_feature_ranks_per_year
+        plt.close('all')
+        try:
+            plot_feature_ranks_per_year(self.data)
+            self.assertEqual(len(plt.gcf().axes), 2)  # one panel per XGBoost scenario
+        finally:
+            plt.close('all')
+
+    def test_wide_report_table_is_not_cut(self):
+        import io
+        from unittest import mock
+        from rich.console import Console
+        from diive.flux.postprocessingchain import reports
+        buf = io.StringIO()
+        table = reports._table()
+        for year in range(2016, 2027):
+            table.add_column(str(year), justify='right')
+        table.add_row(*['12.345'] * 11)
+        with mock.patch.object(reports, '_console', Console(width=60, file=buf)), \
+                mock.patch.object(reports, '_show', return_value=True):
+            reports._print_report('wide', table)
+            self.assertEqual(reports._console.width, 60)  # restored afterwards
+        self.assertNotIn('…', buf.getvalue())
+        self.assertEqual(buf.getvalue().count('12.345'), 11)
+
     def test_one_row_per_scenario_and_year(self):
         from diive.flux.postprocessingchain import report_model_overview
         out = report_model_overview(self.data, verbose=0)

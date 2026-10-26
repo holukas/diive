@@ -22,6 +22,7 @@ from pandas import DataFrame
 from rich import box
 from rich.console import Group
 from rich.markup import escape
+from rich.measure import Measurement
 from rich.table import Table
 from rich.text import Text
 
@@ -79,14 +80,26 @@ def _show(verbose: int | bool | None) -> bool:
 
 def _print_report(title: str, table: Table | None = None, notes: list | None = None,
                   verbose: int | bool | None = None) -> None:
-    """Print one report as a block: bold title, the table, then dim notes."""
+    """Print one report as a block: bold title, the table, then dim notes.
+
+    A table wider than the console is printed at its own width, so Rich does not cut its
+    cells to fit (it would show '2.7…' instead of the number).
+    """
     if not _show(verbose):
         return
     parts = [Text(title, style="bold")] if title else []
+    width = _console.width
     if table is not None:
         parts.append(table)
+        unbounded = _console.options.update_width(1000)
+        width = max(width, Measurement.get(_console, unbounded, table).maximum)
     parts += [Text(n, style="dim") for n in (notes or [])]
-    _console.print(Group(*parts, Text("")))
+    # print(width=...) cannot exceed the console width, so widen the console itself.
+    default, _console.width = _console.width, width
+    try:
+        _console.print(Group(*parts, Text("")))
+    finally:
+        _console.width = default
 
 
 def _write_csv(df: DataFrame, outpath: str | None, filename: str) -> None:
@@ -382,9 +395,9 @@ def report_gapfilling_feature_importances(data, outpath: str | None = None, top_
         if multi_year:
             table.add_column("mean", justify="right", style="bold")
         for rank, (feature, row) in enumerate(ranked.head(top_n).iterrows(), start=1):
-            cells = [f"{row[y]:.3f}" if pd.notna(row[y]) else "-" for y in importances.columns]
+            cells = [f"{row[y]:.2f}" if pd.notna(row[y]) else "-" for y in importances.columns]
             if multi_year:
-                cells.append(f"{row['_mean']:.3f}")
+                cells.append(f"{row['_mean']:.2f}")
             table.add_row(str(rank), escape(str(feature)), *cells)
         shown = min(top_n, len(ranked))
         _print_report(f"Feature importances, {_label(method)} ({scenario}): "
@@ -976,10 +989,11 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
     """Plot the most important features of each ML gap-filler, one panel per USTAR scenario.
 
     With one year of data each panel is a bar chart of the ``top_n`` features by mean
-    |SHAP|. With several years it is a rank chart: one line per feature, its rank in each
-    year, for the ``top_n`` features by mean importance across years. The colour shows the
-    driver a feature comes from, so it is visible at a glance whether radiation, temperature,
-    VPD or the time of the year carries the model.
+    |SHAP|. With several years it is a rank table: one row per feature, for the ``top_n``
+    features by mean importance across years, with its rank in each year written in the
+    cell; ranks below ``top_n`` are shown in grey. The colour of the name shows the driver a
+    feature comes from, so it is visible at a glance whether radiation, temperature, VPD or
+    the time of the year carries the model. Methods without features (MDS) are skipped.
 
     Args:
         data: Chain container after at least one ``run_level41_*``.
@@ -992,12 +1006,15 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
 
     runs = []
     for method, scenario, inst in _iter_level41(data):
+        if method == 'mds':  # no model, no features
+            continue
         imp = _optional(inst, 'feature_importance_per_year')
         if imp is None:
             info(f"{_label(method)} ({scenario}): no feature ranks available.")
             continue
         runs.append((method, scenario, imp))
     if not runs:
+        info("No feature ranks available: no ML gap-filling has run.")
         return
 
     all_features = {f for _, _, imp in runs for f in imp.index}
@@ -1010,7 +1027,7 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
     n = len(runs)
     multi_year = any(imp.shape[1] > 1 for _, _, imp in runs)
     height = max(4.5, 0.34 * top_n + 2.2)
-    fig, axes = plt.subplots(1, n, figsize=(min(20, 6.2 * n), height), layout='constrained',
+    fig, axes = plt.subplots(1, n, figsize=(min(21, 7 * n), height), layout='constrained',
                              squeeze=False)
     for ax, (method, scenario, imp) in zip(axes[0], runs):
         groups = _driver_groups(imp.index, drivers)
@@ -1027,22 +1044,28 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
             cp.style_axes(ax, grid_axis='x')
             ax.margins(x=0.12)
         else:
-            years = [c for c in imp.columns]
-            ranks = imp[years].rank(ascending=False, method='first')
-            for f in top.index:
-                color = driver_color[groups[f]]
-                ax.plot(years, ranks.loc[f].to_numpy(), '-o', color=color, linewidth=1.8,
-                        markersize=6, markeredgecolor='white', markeredgewidth=0.8)
-                last = ranks.loc[f].dropna()
-                if not last.empty:
-                    ax.text(last.index[-1], last.iloc[-1], f"  {f}", va='center', fontsize=7.5,
-                            color=color)
-            ax.set_ylim(top_n + 0.5, 0.5)
-            ax.set_yticks(range(1, top_n + 1))
-            ax.set_ylabel('rank')
-            ax.set_xticks(years, [str(y) for y in years], rotation=45 if len(years) > 6 else 0)
-            cp.style_axes(ax, grid_axis='y')
-            ax.margins(x=0.25)
+            years = list(imp.columns)
+            ranks = imp[years].rank(ascending=False, method='first').loc[top.index]
+            r = ranks.to_numpy(dtype=float)
+            # Darker is more important; ranks below top_n get a grey cell and grey text.
+            vmax = top_n * 1.6
+            cmap = plt.get_cmap('Blues_r').with_extremes(over=cp.NAN_COLOR)
+            ax.imshow(np.where(r > top_n, vmax + 1, r), cmap=cmap, vmin=1, vmax=vmax,
+                      aspect='auto', interpolation='none')
+            for (i, j), v in np.ndenumerate(r):
+                if np.isnan(v):
+                    continue
+                inside = v <= top_n
+                ax.text(j, i, f"{v:.0f}", ha='center', va='center', fontsize=7.5,
+                        color=('white' if v <= top_n / 2 else cp.INK) if inside else cp.MUTED)
+            ax.set_xticks(range(len(years)), [str(y) for y in years],
+                          rotation=45 if len(years) > 6 else 0)
+            ax.set_yticks(range(len(top)), [str(f) for f in top.index], fontsize=8)
+            for label, f in zip(ax.get_yticklabels(), top.index):
+                label.set_color(driver_color[groups[f]])
+            ax.tick_params(length=0)
+            for spine in ax.spines.values():
+                spine.set_visible(False)
         cp.panel_label(ax, f"{_label(method)}, {scenario}: top {len(top)} of {len(imp)} features")
 
     handles = [Line2D([0], [0], color=c, linewidth=6, label=('time terms' if d == 'time' else d))
@@ -1050,7 +1073,9 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
     fig.legend(handles=handles, loc='outside lower center', ncol=len(handles), frameon=False,
                fontsize=9, title='feature comes from', title_fontsize=9)
     cp.figure_title(fig, "Most important features of the gap-filling models",
-                    "mean |SHAP| over the test data" + (", ranked in each year" if multi_year else "")
+                    "mean |SHAP| over the test data"
+                    + (f", as the rank in each year (1 = most important; grey: below rank {top_n})"
+                       if multi_year else "")
                     + ". Names starting with '.' are features engineered from the drivers.")
     plt.show()
 
