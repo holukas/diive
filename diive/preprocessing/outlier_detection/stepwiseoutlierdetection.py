@@ -246,8 +246,9 @@ class StepwiseOutlierDetection:
         cp.style_axes(ax_ts)
         ax_ts.set_ylabel(series.name)
         cp.panel_label(ax_ts, "All records")
-        ax_ts.legend(loc='lower right', bbox_to_anchor=(1, 1), frameon=False, markerscale=3,
-                     fontsize=9, ncol=min(len(tests) + 1, 4), borderaxespad=0.2)
+        # Below the figure: above the panel a second legend row would cover the panel label.
+        fig.legend(*ax_ts.get_legend_handles_labels(), loc='outside lower center', frameon=False,
+                   markerscale=3, fontsize=9, ncol=min(len(tests) + 1, 6))
         ax_ts.tick_params(axis='x', labelbottom=False)
 
         # Share removed per month, stacked by test.

@@ -325,13 +325,18 @@ class Hampel(FlagBase):
             # One figure per test. The daytime/nighttime figure already holds the
             # default plot's panels (all records, cleaned, with histograms) in its
             # first row, so drawing both repeated them, as Local SD and Trim avoid.
+            # The title names the mode, so two Hampel tests on one series can be told apart.
+            tested = "double differences" if self.use_differencing else "values"
+            if self.by_time_of_day:
+                tested += " per time of day"
             if self.separate_day_night:
                 self.plot_outlier_daytime_nighttime(
                     series=self.series, flag_daytime=self.flag_daytime, flag_quality=self.overall_flag,
-                    title=f"Hampel filter, day and night separately: {self.series.name}",
+                    title=f"Hampel filter on {tested}, day and night separately: {self.series.name}",
                     n_iterations=n_iterations)
             else:
-                self.defaultplot(n_iterations=n_iterations)
+                self.defaultplot(n_iterations=n_iterations,
+                                 title=f"Hampel filter on {tested}: {self.series.name}")
 
     @staticmethod
     def _step(index) -> pd.Timedelta | None:
