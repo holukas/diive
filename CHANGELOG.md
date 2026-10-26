@@ -82,6 +82,12 @@ default. Thresholds detected in the chain change: look for entries marked "chang
   filter, and the records left for gap-filling, split into QCF 0 and 1 and into day and night.
   `plot_gapfilling_input` shows the records for gap-filling and the highest-quality records (QCF 0)
   as heatmaps, one column per scenario. `report_gaps` reports the gaps left per scenario.
+- **Gap-filling methods compared:** `report_gapfilling_comparison` gives, per USTAR scenario, the
+  sums of two methods (e.g. MDS and XGBoost), their difference split into daytime and nighttime gaps
+  and by gap length, and the scores of both on the same held-out records. `plot_gapfilling_comparison`
+  shows the filled values against each other, the mean difference by month and hour, each month's
+  contribution and the cumulative difference per scenario. `plot_quality_heatmaps` and
+  `plot_quality_timeseries` take `method=`; without it they showed the first method silently.
 - **Model overview:** `report_model_overview` lists, per ML method, USTAR scenario and year, the
   training years, features, training and test records, the number of trees early stopping chose,
   the records of the final fit, the test scores and how the year's gaps were filled.
@@ -105,6 +111,9 @@ default. Thresholds detected in the chain change: look for entries marked "chang
 
 ### Changed
 
+- **Cumulative plots with several methods:** `plot_gapfilled_cumulative` gives each method its own
+  hue (scenarios as shades of it), keeps the end labels apart and reports the range over the USTAR
+  scenarios per method instead of one range over all series.
 - **Heatmap colours:** flux heatmaps use the diive default `RdYlBu_r` (blue for low values, red
   for high ones) instead of `RdBu_r`: the gap-filled and quality heatmaps of the flux chain, the QCF
   heatmaps and the default of `TreeRingPlot`. Categorical heatmaps such as the quality flags keep
