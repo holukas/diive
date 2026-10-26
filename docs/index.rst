@@ -21,6 +21,7 @@ Quick Links
 - :doc:`installation` — Installation guide
 - :doc:`getting_started` — Quick start tutorial
 - :doc:`examples` — Example gallery (112 examples)
+- :doc:`flux_postprocessing` — Flux post-processing chain: methods
 - :doc:`api_reference` — API reference
 
 .. toctree::
@@ -30,6 +31,7 @@ Quick Links
    installation
    getting_started
    examples
+   flux_postprocessing
    api_reference
    contributing
    faq
