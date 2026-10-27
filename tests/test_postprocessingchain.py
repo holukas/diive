@@ -1693,5 +1693,96 @@ class TestModelOverview(unittest.TestCase):
         self.assertNotIn('CUT_16', text)
 
 
+class TestBlockedTreeSelection(unittest.TestCase):
+    """n_estimators_cv chooses one number of trees by blocked cross-validation."""
+
+    def test_blocked_folds_hold_out_whole_blocks(self):
+        import numpy as np
+        import pandas as pd
+        from diive.gapfilling.tree_selection import blocked_folds
+        index = pd.date_range('2022-01-01 00:15', periods=48 * 90, freq='30min')
+        index = index.delete(np.arange(100, 400))  # a gap does not matter
+        folds = blocked_folds(index, block_days=7, n_folds=4, random_state=1)
+        self.assertEqual(len(folds), 4)
+        held_out = np.concatenate([test for _, test in folds])
+        self.assertEqual(sorted(held_out.tolist()), list(range(len(index))))
+        block = ((index - index[0]) / pd.Timedelta(days=7)).astype(int)
+        for train, test in folds:
+            self.assertEqual(len(set(train) & set(test)), 0)
+            # A block is either held out as a whole or not at all.
+            self.assertEqual(set(block[test]) & set(block[train]), set())
+        with self.assertRaises(ValueError):
+            blocked_folds(index[:48], block_days=7, n_folds=4)
+
+    def test_selection_on_synthetic_pools(self):
+        import numpy as np
+        import pandas as pd
+        from diive.gapfilling.tree_selection import select_n_estimators_blocked_cv
+        rng = np.random.default_rng(0)
+        pools = {}
+        for label in ('2020-2022', '2021-2023'):
+            index = pd.date_range('2021-01-01 00:15', periods=48 * 120, freq='30min')
+            x = rng.normal(size=(len(index), 3))
+            y = 2 * x[:, 0] - x[:, 1] ** 2 + rng.normal(0, 0.5, len(index))
+            pools[label] = pd.DataFrame({'y': y, 'a': x[:, 0], 'b': x[:, 1], 'c': x[:, 2]},
+                                        index=index)
+        sel = select_n_estimators_blocked_cv(pools, 'y', dict(n_estimators=150, learning_rate=0.1,
+                                                                 max_depth=3, random_state=1,
+                                                                 early_stopping_rounds=10),
+                                             block_days=10, n_folds=4)
+        self.assertLessEqual(sel.n_estimators, 150)
+        self.assertEqual(sel.n_estimators % 10, 0)
+        self.assertEqual(sel.curves.shape, (150, 2))
+        self.assertEqual(list(sel.scores.index), list(pools))
+        self.assertLessEqual(float(sel.median_curve.loc[sel.n_estimators]), 1 + sel.tolerance)
+        self.assertTrue((sel.scores['r2'] > 0.5).all())
+
+    def test_run_level41_xgb_uses_one_fixed_number(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        from diive.flux.postprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector, run_level32,
+            run_level33_constant_ustar, run_level41_xgb, report_tree_selection,
+            plot_tree_selection, report_model_overview)
+        df = _eddypro_input()
+        data = init_flux_data(df=df, fluxcol='FC', site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        data = run_level33_constant_ustar(data, thresholds=[0.1, 0.2], threshold_labels=['CUT_16', 'CUT_84'],
+                                          showplot=False, verbose=False)
+        engineer = FeatureEngineer(target_col='_target_', features_lag=[-1, 1], vectorize_timestamps=True,
+                                   verbose=0)
+        data = run_level41_xgb(data, features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'], engineer=engineer,
+                               n_estimators=80, learning_rate=0.3, early_stopping_rounds=5,
+                               random_state=42, verbose=0,
+                               n_estimators_cv={'block_days': 7, 'n_folds': 3})
+        sel = data.levels.level41_xgb['CUT_84'].tree_selection_
+        self.assertEqual(sel.scenario, 'CUT_84')  # the middle of two scenarios
+        self.assertLessEqual(sel.n_estimators, 80)
+        for inst in data.levels.level41_xgb.values():
+            self.assertIs(inst.tree_selection_, sel)
+            for model in inst.results_yearly_.values():
+                self.assertEqual(model.kwargs['n_estimators'], sel.n_estimators)
+                self.assertIsNone(model.kwargs['early_stopping_rounds'])
+                self.assertIsNone(model._n_trees)
+                self.assertEqual(model.model_.n_estimators, sel.n_estimators)
+        out = report_tree_selection(data, verbose=0)
+        self.assertEqual(len(out), len(sel.scores))
+        self.assertTrue({'rmse', 'random RMSE', 'random R2'} <= set(out.columns))
+        overview = report_model_overview(data, verbose=0)
+        self.assertTrue((overview['trees'] == sel.n_estimators).all())
+        try:
+            fig = plot_tree_selection(data, showplot=False)
+            self.assertEqual(len(fig.axes), 2)
+        finally:
+            plt.close('all')
+
+
 if __name__ == '__main__':
     unittest.main()

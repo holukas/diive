@@ -480,19 +480,158 @@ def report_model_overview(data, verbose: int | bool | None = None) -> DataFrame:
         "Each year has its own model, trained on that year and its neighbours ('trained on').",
         "train / test: a random 75 / 25 % split of the complete records; the test scores come from "
         "the 25 %, which the model did not see.",
-        "trees: with early stopping, the number it chose on 10 % of the training records, "
-        "out of the maximum; at the maximum, more trees might still help.",
-        "final fit: the gaps are filled by a model refitted on all complete records with that "
-        "number of trees. filled / fallback: gaps of the model year filled by this model, or by "
-        "the fallback model on timestamp features where a driver was missing.",
     ]
-    if out['trees'].eq(out['max trees']).any() and out['max trees'].notna().all():
+    early_stopping = any(p.get('early_stopping_rounds') for p in params.values())
+    selection = _tree_selection(data)
+    if early_stopping:
+        notes.append("trees: with early stopping, the number it chose on 10 % of the training "
+                     "records, out of the maximum; at the maximum, more trees might still help.")
+    elif selection is not None:
+        notes.append(f"trees: {selection.n_estimators} for every model, chosen by blocked "
+                     f"cross-validation (report_tree_selection).")
+    notes.append("final fit: the gaps are filled by a model refitted on all complete records with "
+                 "that number of trees. filled / fallback: gaps of the model year filled by this "
+                 "model, or by the fallback model on timestamp features where a driver was missing.")
+    if early_stopping and out['trees'].eq(out['max trees']).any() and out['max trees'].notna().all():
         n_cap = int(out['trees'].eq(out['max trees']).sum())
         notes.append(f"{n_cap} model(s) used all trees: early stopping did not stop them.")
     for label, p in params.items():
         notes.append(f"{label}: " + ", ".join(f"{k}={v}" for k, v in sorted(p.items())))
     _print_report("Gap-filling models", table, notes, verbose=verbose)
     return out
+
+
+def _tree_selection(data):
+    """The blocked cross-validation result of the ML gap-fillers, or None."""
+    for _, _, inst in _iter_level41(data):
+        selection = getattr(inst, 'tree_selection_', None)
+        if selection is not None:
+            return selection
+    return None
+
+
+def _pool_labels(inst) -> dict:
+    """``{year: '2016-2018'}``: the pool of each yearly model, labelled as the tree selection does."""
+    labels = {}
+    for year in inst.results_yearly_:
+        years = inst.yearpools[year]['poolyears']
+        labels[year] = f"{min(years)}-{max(years)}" if len(years) > 1 else str(years[0])
+    return labels
+
+
+def report_tree_selection(data, verbose: int | bool | None = None) -> DataFrame:
+    """Report the number of trees chosen by blocked cross-validation, and the blocked scores.
+
+    One row per yearly pool of the scenario the selection ran on: the records, the RMSE, MAE
+    and R² on held-out blocks of days at the chosen number of trees, and, for comparison, the
+    scores on the random test records of the models of that pool. The blocked scores describe
+    gaps of the block length; the random scores describe single missing half-hours. Needs
+    ``run_level41_xgb(..., n_estimators_cv=True)``.
+
+    Args:
+        data: Chain container after ``run_level41_xgb`` with ``n_estimators_cv``.
+        verbose: Verbosity for the console helpers.
+
+    Returns:
+        DataFrame with one row per pool.
+    """
+    selection = _tree_selection(data)
+    if selection is None:
+        _print_report("Number of trees", None,
+                      ["No tree selection: run run_level41_xgb with n_estimators_cv=True."],
+                      verbose=verbose)
+        return DataFrame()
+    inst = data.levels.level41_xgb[selection.scenario]
+    random_scores = {}
+    for year, label in _pool_labels(inst).items():
+        random_scores.setdefault(label, []).append(inst.results_yearly_[year].scores_traintest_)
+    out = selection.scores.copy()
+    out['random RMSE'] = {k: sum(s['rmse'] for s in v) / len(v) for k, v in random_scores.items()}
+    out['random R2'] = {k: sum(s['r2'] for s in v) / len(v) for k, v in random_scores.items()}
+    out.index.name = 'pool'
+
+    table = _table()
+    table.add_column("pool", no_wrap=True)
+    for col in ('records', 'blocked\nRMSE', 'blocked\nMAE', 'blocked\nR²', 'random\nRMSE',
+                'random\nR²'):
+        table.add_column(col, justify="right", no_wrap=True)
+    for pool, r in out.iterrows():
+        table.add_row(str(pool), f"{int(r['records']):,}", f"{r['rmse']:.2f}", f"{r['mae']:.2f}",
+                      f"{r['r2']:.3f}", f"{r['random RMSE']:.2f}", f"{r['random R2']:.3f}")
+    notes = [
+        f"{selection.n_estimators} trees for every model: the smallest number at which the median "
+        f"error curve of the pools is within {100 * selection.tolerance:g} % of its minimum "
+        f"(up to {selection.max_trees} tested). USTAR scenario {selection.scenario}.",
+        f"blocked: {selection.n_folds}-fold cross-validation on the training records of each pool, "
+        f"holding out whole {selection.block_days:g}-day blocks, at the chosen number of trees. "
+        f"R² from the RMSE and the variance of the target.",
+        "random: the test records of the models of that pool, random single half-hours that the "
+        "models did not see. The difference shows how much harder gaps of days are than single "
+        "missing records.",
+    ]
+    _print_report("Number of trees from blocked cross-validation", table, notes, verbose=verbose)
+    return out
+
+
+def plot_tree_selection(data, showplot: bool = True):
+    """Plot the blocked cross-validation that chose the number of trees.
+
+    Left: the error on the held-out blocks against the number of trees for each pool, relative
+    to its minimum, with their median and the chosen number. Right: the blocked and the random
+    test RMSE of each pool. Needs ``run_level41_xgb(..., n_estimators_cv=True)``.
+
+    Args:
+        data: Chain container after ``run_level41_xgb`` with ``n_estimators_cv``.
+        showplot: Call ``plt.show()`` after drawing.
+
+    Returns:
+        The matplotlib figure, or None without a tree selection.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from diive.core.plotting.styles import chainplots as cp
+
+    selection = _tree_selection(data)
+    if selection is None:
+        info("No tree selection: run run_level41_xgb with n_estimators_cv=True.")
+        return None
+    scores = report_tree_selection(data, verbose=0)
+    fig, (ax_c, ax_s) = plt.subplots(1, 2, figsize=(15, 5.6), layout='constrained',
+                                     gridspec_kw=dict(width_ratios=[1.4, 1]))
+    relative = selection.curves / selection.curves.min()
+    for col in relative.columns:
+        ax_c.plot(relative.index, relative[col].to_numpy(), color=cp.KEPT, linewidth=1)
+    ax_c.plot(selection.median_curve.index, selection.median_curve.to_numpy(), color=cp.INK,
+              linewidth=2.2, label='median of the pools')
+    ax_c.axhline(1 + selection.tolerance, color=cp.MUTED, linewidth=0.8, linestyle=(0, (4, 3)),
+                 label=f'minimum + {100 * selection.tolerance:g} %')
+    ax_c.axvline(selection.n_estimators, color=cp.REJECTED, linewidth=1.4,
+                 label=f'chosen: {selection.n_estimators} trees')
+    top = float(np.nanquantile(relative.to_numpy(), 0.98))
+    ax_c.set_ylim(0.995, max(1.05, min(top, 1.3)))
+    ax_c.set_xlabel('number of trees')
+    ax_c.set_ylabel('RMSE on held-out blocks / minimum')
+    cp.style_axes(ax_c)
+    cp.panel_label(ax_c, "Error on held-out blocks, one line per pool")
+    ax_c.legend(frameon=False, fontsize=8.5, loc='upper right')
+
+    x = np.arange(len(scores))
+    ax_s.bar(x - 0.2, scores['rmse'].to_numpy(), 0.4, color=cp.CLEANED,
+             label=f'held-out {selection.block_days:g}-day blocks')
+    ax_s.bar(x + 0.2, scores['random RMSE'].to_numpy(), 0.4, color=cp.KEPT,
+             label='random test records')
+    ax_s.set_xticks(x, [str(p) for p in scores.index], rotation=45, ha='right')
+    ax_s.set_ylabel('RMSE')
+    cp.style_axes(ax_s)
+    cp.panel_label(ax_s, f"RMSE at {selection.n_estimators} trees")
+    ax_s.legend(frameon=False, fontsize=8.5, loc='lower right')
+    cp.figure_title(fig, "Number of trees from blocked cross-validation",
+                    f"USTAR scenario {selection.scenario}, {selection.n_folds} folds of "
+                    f"{selection.block_days:g}-day blocks. Every model uses {selection.n_estimators} "
+                    f"trees, without early stopping.")
+    if showplot:
+        plt.show()
+    return fig
 
 
 def report_gapfilling_poolyears(data, verbose: int | bool | None = None) -> None:

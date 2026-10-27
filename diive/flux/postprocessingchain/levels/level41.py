@@ -286,6 +286,7 @@ def _run_level41_ml(
         results_attr: str,
         scenarios=None,
         shared_features: bool = True,
+        n_estimators_cv: bool | dict = False,
 ) -> FluxLevelData:
     """Internal: shared workflow for Random Forest and XGBoost L4.1 gap-filling."""
     # Validate feature columns exist in full_df before doing any work.
@@ -345,6 +346,9 @@ def _run_level41_ml(
         for instance in instances.values():
             instance.use_features(shared)
 
+    if n_estimators_cv:
+        _set_n_estimators_from_blocked_cv(instances, model_kwargs, n_estimators_cv, verbose)
+
     for ustar_scen, ustar_flux in filteredseries_l33.items():
         instance = instances[ustar_scen]
         instance.fillgaps()
@@ -380,6 +384,38 @@ def _run_level41_ml(
         level_ids=append_level_id(data.level_ids, _LEVEL41_IDSTR),
     )
     return replace(final, added_columns=record_added_columns(final, tracking_key, pre_columns))
+
+
+def _set_n_estimators_from_blocked_cv(instances: dict, model_kwargs: dict,
+                                      settings: bool | dict, verbose: int) -> None:
+    """Choose one number of trees by blocked cross-validation and give it to every model.
+
+    Runs on the training records of each yearly pool of one scenario (the middle one unless
+    ``settings['scenario']`` names it), so the random test records stay unseen. Every model
+    of every scenario then gets that number of trees and no early stopping.
+    """
+    from diive.gapfilling.tree_selection import select_n_estimators_blocked_cv
+    cv = {} if settings is True else dict(settings)
+    labels = list(instances)
+    scenario = cv.pop('scenario', None) or labels[len(labels) // 2]
+    if scenario not in instances:
+        raise ValueError(f"Scenario {scenario!r} for the tree selection not found. Available: {labels}")
+    ref = instances[scenario]
+    pools = {}
+    for year, model in ref.results_yearly_.items():
+        years = ref.yearpools[year]['poolyears']
+        label = f"{min(years)}-{max(years)}" if len(years) > 1 else str(years[0])
+        pools.setdefault(label, model.train_df)  # neighbouring years can share one pool
+    info(f"Choosing the number of trees by blocked cross-validation on {scenario} "
+         f"({len(pools)} pools) ...", verbose=verbose)
+    selection = select_n_estimators_blocked_cv(pools, ref.target_col, model_kwargs,
+                                               verbose=verbose, **cv)
+    selection.scenario = scenario
+    for instance in instances.values():
+        instance.kwargs = {**instance.kwargs, 'n_estimators': selection.n_estimators,
+                           'early_stopping_rounds': None}
+        instance.initialize_yearly_models()
+        instance.tree_selection_ = selection
 
 
 def run_level41_rf(
@@ -473,6 +509,7 @@ def run_level41_xgb(
         engineer: 'FeatureEngineer',
         reduce_features: bool = False,
         shared_features: bool = True,
+        n_estimators_cv: bool | dict = False,
         scenarios: list[str] | None = None,
         verbose: int = 0,
         **xgb_kwargs,
@@ -499,6 +536,16 @@ def run_level41_xgb(
             for a usage example).
         reduce_features: Apply SHAP-based feature selection across all years.
         shared_features: As in :func:`run_level41_rf`.
+        n_estimators_cv: Choose the number of trees by blocked cross-validation
+            (:func:`~diive.gapfilling.tree_selection.select_n_estimators_blocked_cv`)
+            and use it as a fixed ``n_estimators`` for every year and scenario, with no
+            early stopping. It runs after the feature selection, on the training records
+            of each yearly pool of one scenario, holding out whole blocks of days; the
+            random test records stay unseen. ``n_estimators`` sets the largest number
+            tested. True uses the defaults (middle scenario, 14-day blocks, 5 folds, 1 %
+            tolerance); a dict changes them, e.g. ``{'block_days': 7, 'scenario':
+            'CUT_50'}``. The result is ``tree_selection_`` of each scenario's model, shown
+            by ``report_tree_selection`` and ``plot_tree_selection``. Default False.
         scenarios: As in :func:`run_level41_rf`.
         verbose: Verbosity level (0=silent, 1+=progress).
         **xgb_kwargs: ``XGBRegressor`` hyperparameters (``n_estimators``,
@@ -522,6 +569,7 @@ def run_level41_xgb(
         results_attr='level41_xgb',
         scenarios=scenarios,
         shared_features=shared_features,
+        n_estimators_cv=n_estimators_cv,
     )
 
 
