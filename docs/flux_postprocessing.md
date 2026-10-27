@@ -187,9 +187,11 @@ Option `n_estimators_cv=True` of `run_level41_xgb`.
 After the feature selection, XGBoost is cross-validated on the training records of each yearly
 pool of one USTAR scenario (the middle one by default). The folds hold out whole blocks of days
 (`block_days`, 14) instead of single records, and the error on the held-out blocks is recorded
-after every tree. The number of trees is the smallest at which the median error curve of all
-pools comes within `tolerance` (1 %) of its minimum, rounded up to ten. Every year and scenario
-is then trained with that fixed number and no early stopping. `n_estimators` sets the largest
+after every tree. The error first falls as trees are added, reaches a minimum, and then rises
+again slowly: the extra trees fit patterns that help with single missing records but not with
+gaps of days. The number of trees is the minimum of the median error curve of all pools,
+rounded to ten (with `tolerance` above zero, the smallest number within that fraction of the
+minimum). Every year and scenario is then trained with that fixed number and no early stopping. `n_estimators` sets the largest
 number tested. The random test records are not used, so the test scores stay out-of-sample.
 
 Compared with early stopping for each model, this has five advantages:

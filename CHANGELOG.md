@@ -189,8 +189,7 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 - **Number of trees from blocked cross-validation:** `run_level41_xgb(..., n_estimators_cv=True)`
   chooses one number of trees for all years and USTAR scenarios. After the feature selection,
   XGBoost is cross-validated on the training records of each yearly pool, holding out whole
-  14-day blocks; the number is the smallest at which the median error curve is within 1 % of its
-  minimum. Every model then uses it without early stopping, so no model is stopped early by a
+  14-day blocks; the number is the minimum of the median error curve. Every model then uses it without early stopping, so no model is stopped early by a
   few unusual validation records, the scenarios differ only in their records, and the choice is
   tuned for gaps of days rather than single half-hours. `report_tree_selection` gives the
   blocked scores next to the random test scores, `plot_tree_selection` the error curves. The
