@@ -168,8 +168,9 @@ drivers and features engineered from them (lags, rolling statistics, timestamp t
   features that any scenario selected, so the scenarios differ in their records, not in their
   features.
 - **Training and test.** A random 75 % of the complete records trains the model, the other 25 % tests
-  it. Early stopping chooses the number of trees on 10 % of the training records, up to
-  `n_estimators`. A model that stops at the maximum might still improve with more trees.
+  it. The number of trees is either chosen once for all models by blocked cross-validation
+  (`n_estimators_cv`, see below) or by early stopping for each model on 10 % of its training
+  records, up to `n_estimators`.
 - **Final fit.** The gaps are filled by a model refitted on all complete records with the number of
   trees early stopping chose. Its scores on all measured records are therefore in-sample; the
   held-out test scores describe the fit.
@@ -177,6 +178,42 @@ drivers and features engineered from them (lags, rolling statistics, timestamp t
 
 `report_model_overview` lists for each year the years it was trained on, the features, the
 training and test records, the trees, the test scores and the fallback records.
+
+(tree-selection)=
+### Number of trees from blocked cross-validation
+
+Option `n_estimators_cv=True` of `run_level41_xgb`.
+
+After the feature selection, XGBoost is cross-validated on the training records of each yearly
+pool of one USTAR scenario (the middle one by default). The folds hold out whole blocks of days
+(`block_days`, 14) instead of single records, and the error on the held-out blocks is recorded
+after every tree. The number of trees is the smallest at which the median error curve of all
+pools comes within `tolerance` (1 %) of its minimum, rounded up to ten. Every year and scenario
+is then trained with that fixed number and no early stopping. `n_estimators` sets the largest
+number tested. The random test records are not used, so the test scores stay out-of-sample.
+
+Compared with early stopping for each model, this has five advantages:
+
+1. **No random undersized models.** With early stopping, each model picks its own number of
+   trees on a small random validation set, and a few unusual records in that set can stop the
+   training far too early. Such a model fits worse than its neighbours, and its annual sum can
+   fall out of line with the other years and scenarios. With one fixed number this cannot
+   happen.
+2. **Cleaner scenario differences.** All years and USTAR scenarios get the same model size. The
+   scenarios then differ only in the records the USTAR filter keeps, not in the size of their
+   models, so the USTAR uncertainty reflects the threshold and the scenarios keep their order.
+3. **Tuned for real gaps.** Half-hourly fluxes are autocorrelated. In a random split of single
+   records, the neighbours of almost every held-out record are in the training data, so the
+   number of trees is tuned for short, easy gaps. Held-out blocks of days look like real gaps.
+4. **A score for long gaps.** The error on the held-out blocks is reported next to the random
+   test score (`report_tree_selection`). It shows how much worse the model fills gaps of days to
+   weeks, which decide the annual sums.
+5. **One documented choice.** One number with its error curve (`plot_tree_selection`) replaces a
+   separate, unreported choice for every model, which makes the setting easier to report and to
+   reproduce.
+
+It costs the run time of the cross-validation, a few minutes for a record of ten years. Each
+year still has a single model, so some model variance remains in the sums.
 `report_gapfilling_feature_importances` and `plot_feature_ranks_per_year` show which features
 carry the models.
 

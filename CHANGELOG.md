@@ -186,6 +186,16 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   skipped without a message.
 - **Chain report tables:** a table wider than the console is printed at its own width instead of
   having its cells cut to `2.7…`. The SHAP importances show two decimals.
+- **Number of trees from blocked cross-validation:** `run_level41_xgb(..., n_estimators_cv=True)`
+  chooses one number of trees for all years and USTAR scenarios. After the feature selection,
+  XGBoost is cross-validated on the training records of each yearly pool, holding out whole
+  14-day blocks; the number is the smallest at which the median error curve is within 1 % of its
+  minimum. Every model then uses it without early stopping, so no model is stopped early by a
+  few unusual validation records, the scenarios differ only in their records, and the choice is
+  tuned for gaps of days rather than single half-hours. `report_tree_selection` gives the
+  blocked scores next to the random test scores, `plot_tree_selection` the error curves. The
+  selection itself is `diive.gapfilling.tree_selection.select_n_estimators_blocked_cv`, with
+  `blocked_folds` for the folds.
 - **Pooled night spread for the negative nighttime test:** `nighttime_uncertainty` returns a
   fourth column, `POOLED`: the robust spread (1.4826 MAD) of all nighttime values within
   `pooled_days` (15) days on either side. PAS20 is the spread of similar fluxes, so in a short noisy
