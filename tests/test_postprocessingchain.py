@@ -1734,7 +1734,14 @@ class TestBlockedTreeSelection(unittest.TestCase):
         self.assertEqual(sel.n_estimators % 10, 0)
         self.assertEqual(sel.curves.shape, (150, 2))
         self.assertEqual(list(sel.scores.index), list(pools))
-        self.assertLessEqual(float(sel.median_curve.loc[sel.n_estimators]), 1 + sel.tolerance)
+        # The minimum of the median curve, rounded to ten.
+        best = int(sel.median_curve.to_numpy().argmin()) + 1
+        self.assertLessEqual(abs(sel.n_estimators - best), 5)
+        # With a tolerance, the smallest number within it of the minimum: never more trees.
+        sel_tol = select_n_estimators_blocked_cv(pools, 'y', dict(n_estimators=150, learning_rate=0.1,
+                                                                     max_depth=3, random_state=1),
+                                                 block_days=10, n_folds=4, tolerance=0.05)
+        self.assertLessEqual(sel_tol.n_estimators, sel.n_estimators)
         self.assertTrue((sel.scores['r2'] > 0.5).all())
 
     def test_run_level41_xgb_uses_one_fixed_number(self):

@@ -542,9 +542,9 @@ def run_level41_xgb(
             early stopping. It runs after the feature selection, on the training records
             of each yearly pool of one scenario, holding out whole blocks of days; the
             random test records stay unseen. ``n_estimators`` sets the largest number
-            tested. True uses the defaults (middle scenario, 14-day blocks, 5 folds, 1 %
-            tolerance); a dict changes them, e.g. ``{'block_days': 7, 'scenario':
-            'CUT_50'}``. The result is ``tree_selection_`` of each scenario's model, shown
+            tested. True uses the defaults (middle scenario, 14-day blocks, 5 folds, the
+            minimum of the median error curve); a dict changes them, e.g.
+            ``{'block_days': 7, 'scenario': 'CUT_50'}``. The result is ``tree_selection_`` of each scenario's model, shown
             by ``report_tree_selection`` and ``plot_tree_selection``. Default False.
         scenarios: As in :func:`run_level41_rf`.
         verbose: Verbosity level (0=silent, 1+=progress).

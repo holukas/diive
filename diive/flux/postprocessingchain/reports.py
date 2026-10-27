@@ -558,10 +558,12 @@ def report_tree_selection(data, verbose: int | bool | None = None) -> DataFrame:
     for pool, r in out.iterrows():
         table.add_row(str(pool), f"{int(r['records']):,}", f"{r['rmse']:.2f}", f"{r['mae']:.2f}",
                       f"{r['r2']:.3f}", f"{r['random RMSE']:.2f}", f"{r['random R2']:.3f}")
+    rule = (f"the smallest number at which the median error curve of the pools is within "
+            f"{100 * selection.tolerance:g} % of its minimum" if selection.tolerance
+            else "the minimum of the median error curve of the pools, rounded to ten")
     notes = [
-        f"{selection.n_estimators} trees for every model: the smallest number at which the median "
-        f"error curve of the pools is within {100 * selection.tolerance:g} % of its minimum "
-        f"(up to {selection.max_trees} tested). USTAR scenario {selection.scenario}.",
+        f"{selection.n_estimators} trees for every model: {rule} (up to {selection.max_trees} "
+        f"tested). USTAR scenario {selection.scenario}.",
         f"blocked: {selection.n_folds}-fold cross-validation on the training records of each pool, "
         f"holding out whole {selection.block_days:g}-day blocks, at the chosen number of trees. "
         f"R² from the RMSE and the variance of the target.",
@@ -603,8 +605,10 @@ def plot_tree_selection(data, showplot: bool = True):
         ax_c.plot(relative.index, relative[col].to_numpy(), color=cp.KEPT, linewidth=1)
     ax_c.plot(selection.median_curve.index, selection.median_curve.to_numpy(), color=cp.INK,
               linewidth=2.2, label='median of the pools')
-    ax_c.axhline(1 + selection.tolerance, color=cp.MUTED, linewidth=0.8, linestyle=(0, (4, 3)),
-                 label=f'minimum + {100 * selection.tolerance:g} %')
+    if selection.tolerance:
+        threshold = float(selection.median_curve.min()) * (1 + selection.tolerance)
+        ax_c.axhline(threshold, color=cp.MUTED, linewidth=0.8, linestyle=(0, (4, 3)),
+                     label=f'minimum + {100 * selection.tolerance:g} %')
     ax_c.axvline(selection.n_estimators, color=cp.REJECTED, linewidth=1.4,
                  label=f'chosen: {selection.n_estimators} trees')
     top = float(np.nanquantile(relative.to_numpy(), 0.98))
@@ -622,9 +626,11 @@ def plot_tree_selection(data, showplot: bool = True):
              label='random test records')
     ax_s.set_xticks(x, [str(p) for p in scores.index], rotation=45, ha='right')
     ax_s.set_ylabel('RMSE')
+    # Room above the bars for the legend.
+    ax_s.set_ylim(0, 1.25 * float(np.nanmax(scores[['rmse', 'random RMSE']].to_numpy())))
     cp.style_axes(ax_s)
     cp.panel_label(ax_s, f"RMSE at {selection.n_estimators} trees")
-    ax_s.legend(frameon=False, fontsize=8.5, loc='lower right')
+    ax_s.legend(frameon=False, fontsize=8.5, loc='upper right', ncol=2)
     cp.figure_title(fig, "Number of trees from blocked cross-validation",
                     f"USTAR scenario {selection.scenario}, {selection.n_folds} folds of "
                     f"{selection.block_days:g}-day blocks. Every model uses {selection.n_estimators} "

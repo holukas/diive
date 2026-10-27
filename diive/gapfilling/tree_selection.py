@@ -82,7 +82,7 @@ def blocked_folds(index: pd.DatetimeIndex, block_days: float = 14, n_folds: int 
 
 def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: dict,
                                    max_trees: int | None = None, block_days: float = 14,
-                                   n_folds: int = 5, tolerance: float = 0.01,
+                                   n_folds: int = 5, tolerance: float = 0.0,
                                    random_state: int | None = None,
                                    verbose: int = 0) -> TreeSelection:
     """Choose one number of trees for XGBoost by blocked cross-validation.
@@ -90,8 +90,11 @@ def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: d
     For each pool (the training records of one model, e.g. one year and its neighbours),
     XGBoost is cross-validated on folds of whole ``block_days`` blocks (:func:`blocked_folds`),
     and the RMSE on the held-out blocks is recorded after every tree. The curves of all
-    pools are scaled to their minimum, and the number of trees is the smallest at which the
-    median curve comes within ``tolerance`` of its minimum, rounded up to ten.
+    pools are scaled to their minimum, and the number of trees is the minimum of their median
+    curve, rounded to ten. With fewer trees the model misses structure; with more it fits
+    patterns that help with single missing records but not with gaps of days, and the error
+    on the held-out blocks rises again. A ``tolerance`` above zero takes instead the smallest
+    number at which the median curve comes within that fraction of its minimum.
 
     Use the result as a fixed ``n_estimators`` for every model, without early stopping. All
     models then have the same size, so differences between them come from their data, and
@@ -106,7 +109,8 @@ def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: d
         max_trees: Largest number of trees tested.
         block_days: Length of the held-out blocks in days.
         n_folds: Number of folds.
-        tolerance: Relative tolerance: 0.01 accepts an RMSE up to 1 % above the minimum.
+        tolerance: 0 (default) takes the minimum of the median curve; e.g. 0.01 takes the
+            smallest number of trees with a median RMSE up to 1 % above that minimum.
         random_state: Seed for the folds.
         verbose: Verbosity level.
 
@@ -139,8 +143,9 @@ def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: d
     curves = DataFrame(curves, index=pd.RangeIndex(1, max_trees + 1, name='trees'))
     relative = curves / curves.min()
     median_curve = relative.median(axis=1)
-    first = int(np.argmax(median_curve.to_numpy() <= 1 + tolerance)) + 1
-    n_estimators = min(max_trees, int(np.ceil(first / 10) * 10))
+    values = median_curve.to_numpy()
+    first = int(np.argmax(values <= values.min() * (1 + tolerance))) + 1
+    n_estimators = min(max_trees, max(10, int(round(first / 10)) * 10))
 
     scores = DataFrame({
         'records': {k: v[0] for k, v in rows.items()},
@@ -148,8 +153,9 @@ def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: d
         'mae': {k: v[n_estimators - 1] for k, v in mae.items()},
         'r2': {k: 1 - curves.loc[n_estimators, k] ** 2 / v[1] for k, v in rows.items()},
     })
-    info(f"Number of trees from blocked cross-validation: {n_estimators} (median RMSE within "
-         f"{100 * tolerance:g} % of its minimum)", verbose=verbose)
+    rule = (f"median RMSE within {100 * tolerance:g} % of its minimum" if tolerance
+            else "minimum of the median RMSE")
+    info(f"Number of trees from blocked cross-validation: {n_estimators} ({rule})", verbose=verbose)
     return TreeSelection(n_estimators=n_estimators, curves=curves, median_curve=median_curve,
                          scores=scores, block_days=block_days, n_folds=n_folds,
                          tolerance=tolerance, max_trees=max_trees)
