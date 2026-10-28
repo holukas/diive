@@ -1293,6 +1293,64 @@ class TestNegativeNighttime(unittest.TestCase):
         self.assertGreater(e['bias'], 0)
         self.assertAlmostEqual(e['bias'], float((p * df['level']).sum()) - e['sum'], places=9)
 
+    def test_uncertainty_follows_the_series_timestamps(self):
+        """L415: with an END index the detector moves the series to the middle. The uncertainty,
+        as a column name or a Series of the same frame, must move with it."""
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        values, sigma, night_ix, _ = self._series()
+        df = pd.DataFrame({'NEE': values, 'UNC': sigma})
+        df.index = (df.index + pd.Timedelta('15min')).rename('TIMESTAMP_END')
+        for uncertainty in ('UNC', df['UNC']):
+            sod = StepwiseOutlierDetection(dfin=df, col='NEE', site_lat=self.COORDS['lat'],
+                                           site_lon=self.COORDS['lon'], utc_offset=1)
+            self.assertEqual(sod.series_hires_cleaned.index.name, 'TIMESTAMP_MIDDLE')
+            sod.flag_outliers_negative_night_test(uncertainty=uncertainty, z=2)
+            self.assertEqual(list(sod.last_flag[sod.last_flag == 2].index), [night_ix[10]])
+
+    def test_warns_when_most_nights_have_no_uncertainty(self):
+        """L415: an uncertainty on other timestamps matches no record. That is shown even
+        with verbose=False, because the test then removes nothing."""
+        from diive.core.utils.console import console, get_verbosity, set_verbosity, VERBOSE_PROGRESS
+        from diive.preprocessing.outlier_detection import NegativeNighttime
+        values, sigma, _, _ = self._series()
+        shifted = sigma.copy()
+        shifted.index = shifted.index + pd.Timedelta('15min')
+        saved = get_verbosity()
+        set_verbosity(VERBOSE_PROGRESS)
+        try:
+            with console.capture() as cap:
+                t = NegativeNighttime(series=values, uncertainty=shifted, z=2, **self.COORDS).run()
+        finally:
+            set_verbosity(saved)
+        n_night = int(t.is_nighttime.sum())
+        self.assertFalse((t.overall_flag == 2).any())
+        self.assertIn(f"{n_night:,} of {n_night:,} nighttime records", ' '.join(cap.get().split()))
+
+    def test_counts_nights_without_uncertainty(self):
+        """L423: a few nights without uncertainty keep flag 0, their number is reported."""
+        from diive.core.utils.console import console
+        from diive.preprocessing.outlier_detection import NegativeNighttime
+        values, sigma, night_ix, _ = self._series()
+        sigma[night_ix[:3]] = np.nan
+        with console.capture() as cap:
+            t = NegativeNighttime(series=values, uncertainty=sigma, z=2, verbose=True,
+                                  **self.COORDS).run()
+        self.assertEqual(int((t.overall_flag == 2).sum()), 1)
+        self.assertIn(f"3 of {len(night_ix):,} nighttime records", ' '.join(cap.get().split()))
+
+    def test_plot_without_any_uncertainty(self):
+        """L421: the figure drew limits from an empty frame and raised."""
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from diive.preprocessing.outlier_detection import NegativeNighttime
+        values, sigma, _, _ = self._series()
+        t = NegativeNighttime(series=values, uncertainty=sigma * np.nan, z=2, showplot=True,
+                              **self.COORDS).run()
+        self.assertFalse((t.overall_flag == 2).any())
+        self.assertIsNotNone(t.fig)
+        plt.close(t.fig)
+
 
 class TestHampelTimeOfDay(unittest.TestCase):
     """by_time_of_day=True judges a value against the same time of day."""
@@ -1337,11 +1395,37 @@ class TestHampelTimeOfDay(unittest.TestCase):
         self.assertAlmostEqual(median[t], float(pd.concat([window, before]).median()), places=12)
 
     def test_too_few_records_are_not_tested(self):
+        """L423: records with too few values in their window keep flag 0 and are counted."""
+        from diive.core.utils.console import console
         from diive.preprocessing.outlier_detection.hampel import Hampel
         s, spike = self._series()
-        h = Hampel(series=s, window_length='13D', use_differencing=False, separate_day_night=False,
-                   by_time_of_day=True, min_records=40).run()  # at most 39 in the window
+        # Every fourth day: at most 4 days x 3 slots = 12 values in a 13-day window.
+        s = s[(s.index.normalize() - s.index[0].normalize()).days % 4 == 2]
+        self.assertIn(spike, s.index)
+        with console.capture() as cap:
+            h = Hampel(series=s, window_length='13D', use_differencing=False, separate_day_night=False,
+                       by_time_of_day=True, min_records=13, verbose=True).run()
         self.assertFalse((h.overall_flag == 2).any())
+        self.assertIn(f"{int(s.notna().sum())} record(s) were not tested", ' '.join(cap.get().split()))
+
+    def test_window_that_can_never_hold_min_records(self):
+        """L423: a window that can never hold min_records values would test nothing."""
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s, _ = self._series()
+        kw = dict(series=s, use_differencing=False, separate_day_night=False, by_time_of_day=True)
+        with self.assertRaises(ValueError):
+            Hampel(**kw, window_length='13D', min_records=40)  # at most 39 in the window
+        with self.assertRaises(ValueError):
+            Hampel(**kw, window_length='3D')  # 9 values, min_records 10
+        Hampel(**kw, window_length='13D', min_records=39)
+
+    def test_all_nan_series(self):
+        """L420: as in the default mode, an all-NaN series gives NaN flags, no error."""
+        from diive.preprocessing.outlier_detection.hampel import Hampel
+        s, _ = self._series()
+        h = Hampel(series=s * np.nan, window_length='13D', use_differencing=False,
+                   separate_day_night=False, by_time_of_day=True).run(repeat=False)
+        self.assertTrue(h.overall_flag.isna().all())
 
     def test_invalid_settings(self):
         from diive.preprocessing.outlier_detection.hampel import Hampel
@@ -1394,3 +1478,20 @@ class TestHampelWindowSpan(unittest.TestCase):
             ham.calc(repeat=False)
             flags.append(ham.overall_flag)
         pd.testing.assert_series_equal(flags[0], flags[1])
+
+
+class TestHighestQualityFluxWindow(unittest.TestCase):
+    """L414: the automatic Hampel window of analyze_highest_quality_flux."""
+
+    def test_window_holds_one_percent_of_the_valid_records_on_sparse_data(self):
+        """Hampel applies the window as a time span on the full grid. A window of 1 % of the
+        valid records spanned a much shorter time on sparse data, so it must be 1 % of the grid."""
+        from diive.flux.lowres.hqflux import analyze_highest_quality_flux
+        rng = np.random.default_rng(7)
+        index = pd.date_range('2022-05-01 00:15', periods=48 * 120, freq='30min', name='TIMESTAMP_MIDDLE')
+        flux = pd.Series(rng.normal(0, 1, len(index)), index=index, name='FC')
+        # A third of the records, in runs of 6, as after a strict quality filter.
+        flux = flux[(np.arange(len(index)) // 6) % 3 == 0]
+        _, summary = analyze_highest_quality_flux(flux, lat=47.21, lon=8.41, utc_offset=1,
+                                                  showplot=False, return_summary=True)
+        self.assertAlmostEqual(summary['window_length'], len(index) / 100, delta=1)

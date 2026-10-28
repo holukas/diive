@@ -139,6 +139,22 @@ class StepwiseOutlierDetection:
         self._last_bounds = (getattr(flagtest, "last_lower_bound", None),
                              getattr(flagtest, "last_upper_bound", None))
 
+    def _like_series(self, data: Series | str, name: str) -> Series:
+        """*data* (a Series or a column of ``dfin``) on the timestamps of the series.
+
+        The series was sanitized in ``_setup``, which can move its index (END to MIDDLE). A
+        second variable needs the same handling, or it matches no timestamp (L415).
+        """
+        if isinstance(data, str):
+            if data not in self.dfin.columns:
+                raise ValueError(f"{name}={data!r} is not a column of dfin.")
+            data = self.dfin[data]
+        if data.index.equals(self._series_hires_cleaned.index):
+            return data
+        if data.index.name in ('TIMESTAMP_START', 'TIMESTAMP_MIDDLE', 'TIMESTAMP_END'):
+            return TimestampSanitizer(data=data, output_middle_timestamp=self.output_middle_timestamp).get()
+        return data
+
     def _run_test(self, cls, calc_kwargs: dict, **kwargs) -> None:
         """Run test *cls* on a copy of the cleaned series and record its flag.
 
@@ -335,14 +351,19 @@ class StepwiseOutlierDetection:
                        lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset,
                        lower_limit=lower_limit, showplot=showplot, verbose=verbose)
 
-    def flag_outliers_negative_night_test(self, uncertainty: Series, z: float = 2.0,
+    def flag_outliers_negative_night_test(self, uncertainty: Series | str, z: float = 2.0,
                                           level_window: int | str = '13D',
                                           showplot: bool = False, verbose: bool = False):
         """Flag nighttime values below -z times their random uncertainty. See ``NegativeNighttime``.
 
-        ``uncertainty`` is the random uncertainty of each record, in the units of the series
-        and on its index. Daytime records are never flagged.
+        ``uncertainty`` is the random uncertainty of each record, in the units of the series:
+        a column name of ``dfin`` or a Series. A column, and a Series with an index named
+        ``TIMESTAMP_START``, ``TIMESTAMP_MIDDLE`` or ``TIMESTAMP_END``, get the same timestamp
+        handling as the series, so an END index is moved to the middle of the averaging period
+        like the series. A Series with another index must be on the index of
+        ``series_hires_cleaned``. Daytime records are never flagged.
         """
+        uncertainty = self._like_series(uncertainty, name='uncertainty')
         self._run_test(NegativeNighttime, {}, idstr=self.idstr, uncertainty=uncertainty,
                        lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset, z=z,
                        level_window=level_window, showplot=showplot, verbose=verbose)

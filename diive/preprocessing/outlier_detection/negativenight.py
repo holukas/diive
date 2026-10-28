@@ -22,7 +22,9 @@ true numbers can be higher: at z = 3 a Laplace tail of the same standard deviati
 times larger.
 
 Quality flags (overall_flag):
-  - flag=0: daytime record, or nighttime record not clearly below zero (valid)
+  - flag=0: daytime record, or nighttime record not clearly below zero (valid). A nighttime
+    record without an uncertainty is not tested and also gets flag 0. Their number is shown as a
+    warning.
   - flag=2: nighttime record below ``-z * uncertainty`` (removed)
   - NaN: record missing in the input, so no test could be performed
 
@@ -34,7 +36,7 @@ from pandas import DatetimeIndex, Series
 from scipy.stats import norm
 
 from diive.core.base.flagbase import FlagBase
-from diive.core.utils.console import info
+from diive.core.utils.console import info, warn
 from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
@@ -62,8 +64,12 @@ class NegativeNighttime(FlagBase):
             uncertainty: Random uncertainty of each record, in the units of ``series`` and on its
                 index, e.g. EddyPro's ``FC_RANDUNC_HF``, the PAS20 random uncertainty, the
                 larger of the two, or the pooled spread of nighttime values (``POOLED`` of
-                ``nighttime_uncertainty``). A nighttime record without an uncertainty is not
-                tested. Its name labels the plot.
+                ``nighttime_uncertainty``). It is matched to ``series`` by timestamp, so both
+                must use the same timestamp convention (e.g. both ``TIMESTAMP_MIDDLE``). A
+                nighttime record without an uncertainty is not tested and keeps flag 0. If
+                most nighttime records have none, a warning is always shown, because the two
+                indexes then most likely use different conventions. Otherwise their number is
+                shown with ``verbose=True``. Its name labels the plot.
             lat: Latitude of the site, to tell day from night.
             lon: Longitude of the site.
             utc_offset: UTC offset of the timestamps in hours.
@@ -98,6 +104,7 @@ class NegativeNighttime(FlagBase):
         self._overall_flag, n_iterations = self.repeat(
             func=self.run_flagtests, repeat=False, progress_callback=progress_callback)
         self.expected_noise = self._expected_noise()
+        self._warn_untested()
         if self.verbose:
             n_removed = int((self.overall_flag == 2).sum())
             info(f"Nighttime records below -{self.z:g} uncertainties: {n_removed:,}. Expected from "
@@ -106,6 +113,23 @@ class NegativeNighttime(FlagBase):
                  f"gaps are filled.", verbose=self.verbose)
         if self.showplot:
             self._plot()
+
+    def _warn_untested(self) -> None:
+        """Report nighttime records with a value but no uncertainty: they were not tested."""
+        night = self.is_nighttime & self.series.notna()
+        n_night = int(night.sum())
+        n_untested = int((night & self.uncertainty.isna()).sum())
+        if not n_untested:
+            return
+        msg = (f"NegativeNighttime: {n_untested:,} of {n_night:,} nighttime records of "
+               f"{self.series.name} have no uncertainty, so they were not tested and keep flag 0.")
+        if n_untested > n_night / 2:
+            # Most likely the uncertainty is on another timestamp convention (L415). Shown
+            # whatever the verbosity: otherwise the test silently does nothing.
+            warn(f"{msg} Check that the uncertainty uses the same timestamps as the series "
+                 f"(e.g. both TIMESTAMP_MIDDLE).")
+        else:
+            warn(msg, verbose=self.verbose)
 
     def _flagtests(self, iteration) -> tuple[DatetimeIndex, DatetimeIndex, int]:
         s = self.filteredseries.dropna()
@@ -158,11 +182,23 @@ class NegativeNighttime(FlagBase):
         from diive.core.plotting.plotfuncs import nice_date_ticks
 
         df = self._night_frame()
+        name = self.series.name
+        if df.empty:
+            # No night with a value and an uncertainty: nothing to draw (L421).
+            fig = plt.figure(facecolor='white', figsize=(15, 3), layout='constrained')
+            ax = fig.add_subplot()
+            ax.set_axis_off()
+            cp.note(ax, "No nighttime record has both a value and an uncertainty, "
+                        "so no record was tested.")
+            cp.figure_title(fig, f"Negative nighttime values: {name}",
+                            f"Limit -{self.z:g} times the uncertainty, no record tested.")
+            fig.show()
+            self._fig = fig
+            return
         removed = (self.overall_flag == 2).reindex(df.index, fill_value=False)
         positive = df['value'] >= 0
         within = ~positive & ~removed
         c0, c1, c2 = cp.QCF_COLORS
-        name = self.series.name
 
         fig = plt.figure(facecolor='white', figsize=(15, 5.8), layout='constrained')
         gs = fig.add_gridspec(1, 3, width_ratios=[1.3, 1, 1.2])

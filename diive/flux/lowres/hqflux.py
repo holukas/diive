@@ -11,8 +11,10 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import pandas as pd
 from pandas import Series
+from pandas.tseries.frequencies import to_offset
 
 import diive.core.plotting.plotfuncs as pf
+from diive.core.times.times import DetectFrequency
 from diive.core.utils.console import info
 from diive.preprocessing.outlier_detection.hampel import Hampel
 from diive.preprocessing.outlier_detection import LocalOutlierFactorAllData
@@ -150,8 +152,10 @@ def analyze_highest_quality_flux(flux: Series,
         lat (float): Latitude of measurement site in degrees (e.g., 47.286). Range: -90 to 90.
         lon (float): Longitude of measurement site in degrees (e.g., 7.734). Range: -180 to 180.
         utc_offset (int): UTC offset in hours (e.g., 1 for CET, -8 for PST).
-        window_length (int): Rolling window size for Hampel filter.
-            Default: None (auto = data_count / 100, minimum 13 for ~6 hours at 30-min frequency).
+        window_length (int): Hampel window in records of the regular time grid. The window
+            spans a fixed time, so missing records do not widen it. Default: None (auto:
+            1 % of the grid between the first and last record, at least 13 records, about
+            6 hours at 30-min frequency).
         n_sigma_daytime (float): Hampel threshold for DAYTIME records (stricter for high turbulence).
             Default is 5.5 (robust). Use 4.0 for stricter filtering.
         n_sigma_nighttime (float): Hampel threshold for NIGHTTIME records (lenient for stable conditions).
@@ -183,7 +187,10 @@ def analyze_highest_quality_flux(flux: Series,
         outlier detection. Daytime/nighttime separation uses solar elevation angle
         calculated from site coordinates and UTC offset.
 
-        Rolling window = 10% of valid data points (robust to sparse periods).
+        The automatic Hampel window spans 1 % of the period the data cover. On average it
+        then holds 1 % of the valid records, also when the highest-quality records are
+        sparse. The rolling median of the output uses a window of 10 % of the records of
+        each period.
 
     See Also:
         Hampel : Underlying robust outlier detection method using Median Absolute Deviation.
@@ -212,9 +219,14 @@ def analyze_highest_quality_flux(flux: Series,
     hqdf_filtered = pd.DataFrame(index=flux.index)
     summary = {}
 
-    # Auto-configure window length if not provided
+    # Auto-configure window length if not provided. Hampel applies the window as a time span
+    # on the regular grid (L403), so 1 % of the grid, not 1 % of the valid records: on sparse
+    # data a count of valid records spans a much shorter time (L414).
     if window_length is None:
-        window_length = max(int(flux.dropna().count() / 100), 13)
+        freq = flux.index.freq or DetectFrequency(index=flux.index, verbose=False).get()
+        step = pd.Timedelta(to_offset(freq).nanos, unit='ns')
+        n_grid = int((flux.index.max() - flux.index.min()) / step) + 1
+        window_length = max(int(n_grid / 100), 13)
 
     # Apply Hampel filter to entire series with built-in day/night separation
     info(f"\n>>> Removing outliers from highest-quality fluxes ({flux.name})")

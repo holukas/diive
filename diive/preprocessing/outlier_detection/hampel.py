@@ -217,7 +217,9 @@ class Hampel(FlagBase):
                 of day that count as the same time of day. Default 1: with 30-min data
                 three half-hours, up to 39 records in a 13-day window.
             min_records (int): With ``by_time_of_day=True``, a record whose window holds
-                fewer values is not tested. Default 10.
+                fewer values is not tested. It keeps flag 0, and with ``verbose=True`` a
+                warning gives the number of such records. Raises ValueError if no window can
+                hold this many values. Default 10.
             idstr (str, optional): Identifier suffix added to output variable names.
             showplot (bool): If ``True``, displays a summary plot after calculation.
             verbose (bool): If ``True``, prints iteration statistics to the console.
@@ -260,6 +262,14 @@ class Hampel(FlagBase):
             if self.time_of_day_slots < 0 or self.min_records < 1:
                 raise ValueError("time_of_day_slots must be >= 0 and min_records >= 1.")
             self._window_days = int(self._window_span / one_day)
+            # A window that can never hold min_records values would test nothing (L423).
+            capacity = (2 * (self._window_days // 2) + 1) * (2 * self.time_of_day_slots + 1)
+            if capacity < self.min_records:
+                raise ValueError(
+                    f"by_time_of_day=True: a window of {window_length!r} with time_of_day_slots="
+                    f"{self.time_of_day_slots} holds at most {capacity} values, fewer than "
+                    f"min_records={self.min_records}, so no record would be tested. Use a longer "
+                    f"window_length, more time_of_day_slots or a smaller min_records.")
         self.n_sigma = n_sigma
         # Per-period overrides default to None and fall back to the global value,
         # so changing n_sigma alone still affects both periods.
@@ -277,6 +287,9 @@ class Hampel(FlagBase):
         # over iterations. Reported after calc() so a degenerate window is visible
         # rather than silent.
         self._n_degenerate_scale = 0
+        # Time of day: records that no iteration could judge because their window held fewer
+        # than min_records values. They keep flag 0, so the count is reported after calc().
+        self._untested_too_few = None
 
         # Detect daytime and nighttime
         if self.separate_day_night:
@@ -319,6 +332,12 @@ class Hampel(FlagBase):
                  f"unflagged. Typical causes: coarser data upsampled onto a finer grid, quantized "
                  f"readings, or a stuck sensor. Consider a longer window_length, "
                  f"use_differencing=False, or screening the affected period separately.",
+                 verbose=self.verbose)
+        n_too_few = int(self._untested_too_few.sum()) if self._untested_too_few is not None else 0
+        if n_too_few:
+            warn(f"Hampel: {n_too_few} record(s) were not tested because their time-of-day window "
+                 f"held fewer than min_records={self.min_records} values. They keep flag 0. "
+                 f"Consider a longer window_length or more time_of_day_slots.",
                  verbose=self.verbose)
 
         if self.showplot:
@@ -600,6 +619,10 @@ class Hampel(FlagBase):
         ``_rolling_median_mad``.
         """
         from numpy.lib.stride_tricks import sliding_window_view
+        if not x.notna().any():
+            # Nothing to judge, e.g. an all-NaN series (L420). As in the default mode.
+            nan = pd.Series(np.nan, index=x.index, dtype=float)
+            return nan, nan.copy()
         step = self._step(self.series.index)
         per_day = int(pd.Timedelta('1D') / step)
         day = x.index.normalize()
@@ -632,6 +655,10 @@ class Hampel(FlagBase):
 
         median = pd.Series(med[rows, slot], index=x.index)
         mad = pd.Series(mad[rows, slot], index=x.index)
+        # A record judged in any iteration counts as tested. A record removed by an earlier
+        # iteration is not in x, so it stays False here.
+        too_few = (x.notna() & median.isna()).reindex(self.series.index, fill_value=False)
+        self._untested_too_few = too_few if self._untested_too_few is None else self._untested_too_few & too_few
         degenerate = (mad == 0) & x.notna()
         if degenerate.any():
             self._n_degenerate_scale += int(degenerate.sum())
