@@ -655,6 +655,15 @@ class TestLevel42UstarReference(unittest.TestCase):
         cls.before = _chain_to_ref()
         cls.data = run_level42_ustar_reference(cls.before, method='nighttime', **_NT)
 
+    def test_needs_mds_filled_versions(self):
+        """L417: a gap-filling method that did not fill the 40 versions is refused up front."""
+        from diive.flux.postprocessingchain import run_level42_ustar_reference
+        for method in ('nighttime', 'daytime'):
+            with self.subTest(method=method):
+                with self.assertRaisesRegex(ValueError, "gapfill_method='mds'"):
+                    run_level42_ustar_reference(self.before, method=method, gapfill_method='rf',
+                                                sw_in_f='SW_IN_1_1_1', vpd_f='VPD_kPa', **_NT)
+
     def test_needs_the_nee_ref(self):
         from diive.flux.postprocessingchain import (
             run_level33_ustar_detection, run_level42_ustar_reference,

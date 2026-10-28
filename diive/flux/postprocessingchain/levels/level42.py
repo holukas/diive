@@ -894,6 +894,19 @@ def run_level42_ustar_reference(
         warn("run_level42_ustar_reference: no u* scenario at percentile 50, so no USTAR50 "
              "version. Its column stays empty and week 52 starts at day 351, as in ure "
              "without USTAR50.", verbose=verbose)
+    # Only MDS fills the 40 REF versions. Without this check NT_* failed only
+    # after the main partitioning had run, and DT_OF silently partitioned the
+    # versions without nee_f (L417).
+    if gapfill_method is not None and variant != 'dt_rp':
+        filled = data.gapfilled_cols().get(gapfill_method, {})
+        needed = labels + ([lab50] if lab50 is not None else [])
+        missing = [lab for lab in needed if lab not in filled]
+        if missing:
+            raise ValueError(
+                f"run_level42_ustar_reference(gapfill_method={gapfill_method!r}): L4.1 "
+                f"method {gapfill_method!r} did not fill {len(missing)} of the "
+                f"{len(needed)} u* versions the REF needs (e.g. {missing[0]}). "
+                f"run_level41_mds() fills them all: use gapfill_method='mds'.")
 
     rule(f"Level 4.2: REF of GPP and RECO (ONEFlux ure), variant {variant}",
          verbose=verbose)

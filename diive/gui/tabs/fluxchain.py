@@ -53,9 +53,11 @@ REddyProc), the driver columns that variant needs, and for the nighttime method
 other variants add up, as at L4.1. With the NEE REF on (L3.3 REF and L4.1 MDS),
 **Add GPP / RECO REF (ONEFlux)** also runs `run_level42_ustar_reference` for the
 variant, which adds ``GPP_<tag>_CUT_REF`` / ``RECO_<tag>_CUT_REF`` (or VUT) and
-reports the REF percentile per product and time resolution. **Copy Python**
-switches to `level42_to_code`. Re-running L4.1 starts from the container L4.2
-started from, so the partitioning of the old gap-filling goes.
+reports the REF percentile per product and time resolution. A variant that reads
+a gap-filled NEE must take it from mds for the REF (only MDS fills the 40 REF
+versions). **Copy Python** switches to `level42_to_code`. Re-running L4.1 starts
+from the container L4.2 started from, so the partitioning of the old gap-filling
+goes.
 
 Thresholds with free labels from projects saved before the percentile form
 (e.g. ``CUT_NONE``) still run through `run_level33_constant_ustar`.
@@ -211,7 +213,9 @@ _REF42_TIP = (
     "REF versions of the NEE REF and the u* scenario at percentile 50 with this "
     "method and mode, then selects one REF for GPP and one for RECO by model "
     "efficiency, on half-hourly, daily, weekly, monthly and yearly values.\n\n"
-    "Needs the NEE REF: 'Add REF (ONEFlux)' in Level 3.3 and MDS in Level 4.1.\n"
+    "Needs the NEE REF: 'Add REF (ONEFlux)' in Level 3.3 and MDS in Level 4.1. "
+    "Where the method reads a gap-filled NEE, it must come from mds, because only "
+    "MDS fills the 40 REF versions.\n"
     "Slow: about 41 partitionings. Daytime ONEFlux takes minutes per year.\n\n"
     "For the REddyProc modes, which ONEFlux does not run, the same selection is "
     "applied to their results (a diive extension).")
@@ -235,7 +239,7 @@ def _label_percentile(label: str) -> float | None:
 
 class _ChainSignals(QObject):
     """Qt signals (DiiveTab is a plain ABC, not a QObject)."""
-    done = Signal(object)        # FluxLevelData (run-all completion)
+    done = Signal(object, object)  # (FluxLevelData, its L4.1 container or None), run-all
     level_done = Signal(object)  # (FluxLevelData, stage_idx) — single-level run
     failed = Signal(str)
     features_created = Signal(object)  # DataFrame — a level's results pushed to dataset
@@ -1512,6 +1516,9 @@ class FluxChainTab(DiiveTab):
             combo.currentIndexChanged.connect(self._sync_l42)
             combo.currentIndexChanged.connect(self._update_run_label)
         self.l42_ref.toggled.connect(self._update_run_label)
+        # The REF needs the gap-filled NEE from MDS (only MDS fills the 40 versions).
+        self.l42_gapfill.currentIndexChanged.connect(self._sync_l42)
+        self.l42_gapfill.currentIndexChanged.connect(self._update_run_label)
         # The REF option follows the NEE REF set in Level 3.3 and Level 4.1.
         for cb in (self.l33_enable, self.l33_ref, self.l41_mds):
             cb.toggled.connect(self._sync_l42)
@@ -1532,9 +1539,24 @@ class FluxChainTab(DiiveTab):
         m, mo = combo_value(self.l42_method), combo_value(self.l42_mode)
         return "nee_f" in partitioning_inputs(m, mo) + partitioning_optional_inputs(m, mo)
 
+    def _l42_ref_problem(self) -> str | None:
+        """Why the GPP / RECO REF cannot run with the current settings, or None.
+
+        It needs the NEE REF (L3.3 REF on and L4.1 MDS ticked). A variant that
+        reads an L4.1 gap-filled NEE must take it from MDS, because only MDS
+        fills the 40 REF versions."""
+        if not (self._ref_on() and self.l41_mds.isChecked()):
+            return ("Needs the NEE REF: tick 'Add REF (ONEFlux)' in Level 3.3 and "
+                    "Marginal Distribution Sampling in Level 4.1.")
+        if self._l42_uses_nee_f() and self.l42_gapfill.currentText() != "mds":
+            return (f"Needs the gap-filled NEE from mds. Only MDS fills the 40 REF "
+                    f"versions, not {self.l42_gapfill.currentText()}. Pick mds in "
+                    f"'Gap-filled NEE from'.")
+        return None
+
     def _l42_ref_allowed(self) -> bool:
-        """The GPP / RECO REF needs the NEE REF: L3.3 REF on and L4.1 MDS ticked."""
-        return self._ref_on() and self.l41_mds.isChecked()
+        """True when the GPP / RECO REF can run (see ``_l42_ref_problem``)."""
+        return self._l42_ref_problem() is None
 
     def _sync_l42(self, *_) -> None:
         """Show the controls of the selected variant and gate the REF option."""
@@ -1545,7 +1567,8 @@ class FluxChainTab(DiiveTab):
         for arg, combo in self._l42_cols.items():
             self._l42_form.setRowVisible(combo, arg in needed)
         self._l42_form.setRowVisible(self.l42_gapfill, self._l42_uses_nee_f())
-        allowed = self._l42_ref_allowed()
+        problem = self._l42_ref_problem()
+        allowed = problem is None
         self.l42_ref.setEnabled(allowed)
         if allowed:
             tag = self._l42_variant().upper()
@@ -1553,8 +1576,7 @@ class FluxChainTab(DiiveTab):
                     "thresholds). Partitions the 40 REF versions and the scenario at "
                     "percentile 50 again, so the run takes about 41 times longer.")
         else:
-            text = ("Needs the NEE REF: tick 'Add REF (ONEFlux)' in Level 3.3 and "
-                    "Marginal Distribution Sampling in Level 4.1.")
+            text = problem
         self._set_marker(self.l42_ref_note, allowed, text)
         self._refresh_levels_info()
 
@@ -1577,15 +1599,25 @@ class FluxChainTab(DiiveTab):
         return cfg
 
     def _l42_problem(self, l42: dict, l41_methods) -> str | None:
-        """Why an L4.2 run cannot start (missing drivers, or the nighttime method
-        without its L4.1 gap-filled NEE), or None."""
+        """Why an L4.2 run cannot start (missing drivers, an L4.1 gap-filled NEE
+        from a method that did not run, or the GPP / RECO REF with a gap-filled
+        NEE that is not from MDS), or None."""
         missing = [arg for arg in self._l42_drivers() if not l42.get(arg)]
         if missing:
             return ("Pick the Level 4.2 driver columns: " + ", ".join(missing) + ".")
-        method = l42.get("gapfill_method")
-        if l42["method"] == "nighttime" and method not in l41_methods:
-            return (f"The nighttime method needs the gap-filled NEE of Level 4.1 "
-                    f"method '{method}'. Run it in Level 4.1, or pick a method that ran.")
+        method = l42.get("gapfill_method")  # set only for variants that read one
+        if "gapfill_method" in l42 and method not in l41_methods:
+            if l42["method"] == "nighttime":
+                return (f"The nighttime method needs the gap-filled NEE of Level 4.1 "
+                        f"method '{method}'. Run it in Level 4.1, or pick a method "
+                        f"that ran.")
+            # Daytime ONEFlux: the library would drop it with a console warning.
+            return (f"Daytime ONEFlux uses the gap-filled NEE of Level 4.1 method "
+                    f"'{method}', which did not run. Run it in Level 4.1, or pick a "
+                    f"method that ran.")
+        if l42.get("ustar_reference") and method not in (None, "mds"):
+            return (f"The GPP / RECO REF needs the gap-filled NEE from mds. Only MDS "
+                    f"fills the 40 REF versions, not {method}.")
         return None
 
     def _update_run_label(self, *_) -> None:
@@ -1944,9 +1976,10 @@ class FluxChainTab(DiiveTab):
     def _compute(self, df, init_kwargs: dict, level2_settings: dict, level31_kwargs: dict,
                  level32_steps: list[dict] | None = None,
                  level33_kwargs: dict | None = None,
-                 level41_cfg: dict | None = None,
-                 level42_cfg: dict | None = None):
-        """Init container, run L2 → 3.1 → (opt) 3.2 → (opt) 3.3 → (opt) 4.1 → (opt) 4.2."""
+                 level41_cfg: dict | None = None):
+        """Init container, run L2 → 3.1 → (opt) 3.2 → (opt) 3.3 → (opt) 4.1.
+
+        L4.2 runs in ``_worker``, which keeps the L4.1 container for the GUI thread."""
         work = df.drop(columns=[c for c in _RESERVED if c in df.columns])
         data = init_flux_data(df=work, **init_kwargs)
         data = run_level2(data, **level2_settings)
@@ -1964,9 +1997,6 @@ class FluxChainTab(DiiveTab):
             data = self._run_level33(data, level33_kwargs)
         if level41_cfg:
             data = self._run_level41(data, level41_cfg)
-        if level42_cfg:
-            self._l41_data = data  # a later L4.1 re-run starts from here
-            data = self._run_level42(data, level42_cfg)
         return data
 
     @staticmethod
@@ -2021,7 +2051,9 @@ class FluxChainTab(DiiveTab):
         kwargs = {k: v for k, v in cfg.items() if k != "ustar_reference"}
         data = run_level42_partitioning(data, **kwargs)
         if cfg.get("ustar_reference"):
-            data = run_level42_ustar_reference(data, verbose=0, **kwargs)
+            # verbose=1: warnings reach the console, e.g. versions partitioned
+            # without a gap-filled NEE or failed fits.
+            data = run_level42_ustar_reference(data, verbose=1, **kwargs)
         return data
 
     def _run(self) -> None:
@@ -2077,7 +2109,6 @@ class FluxChainTab(DiiveTab):
             return
         self._set_running(True)
         self.summary.setPlainText(f"Running Level 2 → Level {deepest}…")
-        self._l41_data = None
         threading.Thread(
             target=self._worker, args=(self._df, ik, l2, l31, steps, l33, l41, l42),
             daemon=True).start()
@@ -2086,11 +2117,18 @@ class FluxChainTab(DiiveTab):
                 level33_kwargs, level41_cfg=None, level42_cfg=None) -> None:
         try:
             data = self._compute(df, init_kwargs, level2_settings, level31_kwargs,
-                                  level32_steps, level33_kwargs, level41_cfg, level42_cfg)
+                                  level32_steps, level33_kwargs, level41_cfg)
+            l41_data = None
+            if level42_cfg:
+                # Handed to _on_done with the result: a later L4.1 re-run starts
+                # from it. Tab state changes on the GUI thread only, so a failed
+                # run leaves it as it was.
+                l41_data = data
+                data = self._run_level42(data, level42_cfg)
         except Exception as err:
             self._sig.failed.emit(str(err))
             return
-        self._sig.done.emit(data)
+        self._sig.done.emit(data, l41_data)
 
     # --- per-level run (each level's output feeds the next) ---
     def _run_level(self, idx: int) -> None:
@@ -2118,9 +2156,8 @@ class FluxChainTab(DiiveTab):
         The first L4.2 run on an L4.1 result keeps that result. Re-running
         L4.1 after L4.2 starts from it, so the partitioning of the old
         gap-filling is discarded as the confirm prompt says (the library keeps
-        L4.2 through an L4.1 re-run, L4.2 being additive)."""
-        if idx == 6 and self._reached == 5:
-            self._l41_data = self._data
+        L4.2 through an L4.1 re-run, L4.2 being additive). ``_l41_data`` is
+        set when an L4.2 run completes (``_on_done``, ``_on_level_done``)."""
         if idx == 5 and self._reached >= 6 and self._l41_data is not None:
             return self._l41_data
         return self._data
@@ -2244,11 +2281,14 @@ class FluxChainTab(DiiveTab):
                 return stage
         return 0
 
-    def _on_done(self, data) -> None:
+    def _on_done(self, data, l41_data=None) -> None:
+        self._l41_data = l41_data  # the L4.1 container L4.2 started from, or None
         self._finalize(data, self._reached_from_data(data))
 
     def _on_level_done(self, payload) -> None:
         data, idx = payload
+        if idx == 6 and self._reached == 5:
+            self._l41_data = self._data  # the L4.1 result this first L4.2 run started from
         self._finalize(data, idx)
 
     def _finalize(self, data, idx: int) -> None:

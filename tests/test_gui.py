@@ -3993,6 +3993,133 @@ def test_flux_chain_tab_level42_reference(app, configured_site):
     assert base is l41_data and not base.levels.has_level42()
 
 
+def test_flux_chain_tab_level42_failed_run_all_keeps_l41_base(app, configured_site):
+    # L416: a run-all through L4.2 hands its L4.1 container to the GUI thread
+    # with the result. A run-all that then fails leaves the tab as it was, so a
+    # later L4.1 re-run still starts without the old L4.2.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    tab.l42_enable.setChecked(True)   # nighttime ONEFlux, gap-filled NEE from mds
+
+    def run_all():
+        tab._run()
+        deadline = time.monotonic() + 300
+        while tab._running:
+            assert time.monotonic() < deadline, "run-all still running"
+            QApplication.processEvents()
+            time.sleep(0.005)
+        QApplication.processEvents()
+
+    run_all()
+    assert tab._reached == 6, tab.summary.toPlainText()
+    data, l41_data = tab._data, tab._l41_data
+    assert data.levels.has_level42()
+    assert l41_data is not None and not l41_data.levels.has_level42()
+    assert l41_data.gapfilled_cols()
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("simulated failure")
+    tab._compute = boom
+    run_all()
+    assert tab.summary.toPlainText().startswith("Failed:")
+    assert tab._data is data and tab._reached == 6
+    assert tab._l41_data is l41_data
+    base = tab._level_base(5)
+    assert base is l41_data and not base.levels.has_level42()
+
+
+def test_flux_chain_tab_level42_ref_needs_mds_nee(app, monkeypatch, configured_site):
+    # L417: the GPP / RECO REF needs the gap-filled NEE from MDS where the
+    # variant reads one (only MDS fills the 40 REF versions). The option
+    # follows "Gap-filled NEE from", and the note says why it is off. The REF
+    # step runs with warnings on.
+    import diive.gui.tabs.fluxchain as mod
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = mod.FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab.l33_enable.setChecked(True)
+    tab.l33_ref.setChecked(True)
+    tab.l41_mds.setChecked(True)
+    tab.l41_rf.setChecked(True)
+    tab.l42_enable.setChecked(True)
+    tab.l42_ref.setChecked(True)
+    for method, mode in (("nighttime", "oneflux"), ("nighttime", "reddyproc"),
+                         ("daytime", "oneflux")):
+        set_combo_value(tab.l42_method, method)
+        set_combo_value(tab.l42_mode, mode)
+        tab.l42_gapfill.setCurrentText("mds")
+        assert tab.l42_ref.isEnabled()
+        assert tab._level42_cfg()["ustar_reference"] is True
+        tab.l42_gapfill.setCurrentText("rf")
+        assert not tab.l42_ref.isEnabled(), (method, mode)
+        assert "ustar_reference" not in tab._level42_cfg()
+        assert "Needs the gap-filled NEE from mds" in tab.l42_ref_note.text()
+        assert "+ REF" not in tab._stage_statuses()[6][0]
+    # Daytime REddyProc reads no gap-filled NEE: the REF runs whatever is picked.
+    set_combo_value(tab.l42_method, "daytime")
+    set_combo_value(tab.l42_mode, "reddyproc")
+    assert tab.l42_ref.isEnabled()
+    assert tab._level42_cfg()["ustar_reference"] is True
+
+    # The run check refuses a REF config with a gap-filled NEE not from mds.
+    set_combo_value(tab.l42_mode, "oneflux")
+    cfg = {**tab._level42_cfg(), "gapfill_method": "rf", "ustar_reference": True}
+    problem = tab._l42_problem(cfg, ["mds", "rf"])
+    assert problem and "needs the gap-filled NEE from mds" in problem
+
+    # The REF step gets verbose=1, so a library warning about a missing nee_f shows.
+    calls = {}
+    monkeypatch.setattr(mod, "run_level42_partitioning", lambda data, **kw: data)
+    monkeypatch.setattr(mod, "run_level42_ustar_reference",
+                        lambda data, **kw: calls.update(kw) or data)
+    sentinel = object()
+    assert mod.FluxChainTab._run_level42(
+        sentinel, {"method": "daytime", "mode": "oneflux", "gapfill_method": "mds",
+                   "ustar_reference": True}) is sentinel
+    assert calls["verbose"] >= 1 and calls["gapfill_method"] == "mds"
+
+
+def test_flux_chain_tab_level42_daytime_gapfill_must_have_run(app, configured_site):
+    # L425: daytime ONEFlux refuses a "Gap-filled NEE from" method that did not
+    # run in Level 4.1, as the nighttime method does. Daytime REddyProc reads
+    # none, so it is not checked there.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    tab.l42_enable.setChecked(True)
+    set_combo_value(tab.l42_method, "daytime")
+    set_combo_value(tab.l42_mode, "oneflux")
+    tab.l42_gapfill.setCurrentText("xgb")
+    tab._run()
+    assert not tab._running
+    assert ("Daytime ONEFlux uses the gap-filled NEE of Level 4.1 method 'xgb', which "
+            "did not run") in tab.summary.toPlainText()
+    # The single L4.2 run checks the methods that ran in Level 4.1.
+    assert tab._level42_plan() is None
+    assert "method 'xgb', which did not run" in tab.summary.toPlainText()
+    assert tab._l42_problem(tab._level42_cfg(), ["mds", "xgb"]) is None
+    set_combo_value(tab.l42_mode, "reddyproc")
+    assert tab._l42_problem(tab._level42_cfg(), ["mds"]) is None
+
+
 def test_ustar_detection_tab(app):
     # Standalone USTAR detection tab: single seasonal detection (moving point)
     # + bootstrap over the years (UstarThresholdDetection), results into table + plot.
