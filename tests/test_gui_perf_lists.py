@@ -381,3 +381,84 @@ def test_hover_line_lookup_matches_full_scan_and_follows_new_data(app):
     assert hover._line_arrays(line)[2] is False
     check(100)
     canvas.close()
+
+
+# --- HoverAnnotator over a gouraud mesh (L419) -------------------------------
+
+def _mesh_canvas(app, shading):
+    from diive.gui.widgets.mpl_canvas import MplCanvas
+
+    canvas = MplCanvas()
+    canvas.resize(900, 600)
+    canvas.show()
+    app.processEvents()
+    ax = canvas.new_axes(1)[0]
+    x = np.array([0.0, 1.0, 2.0, 4.0, 8.0])  # uneven on purpose
+    y = np.array([10.0, 20.0, 30.0, 40.0])
+    values = np.arange(20, dtype=float).reshape(4, 5) * 1.5 + 0.25
+    if shading == "gouraud":
+        mesh = ax.pcolormesh(x, y, values, shading="gouraud")
+    else:  # cell edges: one more than values per axis
+        mesh = ax.pcolormesh(np.append(x, 16.0), np.append(y, 50.0), values,
+                             shading="flat")
+    canvas.draw()
+    app.processEvents()
+    return canvas, ax, mesh, x, y, values
+
+
+def _mesh_event(ax, xd, yd):
+    import types
+    px, py = ax.transData.transform((xd, yd))
+    return types.SimpleNamespace(inaxes=ax, xdata=xd, ydata=yd, x=px, y=py)
+
+
+def test_hover_gouraud_mesh_reads_the_nearest_vertex(app):
+    canvas, ax, mesh, x, y, values = _mesh_canvas(app, "gouraud")
+    hover = canvas.hover
+    xb, yb, vals = hover._mesh_grid(mesh)
+    np.testing.assert_array_equal(vals, values)
+    np.testing.assert_allclose(xb, [-0.5, 0.5, 1.5, 3.0, 6.0, 10.0])
+    np.testing.assert_allclose(yb, [5.0, 15.0, 25.0, 35.0, 45.0])
+    # Next to each vertex the tooltip shows that vertex and its value.
+    for row, yv in enumerate(y):
+        for col, xv in enumerate(x):
+            for dx, dy in ((0.0, 0.0), (0.2, -2.0), (-0.2, 3.0)):
+                hx, hy, text, marker = hover._heatmap_value(
+                    ax, mesh, _mesh_event(ax, xv + dx, yv + dy))
+                assert (hx, hy) == (xv, yv)
+                assert f"{values[row, col]:.4g}" in text
+                assert marker is False
+    # Halfway between x=4 and x=8 is the boundary, beyond it is x=8.
+    assert hover._heatmap_value(ax, mesh, _mesh_event(ax, 6.1, 20.0))[0] == 8.0
+    assert hover._heatmap_value(ax, mesh, _mesh_event(ax, 5.9, 20.0))[0] == 4.0
+    assert hover._heatmap_value(ax, mesh, _mesh_event(ax, 11.0, 20.0)) is None
+    canvas.close()
+
+
+def test_hover_spectrogram_mesh_moves_without_error(app):
+    """The Spectrogram draws a gouraud `_ViewCroppedMesh`. Mouse moves over it
+    raised ValueError in `_mesh_grid` (the autouse fixture catches it)."""
+    from diive.gui.tabs.spectrogram import _ViewCroppedMesh
+    canvas, ax, mesh, x, y, values = _mesh_canvas(app, "gouraud")
+    mesh.__class__ = _ViewCroppedMesh
+    ax.set_xlim(0, 3)
+    canvas.draw()
+    app.processEvents()
+    for fx in (0.1, 0.5, 0.9):
+        _move(canvas, ax, fx, 0.5)
+    assert canvas.hover._visible
+    canvas.close()
+
+
+def test_hover_flat_mesh_still_reads_cells(app):
+    canvas, ax, mesh, x, y, values = _mesh_canvas(app, "flat")
+    hover = canvas.hover
+    xb, yb, vals = hover._mesh_grid(mesh)
+    np.testing.assert_array_equal(xb, np.append(x, 16.0))
+    np.testing.assert_array_equal(vals, values)
+    hx, hy, text, marker = hover._heatmap_value(ax, mesh, _mesh_event(ax, 5.0, 33.0))
+    assert (hx, hy) == (6.0, 35.0)  # centre of the cell x 4..8, y 30..40
+    assert f"{values[2, 3]:.4g}" in text
+    _move(canvas, ax, 0.5, 0.5)
+    assert hover._visible
+    canvas.close()

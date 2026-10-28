@@ -290,7 +290,13 @@ class TimestampSanitizer:
         # a single record takes the expected frequency when there is one (L321:
         # a one-record file stopped a whole multi-file read).
         if len(self.data) == 1 and self.nominal_freq:
-            detected_freq = to_offset(pd.Timedelta(to_offset(self.nominal_freq))).freqstr
+            # Go through the step length, as detection does, so the freqstr is
+            # the one many records of that step give ('D' -> '24h', '1min' ->
+            # 'min'). pandas 3 has no Timedelta for 'D' (L418).
+            nominal = _lenient_freq(self.nominal_freq)
+            step = _step_ns(nominal)
+            detected_freq = (to_offset(pd.Timedelta(step, unit="ns")).freqstr
+                             if step is not None else to_offset(nominal).freqstr)
             self._freq_confidence = None
             self._freq_detection_method = "nominal_single_record"
             self._freq_percent_matching = None

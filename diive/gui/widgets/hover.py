@@ -393,23 +393,36 @@ class HoverAnnotator:
         if col is None or row is None:
             return None
         val = values[row, col]
-        xc = 0.5 * (xb[col] + xb[col + 1])
-        yc = 0.5 * (yb[row] + yb[row + 1])
+        coords = None if isinstance(grid_artist, AxesImage) else grid_artist.get_coordinates()
+        if coords is not None and coords.shape[:2] == values.shape:
+            # Gouraud mesh: the value belongs to the vertex, not a cell centre.
+            xc, yc = float(coords[0, col, 0]), float(coords[row, 0, 1])
+        else:
+            xc = 0.5 * (xb[col] + xb[col + 1])
+            yc = 0.5 * (yb[row] + yb[row + 1])
         vtxt = "no data" if val is None or not np.isfinite(val) else f"{val:.4g}"
         text = f"{self._fmt_axis(ax.xaxis, xc)} · {self._fmt_axis(ax.yaxis, yc)}\n{vtxt}"
         return xc, yc, text, False
 
     def _mesh_grid(self, mesh: QuadMesh):
-        """Cell-boundary arrays + 2-D value grid for a QuadMesh (cached per draw)."""
+        """Cell-boundary arrays + 2-D value grid for a QuadMesh (cached per draw).
+
+        A flat mesh has cell-edge coordinates, one more than values per axis.
+        A gouraud mesh has one vertex per value. Its vertices count as cell
+        centres, with the boundaries halfway between them (L419)."""
         cached = self._mesh_cache.get(id(mesh))
         if cached is not None:
             return cached
-        coords = np.asarray(mesh.get_coordinates())  # (R+1, C+1, 2)
-        rows = coords.shape[0] - 1
-        cols = coords.shape[1] - 1
-        xb = np.asarray(coords[0, :, 0], dtype=float)
-        yb = np.asarray(coords[:, 0, 1], dtype=float)
+        coords = np.asarray(mesh.get_coordinates())  # (R+1, C+1, 2) or (R, C, 2)
         values = np.ma.asarray(mesh.get_array())
+        xv = np.asarray(coords[0, :, 0], dtype=float)
+        yv = np.asarray(coords[:, 0, 1], dtype=float)
+        if values.size == coords.shape[0] * coords.shape[1]:
+            rows, cols = coords.shape[:2]
+            xb, yb = _vertex_bounds(xv), _vertex_bounds(yv)
+        else:
+            rows, cols = coords.shape[0] - 1, coords.shape[1] - 1
+            xb, yb = xv, yv
         values = values.reshape(rows, cols).filled(np.nan).astype(float)
         result = (xb, yb, values)
         self._mesh_cache[id(mesh)] = result
@@ -516,6 +529,18 @@ def _nearest_ascending(x: np.ndarray, value: float) -> int:
         k = pos - 1 if value - x[pos - 1] <= x[pos] - value else pos
     # With repeated x values the first of them is the nearest by index.
     return int(np.searchsorted(x, x[k], side="left"))
+
+
+def _vertex_bounds(vertices: np.ndarray) -> np.ndarray:
+    """Cell boundaries around *vertices*: halfway between neighbours, half a
+    step beyond the first and last vertex. Fewer than two vertices give no
+    cell."""
+    if vertices.size < 2:
+        return vertices.copy()
+    mid = 0.5 * (vertices[:-1] + vertices[1:])
+    first = vertices[0] - 0.5 * (vertices[1] - vertices[0])
+    last = vertices[-1] + 0.5 * (vertices[-1] - vertices[-2])
+    return np.concatenate([[first], mid, [last]])
 
 
 def _cell_index(bounds: np.ndarray, value: float):

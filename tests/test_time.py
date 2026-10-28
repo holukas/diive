@@ -1106,6 +1106,28 @@ class TestNominalFreqSpelling(unittest.TestCase):
             self._sanitize('h', '30min')
 
 
+class TestSingleRecordNominalFreq(unittest.TestCase):
+    """L418: one record takes nominal_freq, also daily ones under pandas 3, and
+    gets the freqstr that detection gives for many records of that step."""
+
+    def test_single_record_gets_the_detected_freqstr(self):
+        import diive as dv
+        from diive.core.times.times import DetectFrequency
+        cases = {'D': 'D', '1D': 'D', '24h': '24h', '30min': '30min', 'h': 'h',
+                 '10s': '10s', '1min': 'min', '1H': 'h'}
+        for nominal, step in cases.items():
+            with self.subTest(nominal=nominal):
+                many = pd.date_range('2024-01-02', periods=10, freq=step)
+                expected = DetectFrequency(index=many).get()
+                one = pd.DatetimeIndex(['2024-01-02'], name='TIMESTAMP_END')
+                san = dv.times.TimestampSanitizer(
+                    data=pd.DataFrame({'TA': [1.0]}, index=one), nominal_freq=nominal)
+                self.assertEqual(san.get_status()['inferred_frequency'], expected)
+                self.assertEqual(san.get_status()['frequency_detection_method'],
+                                 'nominal_single_record')
+                self.assertEqual(san.get()['TA'].tolist(), [1.0])
+
+
 class TestRemovedRowCounts(unittest.TestCase):
     """L348: one NaT and one duplicate timestamp are counted once each."""
 
