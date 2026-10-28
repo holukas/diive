@@ -50,6 +50,7 @@ class MlRegressorGapFillingBase:
                  test_size: float = 0.25,
                  below_zero: str = None,
                  shap_max_rows: int = None,
+                 test_records: pd.Index = None,
                  **kwargs):
         """
         Base class for machine-learning gap-filling using Random Forest or XGBoost.
@@ -115,6 +116,15 @@ class MlRegressorGapFillingBase:
                 the subsample — deterministic given ``random_state``, but a reason
                 to leave this at None if you need bit-identical selection across
                 differently sized records.
+
+            test_records:
+                Timestamps to hold out as the test set, instead of a random draw of
+                ``test_size``. The test set is then the complete records at these
+                timestamps, and the training set all other complete records. Used by
+                the long-term models, which give every yearly model the same
+                timestamps, so that no model trains on a test record of another
+                (:class:`~diive.gapfilling.longterm.LongTermGapFillingBase`).
+                None (default): random draw of ``test_size``.
 
             **kwargs:
                 Regressor-specific hyperparameters passed to the sklearn regressor.
@@ -220,8 +230,12 @@ class MlRegressorGapFillingBase:
         # split unless the goal changes.
         _temp_df = self.model_df.copy().dropna()
 
-        self.train_df, self.test_df = train_test_split(_temp_df, test_size=self.test_size,
-                                                       random_state=self._random_state, shuffle=True)
+        if test_records is None:
+            self.train_df, self.test_df = train_test_split(_temp_df, test_size=self.test_size,
+                                                           random_state=self._random_state, shuffle=True)
+        else:
+            is_test = _temp_df.index.isin(test_records)
+            self.train_df, self.test_df = _temp_df[~is_test], _temp_df[is_test]
 
         self.train_df = self.train_df.sort_index()
         self.test_df = self.test_df.sort_index()

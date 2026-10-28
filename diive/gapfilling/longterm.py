@@ -9,6 +9,7 @@ Part of the diive library: https://github.com/holukas/diive
 """
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from matplotlib.ticker import FixedFormatter, FixedLocator
 from pandas import DataFrame, Series
@@ -19,6 +20,9 @@ from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.plotting.styles.LightTheme import colorwheel_48
 from diive.core.times.neighbors import neighboring_years
 from diive.core.utils.console import detail, info
+
+#: Seed of the long-term models when the caller gives no ``random_state``.
+DEFAULT_RANDOM_STATE = 42
 
 
 class LongTermGapFillingBase:
@@ -36,9 +40,20 @@ class LongTermGapFillingBase:
                  verbose: int = 0,
                  test_size: float = 0.25,
                  below_zero: str = None,
+                 test_records: pd.Index = None,
                  **kwargs):
         """
         Gap-fill each year based on data from the respective year and the two closest neighboring years
+
+        The neighbouring-year pools overlap, so a record is in the pools of up to
+        three yearly models. Every yearly model therefore holds out the complete
+        records at the same timestamps (``test_records_``), and no model trains on
+        a record that another model tests on. The split stays random in time, as
+        the gap-filling task needs (see
+        :class:`~diive.core.ml.common.MlRegressorGapFillingBase`). It is drawn once
+        per instance and kept when the models are set up again
+        (:meth:`use_features`, :meth:`initialize_yearly_models`). The test share of
+        each model is close to ``test_size``, not exactly ``test_size``.
 
         Example:
             Given a long-term time series comprising data between 2013-2017:
@@ -54,6 +69,15 @@ class LongTermGapFillingBase:
             below_zero: How to treat predicted values below zero for variables that
                        cannot be negative (e.g. VPD, SW_IN, PPFD).
                        None (default): keep as-is. 'zero': clip to 0.
+            test_records: Timestamps held out as test records. None (default) draws
+                them once: each timestamp of ``input_df`` is a test record with
+                probability ``test_size``, from ``random_state``. Pass the
+                ``test_records_`` of another instance to hold out the same records,
+                e.g. for several targets on the same timestamps.
+            **kwargs: Hyperparameters of the regressor. Without ``random_state`` the
+                models use ``random_state=42`` (``DEFAULT_RANDOM_STATE``), so identical
+                runs give identical results. Pass ``random_state=None`` for an
+                unseeded run.
 
         Attributes:
             gapfilling_df_: dataframe, gapfilling results from all years in one dataframe
@@ -70,7 +94,12 @@ class LongTermGapFillingBase:
         self.verbose = verbose
         self.test_size = test_size
         self.below_zero = below_zero
-        self.kwargs = kwargs
+        self.kwargs = {'random_state': DEFAULT_RANDOM_STATE, **kwargs}
+
+        if test_records is None:
+            rng = np.random.default_rng(self.kwargs['random_state'])
+            test_records = input_df.index[rng.random(len(input_df.index)) < test_size]
+        self._test_records = test_records
 
         self._yearpools = None
         self._results_yearly = {}
@@ -88,6 +117,11 @@ class LongTermGapFillingBase:
         self._feature_importance_per_year = pd.DataFrame()
 
         self._init_input_df()
+
+    @property
+    def test_records_(self) -> pd.Index:
+        """Timestamps held out as test records in every yearly model."""
+        return self._test_records
 
     @property
     def gapfilling_df_(self) -> DataFrame:
@@ -235,7 +269,11 @@ class LongTermGapFillingBase:
         self._yearpools = neighboring_years(df=self.input_df, verbose=True)
 
     def initialize_yearly_models(self):
-        """Initialize model for each year"""
+        """Initialize model for each year.
+
+        Every model holds out the complete records at ``test_records_``, so calling
+        this again (e.g. after a change of ``kwargs``) keeps the train/test split.
+        """
 
         # Initialize a separate model for each year
         # Features are already engineered in input_df
@@ -251,6 +289,7 @@ class LongTermGapFillingBase:
                 verbose=self.verbose,
                 test_size=self.test_size,
                 below_zero=self.below_zero,
+                test_records=self._test_records,
                 **self.kwargs
             )
             self._results_yearly[year] = model
@@ -390,6 +429,7 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
                  verbose: int = 0,
                  test_size: float = 0.25,
                  below_zero: str = None,
+                 test_records: pd.Index = None,
                  **kwargs):
         """Long-term Random Forest gap-filling with per-year models.
 
@@ -401,7 +441,10 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             below_zero: How to treat predicted values below zero for variables that
                        cannot be negative (e.g. VPD, SW_IN, PPFD).
                        None (default): keep as-is. 'zero': clip to 0.
+            test_records: Timestamps held out as test records, see
+                :class:`LongTermGapFillingBase`.
             **kwargs: Random Forest hyperparameters passed to RandomForestRegressor.
+                Without ``random_state``, 42 is used.
         """
         super().__init__(
             regressor=RandomForestRegressor,
@@ -410,6 +453,7 @@ class LongTermGapFillingRandomForestTS(LongTermGapFillingBase):
             verbose=verbose,
             test_size=test_size,
             below_zero=below_zero,
+            test_records=test_records,
             **kwargs
         )
 
@@ -423,6 +467,7 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
                  verbose: int = 0,
                  test_size: float = 0.25,
                  below_zero: str = None,
+                 test_records: pd.Index = None,
                  **kwargs):
         """Long-term XGBoost gap-filling with per-year models.
 
@@ -434,7 +479,10 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             below_zero: How to treat predicted values below zero for variables that
                        cannot be negative (e.g. VPD, SW_IN, PPFD).
                        None (default): keep as-is. 'zero': clip to 0.
+            test_records: Timestamps held out as test records, see
+                :class:`LongTermGapFillingBase`.
             **kwargs: XGBoost hyperparameters passed to XGBRegressor.
+                Without ``random_state``, 42 is used.
         """
         super().__init__(
             regressor=XGBRegressor,
@@ -443,5 +491,6 @@ class LongTermGapFillingXGBoostTS(LongTermGapFillingBase):
             verbose=verbose,
             test_size=test_size,
             below_zero=below_zero,
+            test_records=test_records,
             **kwargs
         )

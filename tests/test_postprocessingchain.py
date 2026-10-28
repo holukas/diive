@@ -1207,8 +1207,10 @@ class TestLevel41SharedFeatures(unittest.TestCase):
                 return pd.DataFrame({'a': 1.0, 'b': 2.0}, index=df.index)
 
         class Model:
-            def __init__(self, input_df, target_col, verbose=0, **kw):
+            def __init__(self, input_df, target_col, verbose=0, test_records=None, **kw):
                 self.input_df, self.target_col, self.used = input_df, target_col, None
+                # Long-term models expose the test records they hold out (L412).
+                self.test_records_ = test_records if test_records is not None else frozenset()
                 made.append(self)
 
             def create_yearpools(self):

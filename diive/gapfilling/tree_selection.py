@@ -17,7 +17,7 @@ from pandas import DataFrame
 from diive.core.utils.console import detail, info
 
 #: Settings of the model that are not XGBoost booster parameters.
-_NOT_BOOSTER = ('n_estimators', 'early_stopping_rounds', 'shap_max_rows')
+_NOT_BOOSTER = ('n_estimators', 'early_stopping_rounds', 'shap_max_rows', 'test_size', 'below_zero')
 
 
 @dataclass
@@ -105,7 +105,9 @@ def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: d
         target_col: Name of the target column.
         model_kwargs: XGBoost settings of the gap-filling models. ``n_estimators`` gives
             the largest number of trees tested unless ``max_trees`` is set;
-            ``early_stopping_rounds`` and ``shap_max_rows`` are ignored.
+            ``early_stopping_rounds``, ``shap_max_rows``, ``test_size`` and
+            ``below_zero`` are ignored. Its ``random_state`` seeds the folds unless
+            ``random_state`` is given.
         max_trees: Largest number of trees tested.
         block_days: Length of the held-out blocks in days.
         n_folds: Number of folds.

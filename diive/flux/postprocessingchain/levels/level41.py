@@ -317,7 +317,12 @@ def _run_level41_ml(
     # so run it once and reuse the result across all scenarios.
     engineered = engineer.fit_transform(data.full_df[features].copy())
 
+    # Every model of every scenario holds out the same timestamps as test
+    # records: the first instance draws them, the others take them over. No
+    # model, feature selection or tree selection then trains on a record that
+    # another model tests on.
     instances = {}
+    test_records = None
     for ustar_scen, ustar_flux in filteredseries_l33.items():
         assert_aligned_index(engineered, fpc_df[ustar_flux.name],
                              context=f"_run_level41_ml[{ustar_scen!r}] scen_df build")
@@ -327,8 +332,10 @@ def _run_level41_ml(
             input_df=scen_df,
             target_col=ustar_flux.name,
             verbose=verbose,
+            test_records=test_records,
             **model_kwargs,
         )
+        test_records = instance.test_records_
         instance.create_yearpools()
         instance.initialize_yearly_models()
         if reduce_features:
@@ -347,7 +354,7 @@ def _run_level41_ml(
             instance.use_features(shared)
 
     if n_estimators_cv:
-        _set_n_estimators_from_blocked_cv(instances, model_kwargs, n_estimators_cv, verbose)
+        _set_n_estimators_from_blocked_cv(instances, n_estimators_cv, verbose)
 
     for ustar_scen, ustar_flux in filteredseries_l33.items():
         instance = instances[ustar_scen]
@@ -386,13 +393,15 @@ def _run_level41_ml(
     return replace(final, added_columns=record_added_columns(final, tracking_key, pre_columns))
 
 
-def _set_n_estimators_from_blocked_cv(instances: dict, model_kwargs: dict,
-                                      settings: bool | dict, verbose: int) -> None:
+def _set_n_estimators_from_blocked_cv(instances: dict, settings: bool | dict,
+                                      verbose: int) -> None:
     """Choose one number of trees by blocked cross-validation and give it to every model.
 
     Runs on the training records of each yearly pool of one scenario (the middle one unless
-    ``settings['scenario']`` names it), so the random test records stay unseen. Every model
-    of every scenario then gets that number of trees and no early stopping.
+    ``settings['scenario']`` names it). All yearly models of all scenarios hold out the same
+    timestamps (``test_records_``), so these pools contain no test record of any model. Every
+    model of every scenario then gets that number of trees and no early stopping. Setting the
+    models up again keeps their train/test split.
     """
     from diive.gapfilling.tree_selection import select_n_estimators_blocked_cv
     cv = {} if settings is True else dict(settings)
@@ -408,7 +417,9 @@ def _set_n_estimators_from_blocked_cv(instances: dict, model_kwargs: dict,
         pools.setdefault(label, model.train_df)  # neighbouring years can share one pool
     info(f"Choosing the number of trees by blocked cross-validation on {scenario} "
          f"({len(pools)} pools) ...", verbose=verbose)
-    selection = select_n_estimators_blocked_cv(pools, ref.target_col, model_kwargs,
+    # The model's own settings: they include the default random_state of the long-term
+    # models, which then also seeds the folds.
+    selection = select_n_estimators_blocked_cv(pools, ref.target_col, ref.kwargs,
                                                verbose=verbose, **cv)
     selection.scenario = scenario
     for instance in instances.values():
@@ -480,6 +491,10 @@ def run_level41_rf(
         verbose: Verbosity level (0=silent, 1+=progress).
         **rf_kwargs: sklearn ``RandomForestRegressor`` hyperparameters
             (``n_estimators``, ``max_depth``, ``min_samples_split``, ...).
+            Without ``random_state`` the models use ``random_state=42``, so
+            identical runs give identical results. All yearly models of all
+            scenarios hold out the same random test records (see
+            :class:`~diive.gapfilling.longterm.LongTermGapFillingBase`).
 
     Returns:
         Updated FluxLevelData; RF instances accessible via
@@ -540,16 +555,22 @@ def run_level41_xgb(
             (:func:`~diive.gapfilling.tree_selection.select_n_estimators_blocked_cv`)
             and use it as a fixed ``n_estimators`` for every year and scenario, with no
             early stopping. It runs after the feature selection, on the training records
-            of each yearly pool of one scenario, holding out whole blocks of days; the
-            random test records stay unseen. ``n_estimators`` sets the largest number
-            tested. True uses the defaults (middle scenario, 14-day blocks, 5 folds, the
-            minimum of the median error curve); a dict changes them, e.g.
-            ``{'block_days': 7, 'scenario': 'CUT_50'}``. The result is ``tree_selection_`` of each scenario's model, shown
-            by ``report_tree_selection`` and ``plot_tree_selection``. Default False.
+            of each yearly pool of one scenario, holding out whole blocks of days. All
+            yearly models of all scenarios hold out the same random test records, so
+            neither the feature selection nor the tree selection sees a record that a
+            model is tested on, and the test scores stay out-of-sample.
+            ``n_estimators`` sets the largest number tested. True uses the defaults
+            (middle scenario, 14-day blocks, 5 folds, the minimum of the median error
+            curve). A dict changes them, e.g. ``{'block_days': 7, 'scenario': 'CUT_50'}``.
+            The result is ``tree_selection_`` of each scenario's model, shown by
+            ``report_tree_selection`` and ``plot_tree_selection``. Default False.
         scenarios: As in :func:`run_level41_rf`.
         verbose: Verbosity level (0=silent, 1+=progress).
         **xgb_kwargs: ``XGBRegressor`` hyperparameters (``n_estimators``,
             ``max_depth``, ``learning_rate``, ``early_stopping_rounds``, ...).
+            Without ``random_state`` the models use ``random_state=42``, so
+            identical runs give identical results (see
+            :class:`~diive.gapfilling.longterm.LongTermGapFillingBase`).
 
     Returns:
         Updated FluxLevelData; XGBoost instances accessible via
