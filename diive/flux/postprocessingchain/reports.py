@@ -26,7 +26,7 @@ from rich.measure import Measurement
 from rich.table import Table
 from rich.text import Text
 
-from diive.core.utils.console import VERBOSE_PROGRESS, _vlevel, console as _console, info
+from diive.core.utils.console import VERBOSE_PROGRESS, _vlevel, console as _console, info, warn
 
 # Long names for the short method keys used throughout the chain.
 _METHOD_LABELS = {'mds': 'MDS', 'rf': 'Random Forest', 'xgb': 'XGBoost'}
@@ -59,6 +59,17 @@ def _optional(inst, attr: str):
 
 def _label(method: str) -> str:
     return _METHOD_LABELS.get(method, method)
+
+
+def _mds_mode(data) -> str | None:
+    """Mode of the L4.1 MDS run ('diive', 'oneflux' or 'reddyproc'), None when MDS did not run.
+
+    Only ``mode='diive'`` leaves each measured record out of its own prediction. In the other
+    modes the record is one of the records averaged for it, so its MDS prediction is in-sample.
+    """
+    for inst in data.levels.level41_mds.values():
+        return getattr(inst, 'mode', 'diive')
+    return None
 
 
 def _scores_frame(scores: dict) -> DataFrame:
@@ -201,6 +212,11 @@ def report_annual_sums(data, gain: float = 1.0, units: str = "",
     were measured. A year whose record count is below the full calendar year is
     marked as incomplete; its sum is not comparable with the others.
 
+    A gap-filler can leave records missing: MDS in ``mode='oneflux'`` removes
+    long gaps by default, the REddyProc rules leave gaps over 60 days unfilled.
+    The sum skips those records, so such a sum is marked as incomplete (``**``)
+    and the notes give the unfilled records per year and column.
+
     Args:
         data: Chain container after at least one ``run_level41_*``.
         gain: Multiply every flux value by this factor before summing. For
@@ -210,7 +226,8 @@ def report_annual_sums(data, gain: float = 1.0, units: str = "",
 
     Returns:
         DataFrame of the annual sums, one row per year and one column per
-        gap-filled variable.
+        gap-filled variable. ``attrs['unfilled']`` holds the number of records
+        each column left missing, in the same layout.
 
     Example::
 
@@ -230,6 +247,7 @@ def report_annual_sums(data, gain: float = 1.0, units: str = "",
         table.add_column(f"{_label(method)}\n{scenario}", justify="right")
         sums[col] = df[col].multiply(gain).groupby(years).sum(min_count=1)
     sums = DataFrame(sums)
+    unfilled = df[list(sums.columns)].isna().groupby(years).sum()
 
     incomplete = []
     for year in sums.index:
@@ -240,16 +258,28 @@ def report_annual_sums(data, gain: float = 1.0, units: str = "",
             incomplete.append(str(year))
         cells = []
         for method, scenario, _ in _iter_level41(data):
+            col = gf_cols[method][scenario]
             meas = df.loc[in_year, ngf_cols[method][scenario]].notna().mean() * 100
-            total = sums.loc[year, gf_cols[method][scenario]]
-            cells.append(f"{total:,.0f} ({meas:.0f}%)" if pd.notna(total) else "-")
+            total = sums.loc[year, col]
+            mark = " **" if unfilled.loc[year, col] else ""
+            cells.append(f"{total:,.0f} ({meas:.0f}%){mark}" if pd.notna(total) else "-")
         table.add_row(f"{year}{'' if is_full else ' *'}", *cells)
 
     notes = ["In brackets: the share of the year's records that were measured."]
     if incomplete:
         notes.append(f"* Incomplete year ({', '.join(incomplete)}): the sum covers only part of it.")
+    if unfilled.to_numpy().any():
+        notes.append("** Incomplete sum: the gap-filler left records unfilled, and the sum "
+                     "skips them. Unfilled records per year (share of the year's records):")
+        n_year = pd.Series(years).value_counts()
+        for method, scenario, _ in _iter_level41(data):
+            n = unfilled[gf_cols[method][scenario]]
+            if n.any():
+                notes.append(f"  {_label(method)} {scenario}: " + ", ".join(
+                    f"{y} {int(v):,} ({100 * v / n_year[y]:.0f}%)" for y, v in n.items() if v))
     title = f"Annual sums{f' ({units})' if units else ''}"
     _print_report(title, table, notes, verbose=verbose)
+    sums.attrs['unfilled'] = unfilled
     return sums
 
 
@@ -339,20 +369,27 @@ def report_gapfilling_model_scores(data, outpath: str | None = None,
     :func:`report_traintest_model_scores` for the held-out counterpart.
     MDS in ``mode='diive'`` (the default) is the exception: it leaves each
     measured record out of its own prediction, so its scores are out-of-sample.
-    The table shows R², RMSE, MAE, MedAE and the maximum error; the CSV files
-    hold every metric.
+    In ``mode='oneflux'`` and ``mode='reddyproc'`` MDS uses the record itself,
+    so its scores are in-sample as well. The table shows R², RMSE, MAE, MedAE
+    and the maximum error. The CSV files hold every metric.
 
     Args:
         data: Chain container after at least one ``run_level41_*``.
         outpath: Directory to also write one CSV per method and scenario.
         verbose: Verbosity for the console helpers.
     """
+    mode = _mds_mode(data)
+    if mode in (None, 'diive'):
+        mds_note = ("MDS predicts each measured record without using it, so its scores are "
+                    "out-of-sample and not comparable with those of the ML methods; "
+                    "report_gapfilling_comparison scores both on the same held-out records.")
+    else:
+        mds_note = (f"MDS (mode='{mode}') uses each measured record in its own prediction, so "
+                    f"its scores are in-sample as well. Only mode='diive' leaves the record out.")
     _report_scores(data, 'scores_', "In-sample scores",
                    ["Model predictions against every measured record, training records "
                     "included, so optimistic for the ML methods.",
-                    "MDS predicts each measured record without using it, so its scores are "
-                    "out-of-sample and not comparable with those of the ML methods; "
-                    "report_gapfilling_comparison scores both on the same held-out records.",
+                    mds_note,
                     "Errors are in the units of the flux."],
                    'gapfilling_model_scores', outpath, verbose)
 
@@ -742,6 +779,10 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
     panel accumulating over the whole record, one line per gap-filled variable, with its total
     at the end of each line. Infinite values count as gaps.
 
+    Records a gap-filler left missing (MDS in ``mode='oneflux'`` removes long gaps by default)
+    are skipped, so a line with such records is incomplete: its legend entry gives the number
+    of unfilled records, its total is marked with ``*`` and a console warning names the columns.
+
     For the method-comparison view on one axes (RF vs XGBoost vs MDS for a
     single scenario), use ``data.plot_cumulative_comparison()`` instead.
 
@@ -777,12 +818,23 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
     df = df.mask(np.isinf(df.to_numpy(dtype=float, na_value=np.nan))) * gain
     flux = data._flux_varname()
     unit_txt = f" ({units})" if units else ""
+    # Records the gap-filler left missing: the cumulative skips them, so say so.
+    unfilled = df.isna()
+    for col, n in unfilled.sum().items():
+        if n:
+            warn(f"{col}: {int(n):,} records left unfilled, the cumulative skips them and its "
+                 f"total is incomplete.")
+    incomplete_txt = ("* Incomplete: records left unfilled are skipped."
+                      if unfilled.to_numpy().any() else "")
 
     if not per_year:
         fig, ax = plt.subplots(figsize=(14, 6), layout='constrained')
         ends = []
         for col, label, color in series_info:
             cum = df[col].cumsum()
+            n_unfilled = int(unfilled[col].sum())
+            if n_unfilled:
+                label = f"{label} ({n_unfilled:,} unfilled)"
             ax.plot(cum.index, cum.to_numpy(), color=color, linewidth=2.2, label=label, zorder=3)
             valid = cum.dropna()
             if valid.empty:
@@ -792,8 +844,9 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
         if ends:
             lo, hi = ax.get_ylim()
             ypos = _spread_labels([e[1] for e in ends], min_gap=0.035 * (hi - lo))
-            for (x, y, color, _), yl in zip(ends, ypos):
-                ax.annotate(f"{y:,.0f}", (x, yl), xytext=(8, 0), textcoords='offset points',
+            for (x, y, color, col), yl in zip(ends, ypos):
+                mark = '*' if unfilled[col].any() else ''
+                ax.annotate(f"{y:,.0f}{mark}", (x, yl), xytext=(8, 0), textcoords='offset points',
                             va='center', fontsize=10, fontweight='bold', color=color,
                             annotation_clip=False)
         ax.axhline(0, color=cp.INK, linewidth=0.8, alpha=0.5, zorder=1)
@@ -817,6 +870,8 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
             totals = [e[1] for e in ends]
             subtitle += (f". The totals differ by {max(totals) - min(totals):,.0f}{u} between "
                          f"the lowest and the highest.")
+        if incomplete_txt:
+            subtitle += f". {incomplete_txt}"
         cp.figure_title(fig, f"Cumulative {flux} of every gap-filled series", subtitle)
     else:
         n = len(series_info)
@@ -842,11 +897,15 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
                                 linewidth=0, label='mean ± 1 SD', zorder=1)
                 ax.plot(ref.index.to_numpy(), ref['MEAN_DOY_TIME'].to_numpy(), color=cp.INK,
                         linewidth=1.2, linestyle=(0, (4, 3)), label='mean', zorder=2)
+            unfilled_year = unfilled[col].groupby(df.index.year).sum()
             for shade, year in zip(shades, year_list):
                 valid = cum_df[year].dropna()
+                year_label = f"{year}: {valid.iloc[-1]:,.0f}" if not valid.empty else f"{year}"
+                n_unfilled = int(unfilled_year.get(int(year), 0))
+                if n_unfilled:
+                    year_label += f"* ({n_unfilled:,} unfilled)"
                 ax.plot(cum_df.index.to_numpy(), cum_df[year].to_numpy(), color=shade,
-                        linewidth=1.6, zorder=3,
-                        label=f"{year}: {valid.iloc[-1]:,.0f}" if not valid.empty else f"{year}")
+                        linewidth=1.6, zorder=3, label=year_label)
             ax.axhline(0, color=cp.INK, linewidth=0.8, alpha=0.5, zorder=0)
             ax.set_xticks(month_starts, month_names)
             ax.set_xlim(1, 367)
@@ -857,7 +916,7 @@ def plot_gapfilled_cumulative(data, gain: float = 1, units: str = "",
         cp.figure_title(fig, f"Cumulative {flux} per year",
                         "One line per year, the total at the end in the legend. A year that "
                         "starts or ends inside the record has a shorter line and is not "
-                        "comparable with full years.")
+                        "comparable with full years." + (f" {incomplete_txt}" if incomplete_txt else ""))
     if showplot:
         plt.show()
 
@@ -871,7 +930,11 @@ def _gap_lengths(measured: "pd.Series") -> "pd.Series":
 
 
 def _comparison_frame(data, ustar_scenario: str, methods: tuple) -> DataFrame:
-    """Filled values of two methods at the gaps of one USTAR scenario, with context columns."""
+    """Filled values of two methods at the gaps of one USTAR scenario, with context columns.
+
+    ``both`` marks the records where both methods have a value (measured or filled), ``gap``
+    those of them that were not measured. A record that one method left unfilled is in neither.
+    """
     a, b = methods
     gf, ngf = data.gapfilled_cols(), data.nongapfilled_cols()
     for m in methods:
@@ -882,22 +945,27 @@ def _comparison_frame(data, ustar_scenario: str, methods: tuple) -> DataFrame:
     df = DataFrame({'a': data.fpc_df[gf[a][ustar_scenario]], 'b': data.fpc_df[gf[b][ustar_scenario]],
                     'measured': measured, 'night': data.fpc_df['NIGHTTIME'] == 1,
                     'gap_length': _gap_lengths(measured)})
-    df['gap'] = measured.isna() & df['a'].notna() & df['b'].notna()
+    df['both'] = df['a'].notna() & df['b'].notna()
+    df['gap'] = measured.isna() & df['both']
     return df
 
 
 def _same_record_skill(data, ustar_scenario: str, methods: tuple) -> dict | None:
     """Scores of both methods on the held-out test records of the ML method.
 
-    MDS predicts each measured record without using it (leave one out), so its predictions at
-    the ML test records are out-of-sample as well. Returns None if neither method is MDS or the
-    ML method kept no test records.
+    MDS in ``mode='diive'`` predicts each measured record without using it (leave one out), so
+    its predictions at the ML test records are out-of-sample as well. In the other modes the
+    record is part of its own MDS prediction, which would make the comparison favour MDS.
+    Returns None if neither method is MDS, MDS did not run in ``mode='diive'`` or the ML method
+    kept no test records.
     """
     import numpy as np
     if 'mds' not in methods:
         return None
     ml = next(m for m in methods if m != 'mds')
     mds = data.levels.level41_mds[ustar_scenario]
+    if getattr(mds, 'mode', 'diive') != 'diive':
+        return None
     ml_inst = getattr(data.levels, f'level41_{ml}')[ustar_scenario]
     yearly = _optional(ml_inst, 'results_yearly_')
     if not yearly:
@@ -932,12 +1000,19 @@ def report_gapfilling_comparison(data, methods: tuple = ('mds', 'xgb'), gain: fl
                                  units: str = '', verbose: int | bool | None = None) -> DataFrame:
     """Compare the gap-filled results of two methods, for each USTAR scenario.
 
-    Both methods fill the same gaps, so their difference comes from the filled values alone. The
-    table gives, per scenario, the sum of each method and their difference (second minus first),
-    the part of the difference from daytime and from nighttime gaps, the part from gaps of
-    different lengths, and the scores of both methods on the same held-out records (the test
-    records of the ML method, which MDS also predicts without using them). Sums are times
-    ``gain``.
+    Both methods are compared on the same records, those where both have a value (measured or
+    filled), so their difference comes from the filled values alone and equals the difference of
+    the two sums. The table gives, per scenario, the sum of each method and their difference
+    (second minus first), the part of the difference from daytime and from nighttime gaps, the
+    part from gaps of different lengths, and the scores of both methods on the same held-out
+    records (the test records of the ML method, which MDS in ``mode='diive'`` also predicts
+    without using them). Sums are times ``gain``.
+
+    A record that one method left unfilled is left out of both sums: MDS in ``mode='oneflux'``
+    removes long gaps by default, the REddyProc rules leave gaps over 60 days unfilled. The sums
+    are then not totals of the record, and the table gives the unfilled records of each method.
+    MDS in ``mode='oneflux'`` or ``mode='reddyproc'`` uses each measured record in its own
+    prediction, so its scores on the held-out records would be in-sample. They are left out.
 
     Args:
         data: Chain container after both methods ran (e.g. ``run_level41_mds`` and
@@ -958,9 +1033,13 @@ def report_gapfilling_comparison(data, methods: tuple = ('mds', 'xgb'), gain: fl
     for sc in scenarios:
         d = _comparison_frame(data, sc, methods)
         diff = (d['b'] - d['a']).where(d['gap']) * gain
-        row = {f'sum {_label(a)}': float(d['a'].sum() * gain), f'sum {_label(b)}': float(d['b'].sum() * gain),
+        # Both sums over the records both methods have, so the difference is sum b - sum a.
+        row = {f'sum {_label(a)}': float(d['a'][d['both']].sum() * gain),
+               f'sum {_label(b)}': float(d['b'][d['both']].sum() * gain),
                'difference': float(diff.sum()),
-               'from day gaps': float(diff[~d['night']].sum()), 'from night gaps': float(diff[d['night']].sum())}
+               'from day gaps': float(diff[~d['night']].sum()), 'from night gaps': float(diff[d['night']].sum()),
+               f'unfilled {_label(a)}': int(d['a'].isna().sum()),
+               f'unfilled {_label(b)}': int(d['b'].isna().sum())}
         for lo, hi, label in classes:
             sel = (d['gap_length'] >= lo) & ((d['gap_length'] <= hi) if hi else True)
             row[f'gaps {label}'] = float(diff[sel].sum())
@@ -975,17 +1054,29 @@ def report_gapfilling_comparison(data, methods: tuple = ('mds', 'xgb'), gain: fl
     out.index.name = 'USTAR'
 
     u = f" ({units})" if units else ""
+    unfilled_cols = [f'unfilled {_label(m)}' for m in methods]
+    any_unfilled = bool(len(out)) and bool(out[unfilled_cols].to_numpy().any())
+    cols = [f'sum {_label(a)}', f'sum {_label(b)}', 'difference', 'from day gaps',
+            'from night gaps', 'gaps 1', 'gaps 2-12', 'gaps 13-48', 'gaps >48']
+    if any_unfilled:
+        cols += unfilled_cols
     table = _table()
     table.add_column("USTAR")
-    for col in (f'sum {_label(a)}', f'sum {_label(b)}', 'difference', 'from day gaps',
-                'from night gaps', 'gaps 1', 'gaps 2-12', 'gaps 13-48', 'gaps >48'):
+    for col in cols:
         table.add_column(col.replace(' ', '\n', 1), justify="right", no_wrap=True)
     for sc, r in out.iterrows():
-        table.add_row(sc, *[f"{r[c]:,.0f}" for c in (f'sum {_label(a)}', f'sum {_label(b)}', 'difference',
-                                                       'from day gaps', 'from night gaps', 'gaps 1',
-                                                       'gaps 2-12', 'gaps 13-48', 'gaps >48')])
+        table.add_row(sc, *[f"{r[c]:,.0f}" for c in cols])
     notes = [f"Sums{u}. difference = {_label(b)} - {_label(a)} over the filled gaps, split into "
              f"daytime and nighttime gaps and by gap length in records."]
+    if any_unfilled:
+        notes.append("Incomplete sums: a method left records unfilled (columns 'unfilled'). Both "
+                     "sums cover only the records both methods filled or measured, so they are "
+                     "not totals of the record.")
+    mode = _mds_mode(data) if 'mds' in methods else None
+    if mode not in (None, 'diive'):
+        notes.append(f"No scores on the same held-out records: MDS (mode='{mode}') uses each "
+                     f"measured record in its own prediction, so its scores there would be "
+                     f"in-sample. Only mode='diive' leaves the record out.")
     if 'test records' in out.columns:
         for sc, r in out.iterrows():
             notes.append(f"{sc}, same {int(r['test records']):,} held-out records: "
@@ -1010,6 +1101,10 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
     3. Contribution of each month to the difference of the sums, daytime and nighttime gaps apart.
     4. Cumulative difference over the record for every USTAR scenario, with the range of the
        scenarios of each method for comparison.
+
+    All panels and sums use the records where both methods have a value. When a method left
+    records unfilled (MDS in ``mode='oneflux'`` removes long gaps by default), the subtitle gives
+    their number per method and a console warning says that the sums are incomplete.
 
     Args:
         data: Chain container after both methods ran.
@@ -1095,7 +1190,7 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
         cum = ((ds['b'] - ds['a']).where(ds['gap']).fillna(0) * gain).cumsum()
         ax_cum.plot(cum.index, cum.to_numpy(), color=cp.SCENARIO_COLORS[i % len(cp.SCENARIO_COLORS)],
                     linewidth=2, label=f"{sc}: {cum.iloc[-1]:+,.0f}{u}")
-        totals[sc] = (ds['a'].sum() * gain, ds['b'].sum() * gain)
+        totals[sc] = (ds['a'][ds['both']].sum() * gain, ds['b'][ds['both']].sum() * gain)
     ax_cum.axhline(0, color=cp.INK, linewidth=0.7)
     ax_cum.set_ylabel(f"cumulative {lb} - {la}{f' ({units})' if units else ''}")
     cp.style_axes(ax_cum)
@@ -1106,10 +1201,19 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
     spread_a = max(t[0] for t in totals.values()) - min(t[0] for t in totals.values())
     spread_b = max(t[1] for t in totals.values()) - min(t[1] for t in totals.values())
     d_sc = totals[scenario][1] - totals[scenario][0]
+    n_gaps = int(d['gap'].sum())
+    unfilled = {la: int(d['a'].isna().sum()), lb: int(d['b'].isna().sum())}
+    if any(unfilled.values()):
+        left = ", ".join(f"{k} {v:,}" for k, v in unfilled.items())
+        gaps_txt = f"Compared on the {n_gaps:,} gaps both filled. Unfilled: {left}."
+        warn(f"Gap-filling comparison, {scenario}: records left unfilled {left}. The sums cover "
+             f"only the records both methods filled or measured.")
+    else:
+        gaps_txt = f"Both methods fill the same {n_gaps:,} gaps."
     cp.figure_title(fig, f"Gap-filling methods compared: {la} and {lb}",
                     f"{scenario}: {la} {totals[scenario][0]:,.0f}{u}, {lb} {totals[scenario][1]:,.0f}{u}, "
                     f"difference {d_sc:+,.0f}{u}. Range over the USTAR scenarios: {la} {spread_a:,.0f}{u}, "
-                    f"{lb} {spread_b:,.0f}{u}. Both methods fill the same {int(d['gap'].sum()):,} gaps.")
+                    f"{lb} {spread_b:,.0f}{u}. {gaps_txt}")
     if showplot:
         plt.show()
     return fig

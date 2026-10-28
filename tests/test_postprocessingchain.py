@@ -1031,6 +1031,8 @@ class TestChainReports(unittest.TestCase):
         from diive.flux.postprocessingchain import report_gapfilling_model_scores
         out = self._capture(report_gapfilling_model_scores, self.data)
         self.assertIn('MDS', out)
+        # MDS in mode='diive' leaves each record out of its own prediction.
+        self.assertIn('without using it', out)
 
     def test_report_writes_csv_when_outpath_given(self):
         import tempfile
@@ -1693,6 +1695,135 @@ class TestModelOverview(unittest.TestCase):
         text = cap.get()
         self.assertIn('CUT_84', text)
         self.assertNotIn('CUT_16', text)
+
+
+class TestReportsOnefluxMds(unittest.TestCase):
+    """Reports over MDS in mode='oneflux': in-sample MDS scores (L410), unfilled long gaps (L411)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import warnings
+        import matplotlib
+        matplotlib.use('Agg')
+        import numpy as np
+        import pandas as pd
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        from diive.flux.postprocessingchain import (
+            init_flux_data, run_level2, run_level31, make_level32_detector,
+            run_level32, run_level33_constant_ustar, run_level41_mds, run_level41_xgb)
+        # 120 days from the one-month example, with a 50-day outage of the flux and the drivers
+        # in the middle: MDS in mode='oneflux' removes the inner part of that long gap.
+        df = _eddypro_input().select_dtypes('number')
+        n = 120 * 48
+        df = pd.concat([df] * -(-n // len(df))).iloc[:n]
+        df.index = pd.date_range('2021-05-01 00:15', periods=n, freq='30min', name='TIMESTAMP_MIDDLE')
+        start = n // 2 - 25 * 48
+        for c in ('FC', 'TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'):
+            df.iloc[start:start + 50 * 48, df.columns.get_loc(c)] = np.nan
+        data = init_flux_data(df=df, fluxcol='FC', site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+        data = run_level2(data, ssitc={'apply': True, 'setflag_timeperiod': None})
+        data = run_level31(data, gapfill_storage_term=True)
+        data, sod = make_level32_detector(data)
+        sod.flag_outliers_abslim_test(minval=-50, maxval=50, showplot=False, verbose=False)
+        sod.addflag()
+        data = run_level32(data, outlier_detector=sod)
+        data = run_level33_constant_ustar(data, thresholds=[0.1], threshold_labels=['CUT_50'],
+                                          showplot=False, verbose=False)
+        engineer = FeatureEngineer(target_col='_target_', features_lag=[-1, 1], vectorize_timestamps=True,
+                                   verbose=0)
+        data = run_level41_xgb(data, features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'],
+                               engineer=engineer, n_estimators=60, learning_rate=0.3,
+                               early_stopping_rounds=5, random_state=42, verbose=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            cls.data = run_level41_mds(data, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa',
+                                       mode='oneflux')
+        gf = cls.data.gapfilled_cols()
+        cls.mds = cls.data.fpc_df[gf['mds']['CUT_50']]
+        cls.xgb = cls.data.fpc_df[gf['xgb']['CUT_50']]
+        cls.gain = 12.011e-6 * 1800
+
+    def _capture(self, fn, *args, **kwargs):
+        from diive.core.utils.console import console
+        with console.capture() as cap:
+            out = fn(*args, verbose=True, **kwargs)
+        return out, cap.get()
+
+    def test_setup_mds_left_the_long_gap_unfilled(self):
+        self.assertEqual(self.data.levels.level41_mds['CUT_50'].mode, 'oneflux')
+        self.assertGreater(int(self.mds.isna().sum()), 500)
+        self.assertEqual(int(self.xgb.isna().sum()), 0)
+
+    def test_comparison_leaves_out_in_sample_mds_scores(self):
+        from diive.flux.postprocessingchain import report_gapfilling_comparison
+        from diive.flux.postprocessingchain.reports import _same_record_skill
+        self.assertIsNone(_same_record_skill(self.data, 'CUT_50', ('mds', 'xgb')))
+        out, text = self._capture(report_gapfilling_comparison, self.data, methods=('mds', 'xgb'))
+        self.assertNotIn('test records', out.columns)
+        self.assertNotIn('R2 MDS', out.columns)
+        self.assertIn("mode='oneflux'", text)
+        self.assertNotIn('MDS R²', text)
+
+    def test_in_sample_note_follows_the_mds_mode(self):
+        from diive.flux.postprocessingchain import report_gapfilling_model_scores
+        _, text = self._capture(report_gapfilling_model_scores, self.data)
+        self.assertIn('in-sample as well', text)
+        self.assertNotIn('without using it', text)
+
+    def test_annual_sums_mark_unfilled_records(self):
+        from diive.flux.postprocessingchain import report_annual_sums
+        sums, text = self._capture(report_annual_sums, self.data, gain=self.gain)
+        col = self.mds.name
+        expected = self.mds.isna().groupby(self.mds.index.year).sum()
+        self.assertTrue((sums.attrs['unfilled'][col] == expected).all())
+        self.assertEqual(int(sums.attrs['unfilled'][self.xgb.name].sum()), 0)
+        # The sum itself still skips the unfilled records, and the table says so.
+        self.assertAlmostEqual(sums.loc[2021, col], self.mds.sum() * self.gain, places=6)
+        self.assertIn('**', text)
+        self.assertIn('Incomplete sum', text)
+        self.assertIn(f"2021 {int(expected[2021]):,}", text)
+
+    def test_comparison_uses_the_records_both_filled(self):
+        from diive.flux.postprocessingchain import report_gapfilling_comparison
+        out, text = self._capture(report_gapfilling_comparison, self.data, methods=('mds', 'xgb'),
+                                  gain=self.gain)
+        r = out.loc['CUT_50']
+        self.assertAlmostEqual(r['sum XGBoost'] - r['sum MDS'], r['difference'], places=6)
+        both = self.mds.notna() & self.xgb.notna()
+        self.assertAlmostEqual(r['sum XGBoost'], self.xgb[both].sum() * self.gain, places=6)
+        self.assertEqual(r['unfilled MDS'], int(self.mds.isna().sum()))
+        self.assertEqual(r['unfilled XGBoost'], 0)
+        self.assertIn('Incomplete sums', text)
+
+    def test_comparison_plot_states_the_unfilled_records(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.postprocessingchain import plot_gapfilling_comparison
+        try:
+            fig = plot_gapfilling_comparison(self.data, gain=self.gain, showplot=False)
+            subtitle = fig.texts[-1].get_text()
+        finally:
+            plt.close('all')
+        self.assertNotIn('Both methods fill the same', subtitle)
+        self.assertIn(f"Unfilled: MDS {int(self.mds.isna().sum()):,}, XGBoost 0", subtitle)
+        both = self.mds.notna() & self.xgb.notna()
+        diff = (self.xgb[both].sum() - self.mds[both].sum()) * self.gain
+        self.assertIn(f"difference {diff:+,.0f}", subtitle)
+
+    def test_cumulative_plots_mark_incomplete_lines(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.postprocessingchain import plot_gapfilled_cumulative
+        n = int(self.mds.isna().sum())
+        for per_year in (False, True):
+            plt.close('all')
+            try:
+                plot_gapfilled_cumulative(self.data, gain=self.gain, per_year=per_year, showplot=False)
+                fig = plt.gcf()
+                labels = [t.get_text() for ax in fig.axes if ax.get_legend()
+                          for t in ax.get_legend().get_texts()]
+                self.assertTrue(any(f"{n:,} unfilled" in t for t in labels), msg=labels)
+                self.assertIn('Incomplete', fig.texts[-1].get_text())
+            finally:
+                plt.close('all')
 
 
 class TestBlockedTreeSelection(unittest.TestCase):
