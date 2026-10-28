@@ -77,13 +77,15 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 storage term would otherwise turn a good flux record into an outlier that
                 the outlier tests of Level 3.2 remove, so the flux record would be lost.
                 The screening is a Hampel filter on the double differences of the storage
-                term (13 days, 5.5 sigma, day and night together, one pass). It removes
-                isolated spikes only: a run of more than ``max_run`` (3) removed values in a
-                row is kept as measured, because it is a noisy period, not a spike. Each run,
-                together with one record on either side, is replaced by the mean of its
-                measured values. The block keeps its sum, the real concentration change across
-                it, so the storage term stays balanced; a single spike is spread over three
-                records. Needs
+                term (13 days, 5.5 sigma, day and night together, one pass). The double
+                difference of a spike also flags its two neighbours, so the record at either
+                end of a run of three or more flagged records is not counted as a spike. It
+                removes isolated spikes only: more than ``max_run`` (3) spikes in a row are
+                kept as measured, because they are a noisy period, not a spike. Each run of
+                spikes, together with one record on either side, is replaced by the mean of
+                its measured values. The block keeps its sum, the real concentration change
+                across it, so the storage term stays balanced. A single spike is spread over
+                three records, a concentration spike (+X, then -X) over four. Needs
                 ``gapfill_storage_term=True``, so that every measured flux keeps a storage
                 term. Default False.
             storage_screening: Settings that replace the defaults above, e.g.
@@ -297,7 +299,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
             info(f"Gap-fill: recovered {n_filled_missing:,}  |  Recovery rate: {perc_recovered:.1f}%")
             n_screened = int((fluxavailable[self.flag_isgapfilled] == 2).sum())
             if self.screen_storage_term:
-                info(f"Screening: {n_screened:,} storage spike(s) at measured fluxes removed and filled")
+                n_spikes = int(fluxavailable.index.isin(self.storage_outliers_).sum())
+                info(f"Screening: {n_spikes:,} storage spike(s) at measured fluxes, {n_screened:,} "
+                     f"value(s) replaced by the mean of their block")
             if self.concentration_col is not None:
                 n_discarded = int((fluxavailable[self.flag_isgapfilled] == 3).sum())
                 info(f"Restarts: {n_discarded:,} storage value(s) at measured fluxes discarded "
@@ -329,7 +333,10 @@ class FluxStorageCorrectionSinglePointEddyPro:
     def _screen_storage_term(self) -> None:
         """Find isolated spikes in the storage term with a Hampel filter.
 
-        ``_gapfill_storage_term`` replaces each run of them, with one record on either side,
+        Each run of flagged records loses one record at either end, the neighbours that the
+        double difference of a spike flags too. Runs of one or two records are kept whole.
+        Runs with more than ``max_run`` spikes left stay as measured.
+        ``_gapfill_storage_term`` replaces each run of spikes, with one record on either side,
         by its mean (flag 2). The original storage column in the results keeps the measured
         values.
         """
@@ -340,10 +347,21 @@ class FluxStorageCorrectionSinglePointEddyPro:
         ham = Hampel(series=strg.copy(), **self.storage_screening)
         ham.calc(repeat=self._screening_repeat)
         flagged = (ham.overall_flag == 2).reindex(strg.index, fill_value=False)
-        # Only isolated spikes: runs of more than max_run flagged records stay as measured.
+        # The double difference of a spike also leaves the band at the two neighbours, so a
+        # run of flagged records is the spikes plus one record at either end: 3 records for
+        # a single spike, 4 for a concentration spike (+X, then -X). The core, the run without
+        # its two ends, holds the spikes. In a run of one or two records the neighbours stayed
+        # within the band (or the run starts at a gap), so all of it is core. The block of
+        # _screened_block_means adds one record on either side of the core again, so the ends
+        # are still replaced.
         run_id = (flagged != flagged.shift()).cumsum()
         run_len = flagged.groupby(run_id).transform('size')
-        keep = flagged & (run_len <= self._screening_max_run)
+        pos = flagged.groupby(run_id).cumcount()
+        long_run = run_len > 2
+        core = flagged & ~(long_run & ((pos == 0) | (pos == run_len - 1)))
+        core_len = run_len.where(~long_run, run_len - 2)
+        # Only isolated spikes: more than max_run spikes in a row stay as measured.
+        keep = core & (core_len <= self._screening_max_run)
         self.storage_outliers_ = strg.index[keep.to_numpy()]
         info(f"Storage term {self.strgcol}: {len(self.storage_outliers_):,} spike(s) found "
              f"({100 * len(self.storage_outliers_) / max(strg.notna().sum(), 1):.2f} % of the "
@@ -577,8 +595,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
         neighbour without a measured value is a gap and stays out (the rolling median fills it).
         Replacing a block by its mean keeps its sum and removes the spike shape. A single spike
         is spread over three records. A concentration spike puts +X and -X into the storage
-        term, next to each other or, with a central difference, one record apart; both lie in
-        one block, which then becomes values near zero.
+        term, next to each other (a block of four records) or, with a central difference, one
+        record apart. Both lie in one block, which then becomes values near zero.
         """
         strg = self._measured_storage()
         flagged = pd.Series(strg.index.isin(self.storage_outliers_), index=strg.index)

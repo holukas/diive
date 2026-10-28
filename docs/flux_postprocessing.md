@@ -63,11 +63,12 @@ Option `screen_storage_term=True`.
 A spike in the storage term would turn a good flux record into an outlier that Level 3.2 removes,
 so the flux record would be lost. The spikes are found with a Hampel filter on the double
 differences of the storage term (13 days, 5.5 sigma, one pass). Only isolated spikes are replaced:
-a run of more than `max_run` (3) flagged values is a noisy period, not a spike, and stays as
-measured. Each run, together with one record on either side, is replaced by the mean of its
+a run of more than `max_run` (3) spikes in a row is a noisy period, not a spike, and stays as
+measured. The double difference also flags the record next to a spike on either side, so the two
+end records of a flagged run of three or more count as neighbours, not as spikes. Each run, together with one record on either side, is replaced by the mean of its
 measured values. The storage term is the change in concentration, so the sum over such a block is
 the real concentration change across it; keeping the sum keeps the storage term balanced, and a
-single spike is spread over three records.
+single spike is spread over three records and a concentration spike (+X, then -X) over four.
 
 In `plot_screening`, the mean daily cycle should stay positive at night and dip in the morning,
 when the CO2 that built up overnight is released. The spikes should spread over the day with both
