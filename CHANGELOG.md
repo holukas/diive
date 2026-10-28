@@ -75,8 +75,9 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   `FluxStorageCorrectionSinglePointEddyPro(screen_storage_term=True)` remove spikes from the storage
   term with a Hampel filter on its double differences (13 days, 5.5 sigma, one pass;
   `storage_screening` changes the settings) before the term is added to the flux. Only isolated
-  spikes are replaced, runs of up to 3 values: each run, with one record on either side, by the
-  mean of that block, so the storage sum is kept and a single spike is spread over three records. A storage spike no longer turns a good flux record into an outlier, and every measured flux
+  spikes are replaced, up to 3 spikes in a row: each run, with one record on either side, by the
+  mean of that block, so the storage sum is kept, a single spike is spread over three records and a
+  concentration spike (+X, then -X) over four. A storage spike no longer turns a good flux record into an outlier, and every measured flux
   keeps a storage term. The `ISFILLED` flag is 2 for screened values; `storage_outliers_` lists
   them. `plot_screening()` and `screening_summary()` check the result: mean daily cycle, removed
   values by hour and sign, and the cumulative storage sum with and without screening.
@@ -149,6 +150,9 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   compute their densities about 30 to 100 times faster, with the same curves. In the GUI, the
   Ridgeline tab opens in 0.4 s instead of 10 s and the Shifted distribution tab in 0.3 s
   instead of 4.5 s.
+- **Long-term random forest and XGBoost gap-filling (changes results):** the yearly models use
+  `random_state=42` by default and hold out the same test records in every year and u* scenario,
+  so identical runs give identical scores and the number of trees is chosen without test records.
 - **Faster `import diive`:** the package imports in about 0.02 s instead of 1 s. Top-level
   functions and `scipy.stats` load on first use.
 - **Faster colour-coded scatter (changes results):** `ScatterXY` with colour-coded points draws
@@ -254,6 +258,11 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 - **Nighttime uncertainty:** where one of the two uncertainties is missing, `MAX` takes the other
   instead of leaving the record untested, and the table reports records without an uncertainty.
   PAS20 is described as a generous estimate of the random error.
+- **Highest-quality flux analysis (changes results):** the automatic Hampel window of
+  `analyze_highest_quality_flux` holds about 1 % of the valid records again on sparse data, as
+  before 0.93.0.
+- **GUI, Spectrogram hover:** the tooltip shows the value under the cursor instead of failing on
+  every mouse move.
 
 ## [0.92.0] - 2026-10-21
 
