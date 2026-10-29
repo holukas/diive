@@ -71,7 +71,7 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
                                       signal_strength_col: str,
                                       var_col: str,
                                       method: str,
-                                      threshold: int,
+                                      threshold: float | tuple[float, float],
                                       idstr: str = None) -> Series:
     """Extract signal strength data and create a quality flag based on threshold comparison.
 
@@ -83,8 +83,12 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
         signal_strength_col: Name of signal strength column from EddyPro output.
         var_col: Name of the flux variable being evaluated. <var_col> is only used
             for naming the extracted flag.
-        method: Threshold comparison method: 'discard below' or 'discard above'.
-        threshold: Threshold value for quality assessment.
+        method: Threshold comparison method: 'discard below', 'discard above' or
+            'discard outside'. The threshold itself is kept: 'discard below' keeps
+            values >= threshold, 'discard above' values <= threshold, and 'discard
+            outside' values from the lower to the upper limit, both included.
+        threshold: Threshold value for quality assessment; for 'discard outside' a
+            (lower, upper) pair, e.g. (40, 90) for an AGC that is good from 40 to 90.
         idstr: An optional identifier string to append to the flag name.
 
     Returns:
@@ -111,6 +115,18 @@ def flag_signal_strength_eddypro_test(df: DataFrame,
         ss_flag[ss <= threshold] = 0
         ss_flag[ss > threshold] = 2
         signs_str = ['<=', '>']
+    elif method == 'discard outside':
+        lower, upper = threshold
+        if lower > upper:
+            raise ValueError(f"{flag_signal_strength_eddypro_test.__name__}: the lower limit "
+                             f"{lower} is above the upper limit {upper}.")
+        ss_flag[(ss >= lower) & (ss <= upper)] = 0
+        ss_flag[(ss < lower) | (ss > upper)] = 2
+        info(f"SIGNAL STRENGTH TEST: Generating new flag variable {flagname_out}, "
+             f"newly calculated from output variable {signal_strength_col}, with "
+             f"flag 0 (good values) where {lower} <= {signal_strength_col} <= {upper}, "
+             f"flag 2 (bad values) where it is below {lower} or above {upper} ...")
+        return ss_flag
     else:
         raise Exception(f"Error in {flag_signal_strength_eddypro_test.__name__}, "
                         f"the method {method} is unknown.")

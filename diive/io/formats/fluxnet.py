@@ -373,15 +373,16 @@ class FormatEddyProFluxnetFileForUpload:
                                fluxcol: str,
                                signal_strength_col: str,
                                method: str,
-                               threshold: int) -> None:
+                               threshold: float | tuple) -> None:
         """
         Remove flux values where signal strength / AGC is not sufficient (too high or too low)
 
         Args:
             fluxcol: str, name of flux variable
             signal_strength_col: str, name of signal strength or AGC variable
-            method: str, 'discard above' or 'discard below' *threshold*
-            threshold: int, threshold to remove data points
+            method: str, 'discard above' or 'discard below' *threshold*, or
+                'discard outside' a (lower, upper) *threshold* pair
+            threshold: number, or (lower, upper) for 'discard outside'; the limits are kept
 
         Returns:
             None

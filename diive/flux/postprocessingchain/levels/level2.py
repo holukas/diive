@@ -116,9 +116,12 @@ def run_level2(
             - ``'method'``: ``'discard above'`` to flag records where signal
               strength *exceeds* the threshold (high AGC = dirty optics on
               some analyzers), or ``'discard below'`` to flag records where
-              it *falls below* the threshold (low signal = instrument issue).
+              it *falls below* the threshold (low signal = instrument issue),
+              or ``'discard outside'`` to keep only records between two limits.
               Check your analyzer's manual to know which direction applies.
-            - ``'threshold'``: numeric cutoff value (instrument-specific).
+            - ``'threshold'``: numeric cutoff value (instrument-specific); for
+              ``'discard outside'`` a ``(lower, upper)`` pair. The limits
+              themselves are kept.
 
             Example for a LI-7200 where low signal strength indicates a problem::
 
@@ -162,7 +165,8 @@ def run_level2(
             raise KeyError(
                 f"signal_strength config is missing required key(s): {_missing}. "
                 f"Required: {{'apply': True, 'signal_strength_col': '...', "
-                f"'method': 'discard above' | 'discard below', 'threshold': <int>}}"
+                f"'method': 'discard above' | 'discard below' | 'discard outside', "
+                f"'threshold': <number> | (<lower>, <upper>)}}"
             )
 
     if raw_data_screening_vm97 and raw_data_screening_vm97.get('apply'):

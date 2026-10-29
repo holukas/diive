@@ -112,6 +112,10 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   (`shared_features=True`, the default). Before, each scenario kept its own selection, so the spread
   between the scenarios also reflected the selection. `use_features()` on the long-term gap-filling
   classes sets the features by hand.
+- **Signal strength between two limits:** the signal strength test of Level 2
+  (`flag_signal_strength_eddypro_test`, `run_level2(signal_strength=)`) takes
+  `method='discard outside'` with a `(lower, upper)` threshold and keeps the records from the lower
+  to the upper limit, both included. An LI-7500 AGC, for example, is good from about 40 to 90.
 
 ### Changed
 

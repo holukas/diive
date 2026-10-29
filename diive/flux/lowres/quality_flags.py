@@ -211,7 +211,7 @@ class FluxQualityFlagsEddyPro:
     def signal_strength_test(self,
                              signal_strength_col: str,
                              method: str,
-                             threshold: int):
+                             threshold: float | tuple[float, float]):
         """
         Tests the signal strength of flux data using the specified method and threshold.
 
@@ -227,8 +227,10 @@ class FluxQualityFlagsEddyPro:
             signal_strength_col (str): Name of the column containing signal strength
                 data to be tested (e.g., 'AGC_LI7500').
             method (str): Name of the method to be used for testing signal strength
-                Can be 'discard above' or 'discard below' the <threshold>.
-            threshold (int): Threshold for discarding data.
+                Can be 'discard above' or 'discard below' the <threshold>, or
+                'discard outside' a (lower, upper) <threshold> pair.
+            threshold (float or tuple): Threshold for discarding data; a (lower,
+                upper) pair for 'discard outside'. The limits themselves are kept.
 
         Returns:
             None: Modifies the `_results` attribute in-place.

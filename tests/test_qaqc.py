@@ -742,3 +742,25 @@ class TestMeasurementsRegistry(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestSignalStrengthDiscardOutside(unittest.TestCase):
+    """'discard outside' keeps the signal strength from the lower to the upper limit, both included."""
+
+    def setUp(self):
+        from diive.preprocessing.qaqc.eddyproflags import flag_signal_strength_eddypro_test
+        self.test = flag_signal_strength_eddypro_test
+        idx = pd.date_range('2020-01-01', periods=6, freq='30min')
+        self.df = pd.DataFrame({'AGC': [39.9, 40.0, 50.0, 90.0, 90.1, np.nan]}, index=idx)
+
+    def test_limits_are_kept(self):
+        flag = self.test(df=self.df, signal_strength_col='AGC', var_col='FC',
+                         method='discard outside', threshold=(40, 90))
+        self.assertEqual(flag.name, 'FLAG_FC_SIGNAL_STRENGTH_TEST')
+        self.assertEqual(flag.iloc[:5].tolist(), [2, 0, 0, 0, 2])
+        self.assertTrue(np.isnan(flag.iloc[5]))
+
+    def test_lower_above_upper_raises(self):
+        with self.assertRaises(ValueError):
+            self.test(df=self.df, signal_strength_col='AGC', var_col='FC',
+                      method='discard outside', threshold=(90, 40))
