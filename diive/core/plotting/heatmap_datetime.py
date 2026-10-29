@@ -245,7 +245,7 @@ class HeatmapDateTime(HeatmapBase):
              vmax: float = None,
              cmap: str = 'RdYlBu_r',
              zlabel: str = None,
-             cb_digits_after_comma: int | str = 2,
+             cb_digits_after_comma: int | str = 'auto',
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
              minticks: int = 3,
@@ -279,8 +279,8 @@ class HeatmapDateTime(HeatmapBase):
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
             zlabel: Colorbar label (e.g., '°C', 'µmol m⁻²s⁻¹')
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
-                to pick them from the data range
+            cb_digits_after_comma: Decimal places on colorbar labels, or 'auto' (default)
+                to follow the tick spacing
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
             minticks: Minimum major ticks on date axis (default: 3)
@@ -321,8 +321,6 @@ class HeatmapDateTime(HeatmapBase):
         # Use theme defaults if not provided
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
-        if show_values_fontsize is None:
-            show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
         # Call parent plot() to create figure/axes and apply styling
         super().plot(
@@ -521,7 +519,7 @@ class HeatmapYearMonth(HeatmapBase):
              vmax: float = None,
              cmap: str = None,
              zlabel: str = None,
-             cb_digits_after_comma: int | str = 2,
+             cb_digits_after_comma: int | str = 'auto',
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
              minticks: int = 3,
@@ -554,8 +552,8 @@ class HeatmapYearMonth(HeatmapBase):
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (auto-selected if None: 'RdYlBu' for ranks, 'RdYlBu_r' for raw)
             zlabel: Colorbar label
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
-                to pick them from the data range
+            cb_digits_after_comma: Decimal places on colorbar labels, or 'auto' (default)
+                to follow the tick spacing
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
             minticks: Not used here, the ticks are one per month and year (kept for
@@ -592,8 +590,6 @@ class HeatmapYearMonth(HeatmapBase):
         # Use theme defaults if not provided
         if cb_labelsize is None:
             cb_labelsize = theme.AX_LABELS_FONTSIZE
-        if show_values_fontsize is None:
-            show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
         # Call parent plot() to create figure/axes and apply styling
         super().plot(

@@ -279,6 +279,13 @@ class HeatmapXYZ(HeatmapBase):
         self.y = y_edges
         self.z = z_values
 
+    @staticmethod
+    def _integer_ticks(axis, edges):
+        """Set one tick per cell, labelled with its whole-number coordinate, if the axis has them."""
+        ticks = _integer_ticks_for(edges)
+        if ticks is not None:
+            axis.set_ticks(ticks[0], ticks[1])
+
     def plot(self,
              ax=None,
              fig=None,
@@ -288,7 +295,7 @@ class HeatmapXYZ(HeatmapBase):
              vmin: float = None,
              vmax: float = None,
              cmap: str = 'RdYlBu_r',
-             cb_digits_after_comma: int = 2,
+             cb_digits_after_comma: int | str = 'auto',
              cb_labelsize: float = None,
              cb_extend: str = 'neither',
              color_bad: str = 'grey',
@@ -318,8 +325,8 @@ class HeatmapXYZ(HeatmapBase):
             vmin: Minimum color value (auto from data if None)
             vmax: Maximum color value (auto from data if None)
             cmap: Colormap name (default: 'RdYlBu_r')
-            cb_digits_after_comma: Decimal places on colorbar labels (default: 2), or 'auto'
-                to pick them from the data range
+            cb_digits_after_comma: Decimal places on colorbar labels, or 'auto' (default)
+                to follow the tick spacing
             cb_labelsize: Font size for colorbar tick labels
             cb_extend: Colorbar extension arrows ('neither', 'both', 'min', 'max')
             color_bad: Color for NaN cells (default: 'grey')
@@ -350,8 +357,6 @@ class HeatmapXYZ(HeatmapBase):
             ylabel = self.ylabel
         if zlabel is None:
             zlabel = self.zlabel
-        if show_values_fontsize is None:
-            show_values_fontsize = theme.AX_LABELS_FONTSIZE
 
         # Call parent plot() to create figure/axes and apply styling
         super().plot(
@@ -399,6 +404,12 @@ class HeatmapXYZ(HeatmapBase):
             self.ax.set_yticks(self.ytickpos)
             if self.yticklabels is not None:
                 self.ax.set_yticklabels(self.yticklabels)
+        # Whole-number coordinates in steps of one (years, months, hours) get one tick per cell,
+        # at its centre and labelled with the number, instead of ticks at the cell edges.
+        if self.xtickpos is None:
+            self._integer_ticks(self.ax.xaxis, self.x)
+        if self.ytickpos is None:
+            self._integer_ticks(self.ax.yaxis, self.y)
 
         self.format(
             plot=self.p,
@@ -409,6 +420,14 @@ class HeatmapXYZ(HeatmapBase):
         if self.showplot:
             self.fig.patch.set_facecolor('white')
             self.fig.show()
+
+
+def _integer_ticks_for(edges):
+    """Tick positions and labels at the cell centres if the cells are whole numbers in steps of one."""
+    coords = np.asarray(edges, dtype='float64')[:-1]
+    if coords.size < 2 or not np.allclose(coords, np.round(coords)) or not np.allclose(np.diff(coords), 1):
+        return None
+    return coords + 0.5, [str(int(round(c))) for c in coords]
 
 
 def _example():

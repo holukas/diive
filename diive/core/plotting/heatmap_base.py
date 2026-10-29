@@ -20,7 +20,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 from matplotlib import dates as mdates
+from matplotlib import ticker as mticker
 from matplotlib import pyplot as plt
 
 from diive.core.io.files import verify_dir
@@ -44,6 +46,12 @@ from diive.core.utils.console import warn
 #: it would need 166 years of record to reach the limit. Raise it per call with
 #: ``plot(show_values_max_cells=...)``.
 SHOW_VALUES_MAX_CELLS = 2_000
+
+#: Size range (points) of the cell-value labels when they are sized to the cells.
+VALUE_LABEL_MIN_FONTSIZE = 4.0
+VALUE_LABEL_MAX_FONTSIZE = 11.0
+#: Smallest size (points) tick labels are shrunk to before they are thinned out.
+TICKLABEL_MIN_FONTSIZE = 7.0
 
 
 def auto_colorbar_digits(z) -> int:
@@ -210,6 +218,7 @@ class HeatmapBase:
                                linewidths=1, cmap=cmap,
                                vmin=self.vmin, vmax=self.vmax,
                                shading=shading, zorder=99)
+        self._mesh = p  # the cell-value overlay reads the cell colours from it
         return p
 
     def plot_image(self):
@@ -259,7 +268,7 @@ class HeatmapBase:
              format_style: FormatStyle = None,
              vmin: float = None,
              vmax: float = None,
-             cb_digits_after_comma: int | str = 2,
+             cb_digits_after_comma: int | str = 'auto',
              cb_labelsize: float = theme.AX_LABELS_FONTSIZE,
              cb_extend: str = 'neither',
              minticks: int = 3,
@@ -270,7 +279,7 @@ class HeatmapBase:
              show_colormap: bool = True,
              show_less_xticklabels: bool = False,
              show_values: bool = False,
-             show_values_fontsize: float = theme.AX_LABELS_FONTSIZE,
+             show_values_fontsize: float | None = None,
              show_values_n_dec_places: int = 0,
              show_values_max_cells: int | None = SHOW_VALUES_MAX_CELLS):
         """Render heatmap with matplotlib styling (Phase 2 of two-phase design).
@@ -304,9 +313,9 @@ class HeatmapBase:
             vmin: Lower bound of the colour scale.  *None* = auto from data.
             vmax: Upper bound of the colour scale.  *None* = auto from data.
             cb_digits_after_comma: Decimal places shown on colorbar tick labels.
-                Defaults to 2. Pass ``'auto'`` to choose the precision from the
-                data range (whole numbers for wide ranges, more digits for
-                narrow ones).
+                ``'auto'`` (default) shows as many as the tick spacing needs:
+                ``0, 5, 10`` or ``0.5, 1.0, 1.5``, never ``20.00``. Whole-number
+                data (ranks, counts) always gets whole-number ticks.
             cb_labelsize: Font size for colorbar tick labels.
             cb_extend: Colorbar extension arrows.  One of ``'neither'`` (default),
                        ``'both'``, ``'min'``, or ``'max'``.  Use ``'both'`` when
@@ -326,7 +335,9 @@ class HeatmapBase:
             show_values: Overlay each cell with its numeric z-value.
                          Only practical for coarse grids (year × month).
                          Defaults to *False*.
-            show_values_fontsize: Font size for the cell-value overlay text.
+            show_values_fontsize: Font size for the cell-value overlay text.  *None*
+                                  (default) sizes the text to the cells, so the
+                                  numbers fit whatever the size of the panel.
             show_values_n_dec_places: Decimal places for the cell-value overlay.
                                       Defaults to 0.
             show_values_max_cells: Largest grid the ``show_values`` overlay is
@@ -358,10 +369,7 @@ class HeatmapBase:
         self.cmap = cmap
         self.vmin = vmin
         self.vmax = vmax
-        self.cb_digits_after_comma = (
-            auto_colorbar_digits(self.z) if cb_digits_after_comma == 'auto'
-            else cb_digits_after_comma
-        )
+        self.cb_digits_after_comma = cb_digits_after_comma
         self.cb_labelsize = cb_labelsize
         self.cb_extend = cb_extend
         self.color_bad = color_bad
@@ -537,6 +545,20 @@ class HeatmapBase:
                  verbose=self.verbose or None)
             return
 
+        # The labels are sized to the cells unless a size was given, and drawn light on dark
+        # cells and dark on light ones, so every number stays readable.
+        decimals = self.showvalues_n_dec_places
+        finite = self.z[np.isfinite(self.z)]
+        widest = max((len(f"{v:.{decimals}f}") for v in finite), default=1)
+        fontsize = self.showvalues_fontsize
+        if fontsize is None:
+            width_pt, height_pt = self._axes_size_pt(reserve_colorbar=True)
+            cell_w = width_pt / self.z.shape[1]
+            cell_h = height_pt / self.z.shape[0]
+            fontsize = float(np.clip(min(0.6 * cell_h, 0.85 * cell_w / (0.62 * widest)),
+                                     VALUE_LABEL_MIN_FONTSIZE, VALUE_LABEL_MAX_FONTSIZE))
+        mesh = getattr(self, '_mesh', None)
+
         for i in range(self.z.shape[0]):
             for j in range(self.z.shape[1]):
                 # Calculate the center coordinates for each heatmap type
@@ -560,12 +582,68 @@ class HeatmapBase:
                     )
 
                 val = self.z[i, j]
-                if not np.isnan(val):  # Check if number, skips part if NaN
-                    valstr = f"{val:.{self.showvalues_n_dec_places}f}"
-                else:
-                    valstr = ""
-                self.ax.text(x_center, y_center, valstr,
-                             ha='center', va='center', color='black', fontsize=self.showvalues_fontsize, zorder=100)
+                if np.isnan(val):  # no label on a missing cell
+                    continue
+                label = f"{val:.{decimals}f}"
+                if float(label) == 0:  # -0.2 rounds to "-0"; show it as "0"
+                    label = f"{0:.{decimals}f}"
+                self.ax.text(x_center, y_center, label,
+                             ha='center', va='center', color=self._label_color(mesh, val),
+                             fontsize=fontsize, zorder=100)
+
+    def _axes_size_pt(self, reserve_colorbar: bool = False) -> tuple[float, float]:
+        """Width and height of the heatmap axes in points, from its current position.
+
+        Before the figure is drawn the layout engine has not yet made room for the
+        colorbar; ``reserve_colorbar`` takes that share off the width in advance.
+        """
+        bbox = self.ax.get_position()
+        fig_w, fig_h = self.ax.get_figure().get_size_inches()
+        width = bbox.width * fig_w * 72
+        height = bbox.height * fig_h * 72
+        if reserve_colorbar and self.show_colormap:
+            width *= 0.82
+        return width, height
+
+    @staticmethod
+    def _label_color(mesh, val) -> str:
+        """Dark text on a light cell, white text on a dark one, from the cell's colour."""
+        if mesh is None:
+            return 'black'
+        r, g, b, _ = mesh.cmap(mesh.norm(val))
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return 'white' if luminance < 0.5 else '#212121'
+
+    def _fit_ticklabels(self):
+        """Shrink tick labels that would overlap, and thin them out when even that is not enough.
+
+        Applies to the axes whose ticks the heatmap sets itself (one per month, year
+        or other unit). The labels keep the style's size where they fit; otherwise
+        they shrink by up to a fifth (never below :data:`TICKLABEL_MIN_FONTSIZE`), and
+        beyond that only every k-th label is shown. Thinning before shrinking keeps
+        the labels of both axes at about the same size.
+        """
+        width_pt, height_pt = self._axes_size_pt()
+        for axis, length_pt, is_x in ((self.ax.xaxis, width_pt, True), (self.ax.yaxis, height_pt, False)):
+            lo, hi = sorted(axis.get_view_interval())
+            ticks = [t for t in axis.get_majorticklocs() if lo <= t <= hi]
+            if len(ticks) < 2:
+                continue
+            # The label texts, from the tick labels where they are set, else from the formatter.
+            labels = [str(lab) for lab in axis.get_major_formatter().format_ticks(ticks)]
+            widest = max((len(lab) for lab in labels), default=1)
+            per_tick = length_pt / len(ticks)
+            current = axis.get_tick_params().get('labelsize') or plt.rcParams['xtick.labelsize' if is_x else 'ytick.labelsize']
+            current = float(mpl.font_manager.FontProperties(size=current).get_size_in_points())
+            fits = per_tick * 0.85 / (0.62 * widest) if is_x else per_tick / 1.25
+            floor = max(TICKLABEL_MIN_FONTSIZE, 0.8 * current)
+            if fits >= floor:
+                axis.set_tick_params(labelsize=min(current, fits))
+                continue
+            # Too many labels for the axis: keep every k-th one at the smallest size.
+            axis.set_tick_params(labelsize=floor)
+            k = int(np.ceil(floor / fits))
+            axis.set_ticks(ticks[::k], labels[::k])
 
     def format(self, ax_xlabel_txt, ax_ylabel_txt, plot, shown_freq: str = None):
         """Applies title, colorbar, axis labels, tick formatting, and spine styling.
@@ -605,14 +683,30 @@ class HeatmapBase:
         fig = self.ax.get_figure()
         if self.show_colormap:
             cb_label_fs = style.axlabel_fontsize if style.axlabel_fontsize is not None else theme.FONTSIZE_AXLABEL
-            cb = fig.colorbar(plot, ax=self.ax, format=f"%.{int(self.cb_digits_after_comma)}f",
-                              label=self.zlabel, extend=self.cb_extend)
-            cb.set_label(label=self.zlabel, size=cb_label_fs, labelpad=20)
+            cb = fig.colorbar(plot, ax=self.ax, label=self.zlabel, extend=self.cb_extend)
+            # Whole numbers (ranks, counts) get whole-number ticks; otherwise 'auto' lets the
+            # tick spacing set the decimals, and a number fixes them.
+            finite = np.asarray(self.z, dtype='float64')
+            finite = finite[np.isfinite(finite)]
+            # Steps of 1, 2 or 5 give round ticks (0, 5, 10), never 2.5 or 7.5.
+            if finite.size and np.all(np.mod(finite, 1) == 0):
+                cb.locator = mticker.MaxNLocator(integer=True, steps=[1, 2, 5, 10])
+                cb.formatter = mticker.FormatStrFormatter('%d')
+            elif self.cb_digits_after_comma == 'auto':
+                cb.locator = mticker.MaxNLocator(steps=[1, 2, 5, 10])
+                cb.formatter = mticker.ScalarFormatter(useOffset=False)
+            else:
+                cb.formatter = mticker.FormatStrFormatter(f"%.{int(self.cb_digits_after_comma)}f")
+            cb.update_ticks()
+            cb.set_label(label=self.zlabel, size=cb_label_fs, labelpad=12)
             cb.ax.tick_params(labelsize=self.cb_labelsize)
+            cb.outline.set_visible(False)
 
         style.apply(ax=self.ax, default_title=auto_title,
                     default_xlabel=ax_xlabel_txt, default_ylabel=ax_ylabel_txt)
         self.ax.tick_params(left=True, right=False, top=False, bottom=True)
+        if self.heatmaptype in ('yearmonth', 'xyz'):
+            self._fit_ticklabels()
 
 
 def list_of_colormaps() -> list:

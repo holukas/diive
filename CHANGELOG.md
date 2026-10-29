@@ -119,6 +119,15 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 
 ### Changed
 
+- **Heatmap labels fit the panel:** `HeatmapYearMonth`, `HeatmapXYZ` and `HeatmapDateTime` size the
+  `show_values` numbers to the cells (4 to 11 pt), draw them white on dark cells and dark on light
+  ones, and leave missing cells blank; `show_values_fontsize=` still fixes the size. Crowded tick
+  labels shrink by up to a fifth and are then thinned (every second hour, for example), and
+  `HeatmapXYZ` puts integer coordinates such as years and months at the cell centres.
+- **Heatmap colorbars:** `cb_digits_after_comma` defaults to `'auto'`, which takes the decimals from
+  the tick spacing (`0, 5, 10` or `0.5, 1.0`, not `20.00`) and uses steps of 1, 2 or 5. Whole-number
+  data such as ranks gets whole-number ticks. Pass a number to fix the decimals as before; the old
+  default was 2.
 - **Cumulative plots with several methods:** `plot_gapfilled_cumulative` gives each method its own
   hue (scenarios as shades of it), keeps the end labels apart and reports the range over the USTAR
   scenarios per method instead of one range over all series.
