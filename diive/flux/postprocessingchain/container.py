@@ -1136,7 +1136,9 @@ class FluxLevelData:
         # Resolve USTAR scenario
         all_scenarios = sorted({s for mc in cols.values() for s in mc})
         if ustar_scenario is None:
-            ustar_scenario = all_scenarios[0]
+            from diive.flux.postprocessingchain.levels._shared import reference_helpers
+            helpers = reference_helpers(self)
+            ustar_scenario = next(s for s in all_scenarios if s not in helpers)
         elif ustar_scenario not in all_scenarios:
             raise ValueError(
                 f"USTAR scenario {ustar_scenario!r} not found. "
@@ -1211,7 +1213,9 @@ class FluxLevelData:
         from diive.core.plotting.plotfuncs import nice_date_ticks
         nice_date_ticks(ax=ax)
 
-        auto_title = f"Cumulative {self._flux_varname(ustar_scenario)}, USTAR scenario {ustar_scenario}"
+        from diive.flux.postprocessingchain.levels._shared import scenario_name
+        auto_title = (f"Cumulative {self._flux_varname(ustar_scenario)}, USTAR scenario "
+                      f"{scenario_name(self, ustar_scenario)}")
         if own_fig:
             cp.figure_title(fig, title or auto_title,
                             f"Sum over {cumul.index[0]:%Y-%m-%d} to {cumul.index[-1]:%Y-%m-%d}"
@@ -1302,7 +1306,10 @@ class FluxLevelData:
                 )
             scenarios_to_plot = [ustar_scenario]
         else:
-            scenarios_to_plot = all_scenarios
+            # Not the REF versions that serve only the REF selection.
+            from diive.flux.postprocessingchain.levels._shared import reference_helpers
+            helpers = reference_helpers(self)
+            scenarios_to_plot = [s for s in all_scenarios if s not in helpers]
 
         # An external figure backs a single side-by-side gridspec, so it can
         # only host one scenario; refuse to silently drop the others.
@@ -1393,7 +1400,9 @@ class FluxLevelData:
                 plt.setp(ax.get_yticklabels(), visible=False)
                 ax.yaxis.get_label().set_visible(False)
 
-        auto_title = f"{self._flux_varname(ustar_scenario)} before and after gap-filling, USTAR scenario {ustar_scenario}"
+        from diive.flux.postprocessingchain.levels._shared import scenario_name
+        auto_title = (f"{self._flux_varname(ustar_scenario)} before and after gap-filling, "
+                      f"USTAR scenario {scenario_name(self, ustar_scenario)}")
         if own_fig:
             subtitle = None
             if meas is not None:

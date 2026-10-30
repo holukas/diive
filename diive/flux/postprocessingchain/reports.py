@@ -27,6 +27,11 @@ from rich.table import Table
 from rich.text import Text
 
 from diive.core.utils.console import VERBOSE_PROGRESS, _vlevel, console as _console, info, warn
+from diive.flux.postprocessingchain.levels._shared import (
+    middle_scenario,
+    reference_helpers,
+    scenario_name as _scenario_name,
+)
 
 # Long names for the short method keys used throughout the chain.
 _METHOD_LABELS = {'mds': 'MDS', 'rf': 'Random Forest', 'xgb': 'XGBoost'}
@@ -38,10 +43,21 @@ _SCORE_COLUMNS = [('r2', 'R²', '{:.3f}'), ('rmse', 'RMSE', '{:.2f}'), ('mae', '
 
 
 def _iter_level41(data) -> Iterator[tuple[str, str, Any]]:
-    """Yield ``(method, ustar_scenario, model_instance)`` for every L4.1 result."""
+    """Yield ``(method, ustar_scenario, model_instance)`` for every L4.1 result.
+
+    Leaves out the REF versions that serve only the REF selection (``reference=True``).
+    """
+    helpers = reference_helpers(data)
     for method, scenarios in data.levels.level41_methods().items():
         for scenario, inst in scenarios.items():
-            yield method, scenario, inst
+            if scenario not in helpers:
+                yield method, scenario, inst
+
+
+def _report_scenarios(data, labels) -> list:
+    """*labels* without the REF versions that serve only the REF selection, in their order."""
+    helpers = reference_helpers(data)
+    return [s for s in labels if s not in helpers]
 
 
 def _optional(inst, attr: str):
@@ -146,19 +162,20 @@ def _report_scores(data, attr: str, title: str, notes: list, outfile_prefix: str
         table.add_column(label, justify="right")
     unavailable = []
     for method, scenario, inst in _iter_level41(data):
+        name = _scenario_name(data, scenario)
         scores = _optional(inst, attr)
         if scores is None:
-            unavailable.append(f"{_label(method)} ({scenario})")
+            unavailable.append(f"{_label(method)} ({name})")
             continue
         by_year = _scores_by_year(scores)
         for year, s in by_year.items():
-            table.add_row(_label(method), scenario, str(year),
+            table.add_row(_label(method), name, str(year),
                           *[fmt.format(s[k]) if isinstance(s.get(k), (int, float)) else "-"
                             for k, _, fmt in _SCORE_COLUMNS])
         if len(by_year) > 1:
             # The mean over years, the figure a multi-year record is usually judged by.
             mean = DataFrame(by_year).mean(axis=1, numeric_only=True)
-            table.add_row(_label(method), scenario, "mean",
+            table.add_row(_label(method), name, "mean",
                           *[fmt.format(mean[k]) if k in mean else "-" for k, _, fmt in _SCORE_COLUMNS],
                           style="bold")
             table.add_section()
@@ -196,9 +213,10 @@ def report_gapfilling_variables(data, verbose: int | bool | None = None) -> None
         n = len(data.fpc_df)
         n_meas = int(data.fpc_df[target].notna().sum())
         n_filled = int(data.fpc_df[gapfilled].notna().sum()) - n_meas
-        table.add_row(_label(method), scenario, f"{n:,}", f"{n_meas:,}", f"{n_filled:,}",
+        name = _scenario_name(data, scenario)
+        table.add_row(_label(method), name, f"{n:,}", f"{n_meas:,}", f"{n_filled:,}",
                       f"{100 * n_filled / n:.1f}" if n else "-")
-        names.append(f"{_label(method)} ({scenario}): {inst.target_col} -> {gapfilled}")
+        names.append(f"{_label(method)} ({name}): {inst.target_col} -> {gapfilled}")
     _print_report("Gap-filled variables", table, names, verbose=verbose)
 
 
@@ -244,7 +262,7 @@ def report_annual_sums(data, gain: float = 1.0, units: str = "",
     sums = {}
     for method, scenario, _ in _iter_level41(data):
         col = gf_cols[method][scenario]
-        table.add_column(f"{_label(method)}\n{scenario}", justify="right")
+        table.add_column(f"{_label(method)}\n{_scenario_name(data, scenario)}", justify="right")
         sums[col] = df[col].multiply(gain).groupby(years).sum(min_count=1)
     sums = DataFrame(sums)
     unfilled = df[list(sums.columns)].isna().groupby(years).sum()
@@ -275,7 +293,7 @@ def report_annual_sums(data, gain: float = 1.0, units: str = "",
         for method, scenario, _ in _iter_level41(data):
             n = unfilled[gf_cols[method][scenario]]
             if n.any():
-                notes.append(f"  {_label(method)} {scenario}: " + ", ".join(
+                notes.append(f"  {_label(method)} {_scenario_name(data, scenario)}: " + ", ".join(
                     f"{y} {int(v):,} ({100 * v / n_year[y]:.0f}%)" for y, v in n.items() if v))
     title = f"Annual sums{f' ({units})' if units else ''}"
     _print_report(title, table, notes, verbose=verbose)
@@ -326,9 +344,10 @@ def report_traintest_details(data, outpath: str | None = None,
     unavailable = []
     params = {}
     for method, scenario, inst in _iter_level41(data):
+        name = _scenario_name(data, scenario)
         details = _optional(inst, 'traintest_details_')
         if details is None:
-            unavailable.append(f"{_label(method)} ({scenario})")
+            unavailable.append(f"{_label(method)} ({name})")
             continue
         rows = []
         for year, d in details.items():
@@ -336,11 +355,11 @@ def report_traintest_details(data, outpath: str | None = None,
             rows.append({'year': year, 'complete': n_train + n_test, 'train': n_train,
                          'test': n_test, 'test_pct': 100 * n_test / (n_train + n_test),
                          'features': len(d['X_names'])})
-            table.add_row(_label(method), scenario, str(year), f"{n_train + n_test:,}",
+            table.add_row(_label(method), name, str(year), f"{n_train + n_test:,}",
                           f"{n_train:,}", f"{n_test:,}", f"{rows[-1]['test_pct']:.0f}",
                           str(len(d['X_names'])))
             model_params = d['model'].get_params()
-            params.setdefault(method, {})[scenario] = {
+            params.setdefault(method, {})[name] = {
                 k: v for k, v in model_params.items() if v is not None}
         if len(details) > 1:
             table.add_section()
@@ -415,9 +434,10 @@ def report_gapfilling_feature_importances(data, outpath: str | None = None, top_
     for method, scenario, inst in _iter_level41(data):
         if ustar_scenario is not None and scenario != ustar_scenario:
             continue
+        name = _scenario_name(data, scenario)
         importances = _optional(inst, 'feature_importance_per_year')
         if importances is None:
-            unavailable.append(f"{_label(method)} ({scenario})")
+            unavailable.append(f"{_label(method)} ({name})")
             continue
         _write_csv(importances, outpath,
                    f"gapfilling_model_feature_importances_{scenario}_{method}.csv")
@@ -437,7 +457,7 @@ def report_gapfilling_feature_importances(data, outpath: str | None = None, top_
                 cells.append(f"{row['_mean']:.2f}")
             table.add_row(str(rank), escape(str(feature)), *cells)
         shown = min(top_n, len(ranked))
-        _print_report(f"Feature importances, {_label(method)} ({scenario}): "
+        _print_report(f"Feature importances, {_label(method)} ({name}): "
                       f"top {shown} of {len(ranked)} features, mean |SHAP|", table,
                       verbose=verbose)
     notes = ["Names starting with '.' are features engineered from the drivers "
@@ -509,7 +529,8 @@ def report_model_overview(data, verbose: int | bool | None = None) -> DataFrame:
             table.add_section()
         previous = r['USTAR']
         trees = f"{r['trees']}" if r['trees'] == r['max trees'] else f"{r['trees']}/{r['max trees']}"
-        table.add_row(*([r['method']] if show_method else []), r['USTAR'], str(r['year']),
+        table.add_row(*([r['method']] if show_method else []), _scenario_name(data, r['USTAR']),
+                      str(r['year']),
                       r['trained on'], str(r['features']), f"{r['train']:,}", f"{r['test']:,}",
                       trees, f"{r['final fit']:,}", f"{r['test R2']:.3f}", f"{r['test RMSE']:.2f}",
                       f"{r['filled']:,}", f"{r['fallback']:,}")
@@ -692,11 +713,12 @@ def report_gapfilling_poolyears(data, verbose: int | bool | None = None) -> None
     pools = {}
     unavailable = []
     for method, scenario, inst in _iter_level41(data):
+        name = _scenario_name(data, scenario)
         yearpools = _optional(inst, 'yearpools')
         if yearpools is None:
-            unavailable.append(f"{_label(method)} ({scenario})")
+            unavailable.append(f"{_label(method)} ({name})")
             continue
-        pools[f"{_label(method)} ({scenario})"] = {
+        pools[f"{_label(method)} ({name})"] = {
             year: _year_span(pool['poolyears']) for year, pool in yearpools.items()}
     if pools and all(p == next(iter(pools.values())) for p in pools.values()):
         pools = {'all ML runs': next(iter(pools.values()))}
@@ -734,16 +756,20 @@ def _gapfilled_series(data) -> list:
     """``(column, label, colour)`` for every gap-filled column, in chain order.
 
     The USTAR scenarios get ordered shades (light CUT_16 to dark CUT_84), so their order reads off
-    the colour. With several methods each method has its own hue.
+    the colour. With several methods each method has its own hue. The REF versions that serve only
+    the REF selection are left out.
     """
     from diive.core.plotting.styles import chainplots as cp
     out = []
     methods = data.gapfilled_cols()
+    helpers = reference_helpers(data)
     for method, scenarios in methods.items():
         shades = (cp.METHOD_COLORS.get(method, cp.SCENARIO_COLORS) if len(methods) > 1
                   else cp.SCENARIO_COLORS)
+        scenarios = {s: c for s, c in scenarios.items() if s not in helpers}
         for i, (scenario, col) in enumerate(scenarios.items()):
-            label = scenario if len(methods) == 1 else f"{_label(method)} {scenario}"
+            name = _scenario_name(data, scenario)
+            label = name if len(methods) == 1 else f"{_label(method)} {name}"
             out.append((col, label, shades[i % len(shades)]))
     return out
 
@@ -1027,7 +1053,7 @@ def report_gapfilling_comparison(data, methods: tuple = ('mds', 'xgb'), gain: fl
     """
     a, b = methods
     gf = data.gapfilled_cols()
-    scenarios = [sc for sc in gf.get(a, {}) if sc in gf.get(b, {})]
+    scenarios = _report_scenarios(data, [sc for sc in gf.get(a, {}) if sc in gf.get(b, {})])
     classes = [(1, 1, '1'), (2, 12, '2-12'), (13, 48, '13-48'), (49, None, '>48')]
     rows = {}
     for sc in scenarios:
@@ -1065,7 +1091,7 @@ def report_gapfilling_comparison(data, methods: tuple = ('mds', 'xgb'), gain: fl
     for col in cols:
         table.add_column(col.replace(' ', '\n', 1), justify="right", no_wrap=True)
     for sc, r in out.iterrows():
-        table.add_row(sc, *[f"{r[c]:,.0f}" for c in cols])
+        table.add_row(_scenario_name(data, sc), *[f"{r[c]:,.0f}" for c in cols])
     notes = [f"Sums{u}. difference = {_label(b)} - {_label(a)} over the filled gaps, split into "
              f"daytime and nighttime gaps and by gap length in records."]
     if any_unfilled:
@@ -1079,7 +1105,7 @@ def report_gapfilling_comparison(data, methods: tuple = ('mds', 'xgb'), gain: fl
                      f"in-sample. Only mode='diive' leaves the record out.")
     if 'test records' in out.columns:
         for sc, r in out.iterrows():
-            notes.append(f"{sc}, same {int(r['test records']):,} held-out records: "
+            notes.append(f"{_scenario_name(data, sc)}, same {int(r['test records']):,} held-out records: "
                          + ", ".join(f"{_label(m)} R² {r[f'R2 {_label(m)}']:.2f} "
                                      f"RMSE {r[f'RMSE {_label(m)}']:.2f}" for m in methods))
         notes.append("Held-out records are random single half-hours, so these scores describe short "
@@ -1108,7 +1134,8 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
 
     Args:
         data: Chain container after both methods ran.
-        ustar_scenario: Scenario of panels 1 to 3. Defaults to the middle scenario.
+        ustar_scenario: Scenario of panels 1 to 3. Defaults to the scenario nearest the
+            50th percentile (e.g. CUT_50).
         methods: The two methods; the difference is second minus first.
         gain: Factor for sums (panels 3 and 4), e.g. ``12.011e-6 * 1800`` for gC m-2.
         units: Unit of the sums.
@@ -1123,11 +1150,14 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
     a, b = methods
     la, lb = _label(a), _label(b)
     gf = data.gapfilled_cols()
-    scenarios = [sc for sc in gf.get(a, {}) if sc in gf.get(b, {})]
+    scenarios = _report_scenarios(data, [sc for sc in gf.get(a, {}) if sc in gf.get(b, {})])
     if not scenarios:
         raise ValueError(f"Methods {methods} have no scenario in common. Methods that ran: {list(gf)}")
-    scenario = ustar_scenario or scenarios[len(scenarios) // 2]
+    scenario = ustar_scenario or middle_scenario(data, scenarios)
     d = _comparison_frame(data, scenario, methods)
+    if scenario not in scenarios:  # a REF version asked for by name
+        scenarios.append(scenario)
+    name = _scenario_name(data, scenario)
     g = d[d['gap']]
     fu = f" ({flux_units})" if flux_units else ""
     u = f" {units}" if units else ""
@@ -1149,7 +1179,7 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
     ax_sc.set_xlabel(f"filled by {la}{fu}")
     ax_sc.set_ylabel(f"filled by {lb}{fu}")
     cp.style_axes(ax_sc, grid_axis='both')
-    cp.panel_label(ax_sc, f"Filled values at the same gaps, {scenario}")
+    cp.panel_label(ax_sc, f"Filled values at the same gaps, {name}")
     ax_sc.legend(loc='upper left', frameon=False, fontsize=8.5, markerscale=3)
 
     diff = (g['b'] - g['a'])
@@ -1179,7 +1209,7 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
     ax_mo.axhline(0, color=cp.INK, linewidth=0.7)
     ax_mo.set_ylabel(f"{lb} - {la}{f' ({units})' if units else ''}")
     cp.style_axes(ax_mo)
-    cp.panel_label(ax_mo, f"Contribution of each month to the difference, {scenario}")
+    cp.panel_label(ax_mo, f"Contribution of each month to the difference, {name}")
     ax_mo.legend(loc='best', frameon=False, fontsize=8.5)
     nice_date_ticks(ax=ax_mo)
 
@@ -1189,7 +1219,7 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
         ds = _comparison_frame(data, sc, methods)
         cum = ((ds['b'] - ds['a']).where(ds['gap']).fillna(0) * gain).cumsum()
         ax_cum.plot(cum.index, cum.to_numpy(), color=cp.SCENARIO_COLORS[i % len(cp.SCENARIO_COLORS)],
-                    linewidth=2, label=f"{sc}: {cum.iloc[-1]:+,.0f}{u}")
+                    linewidth=2, label=f"{_scenario_name(data, sc)}: {cum.iloc[-1]:+,.0f}{u}")
         totals[sc] = (ds['a'][ds['both']].sum() * gain, ds['b'][ds['both']].sum() * gain)
     ax_cum.axhline(0, color=cp.INK, linewidth=0.7)
     ax_cum.set_ylabel(f"cumulative {lb} - {la}{f' ({units})' if units else ''}")
@@ -1206,12 +1236,12 @@ def plot_gapfilling_comparison(data, ustar_scenario: str | None = None, methods:
     if any(unfilled.values()):
         left = ", ".join(f"{k} {v:,}" for k, v in unfilled.items())
         gaps_txt = f"Compared on the {n_gaps:,} gaps both filled. Unfilled: {left}."
-        warn(f"Gap-filling comparison, {scenario}: records left unfilled {left}. The sums cover "
+        warn(f"Gap-filling comparison, {name}: records left unfilled {left}. The sums cover "
              f"only the records both methods filled or measured.")
     else:
         gaps_txt = f"Both methods fill the same {n_gaps:,} gaps."
     cp.figure_title(fig, f"Gap-filling methods compared: {la} and {lb}",
-                    f"{scenario}: {la} {totals[scenario][0]:,.0f}{u}, {lb} {totals[scenario][1]:,.0f}{u}, "
+                    f"{name}: {la} {totals[scenario][0]:,.0f}{u}, {lb} {totals[scenario][1]:,.0f}{u}, "
                     f"difference {d_sc:+,.0f}{u}. Range over the USTAR scenarios: {la} {spread_a:,.0f}{u}, "
                     f"{lb} {spread_b:,.0f}{u}. {gaps_txt}")
     if showplot:
@@ -1259,7 +1289,7 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
             continue
         imp = _optional(inst, 'feature_importance_per_year')
         if imp is None:
-            info(f"{_label(method)} ({scenario}): no feature ranks available.")
+            info(f"{_label(method)} ({_scenario_name(data, scenario)}): no feature ranks available.")
             continue
         runs.append((method, scenario, imp))
     if not runs:
@@ -1315,7 +1345,8 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
             ax.tick_params(length=0)
             for spine in ax.spines.values():
                 spine.set_visible(False)
-        cp.panel_label(ax, f"{_label(method)}, {scenario}: top {len(top)} of {len(imp)} features")
+        cp.panel_label(ax, f"{_label(method)}, {_scenario_name(data, scenario)}: "
+                           f"top {len(top)} of {len(imp)} features")
 
     handles = [Line2D([0], [0], color=c, linewidth=6, label=('time terms' if d == 'time' else d))
                for d, c in driver_color.items()]
@@ -1340,7 +1371,7 @@ def _quality_classes(data, ustar_scenario: str | None, method: str | None = None
     used_all = data.levels.filteredseries_level33_qcf
     if not used_all:
         raise RuntimeError("run_level33_*() must be called first.")
-    scenario = ustar_scenario or next(iter(used_all))
+    scenario = ustar_scenario or _report_scenarios(data, used_all)[0]
     if scenario not in used_all:
         raise ValueError(f"USTAR scenario {scenario!r} not found. Available: {list(used_all)}")
     used = used_all[scenario]
@@ -1353,20 +1384,25 @@ def _quality_classes(data, ustar_scenario: str | None, method: str | None = None
                          f"Available methods: {[m for m, sc in gf_cols.items() if scenario in sc]}")
     method = method or next((m for m, sc in gf_cols.items() if scenario in sc), None)
     filled = data.fpc_df[gf_cols[method][scenario]] if method else None
-    return dict(scenario=scenario, best=best, used=used, qcf1=used.where(best.isna()),
+    return dict(scenario=scenario, name=_scenario_name(data, scenario), best=best, used=used,
+                qcf1=used.where(best.isna()),
                 rejected=rejected, filled=filled, method=method,
                 night=data.fpc_df['NIGHTTIME'] == 1, flux=data._flux_varname(scenario))
 
 
 def _gapfilling_input(data) -> dict:
-    """Per USTAR scenario: the records the gap-filling uses and the highest-quality records."""
+    """Per USTAR scenario: the records the gap-filling uses and the highest-quality records.
+
+    Without the REF versions that serve only the REF selection.
+    """
     used_all = data.levels.filteredseries_level33_qcf
     if not used_all:
         raise RuntimeError("run_level33_*() must be called first.")
+    used = {s: used_all[s] for s in _report_scenarios(data, used_all)}
     measured = data.fpc_df[data.levels.flux_corrected_col or data.meta.fluxcol].notna()
     passed = data.levels.filteredseries_level32_qcf
     passed = passed.notna() if passed is not None else measured
-    return dict(used=used_all, best=data.levels.filteredseries_level33_hq, measured=measured,
+    return dict(used=used, best=data.levels.filteredseries_level33_hq, measured=measured,
                 passed=passed, night=data.fpc_df['NIGHTTIME'] == 1)
 
 
@@ -1414,7 +1450,8 @@ def report_gapfilling_input(data, verbose: int | bool | None = None) -> DataFram
     for col in out.columns:
         table.add_column(headers.get(col, col), justify="right", no_wrap=True)
     for scenario, row in out.iterrows():
-        table.add_row(scenario, *[f"{row[c]:,}\n{100 * row[c] / n:.0f}%" for c in out.columns])
+        table.add_row(_scenario_name(data, scenario),
+                      *[f"{row[c]:,}\n{100 * row[c] / n:.0f}%" for c in out.columns])
     m = data.meta
     notes = [f"Records, and their share of all {n:,} records of the period.",
              "removed: tests = quality tests and outlier detection (Levels 2 to 3.2).",
@@ -1442,7 +1479,8 @@ def report_gaps(data, long_gap_days: float = 1, verbose: int | bool | None = Non
         raise RuntimeError("run_level33_*() must be called first.")
     per_day = pd.Timedelta('1D') / data.fpc_df.index.to_series().diff().median()
     rows = {}
-    for scenario, series in used_all.items():
+    for scenario in _report_scenarios(data, used_all):
+        series = used_all[scenario]
         gs = GapStats(series, long_gap_records=int(round(long_gap_days * per_day)))
         sm = gs.summary
         rows[scenario] = {
@@ -1461,7 +1499,7 @@ def report_gaps(data, long_gap_days: float = 1, verbose: int | bool | None = Non
     for col in out.columns:
         table.add_column(col, justify="right")
     for scenario, row in out.iterrows():
-        table.add_row(scenario, *[str(v) for v in row])
+        table.add_row(_scenario_name(data, scenario), *[str(v) for v in row])
     _print_report("Gaps to fill", table,
                   [f"A long gap lasts at least {long_gap_days:g} day{'s' if long_gap_days != 1 else ''}."],
                   verbose=verbose)
@@ -1497,7 +1535,7 @@ def plot_gapfilling_input(data, units: str = '', showplot: bool = True) -> None:
             series = series_by_scenario[scenario]
             ax = fig.add_subplot(gs[i, j], sharex=first, sharey=first)
             first = first or ax
-            title = f"{scenario}: {label}\n{series.count():,} records ({100 * series.count() / n:.0f}%)"
+            title = f"{_scenario_name(data, scenario)}: {label}\n{series.count():,} records ({100 * series.count() / n:.0f}%)"
             HeatmapDateTime(series=series, verbose=False).plot(
                 ax=ax, fig=fig, vmin=-limit, vmax=limit, cmap=cp.HEATMAP_CMAP, cb_extend='both',
                 cb_digits_after_comma='auto', cb_labelsize=8, zlabel=units or 'flux',
@@ -1558,7 +1596,7 @@ def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = 
     counts = [f"QCF 0: {q['best'].count():,} ({100 * q['best'].count() / n:.1f} %)",
               f"used: {q['used'].count():,} ({100 * q['used'].count() / n:.1f} %)",
               f"rejected: {q['rejected'].count():,} ({100 * q['rejected'].count() / n:.1f} %)"]
-    cp.figure_title(fig, f"{q['flux']} by quality class, USTAR scenario {q['scenario']}",
+    cp.figure_title(fig, f"{q['flux']} by quality class, USTAR scenario {q['name']}",
                     "   ".join(counts) + f"   of {n:,} half-hours. Grey: no value in that class.")
     if showplot:
         plt.show()
@@ -1644,7 +1682,7 @@ def plot_quality_timeseries(data, ustar_scenario: str | None = None, units: str 
     nice_date_ticks(ax=axes[-1])
 
     outside = int(((q['rejected'] < ylim[0]) | (q['rejected'] > ylim[1])).sum())
-    cp.figure_title(fig, f"{q['flux']} by quality class, USTAR scenario {q['scenario']}",
+    cp.figure_title(fig, f"{q['flux']} by quality class, USTAR scenario {q['name']}",
                     f"The y-axis spans the records used for gap-filling; {outside:,} rejected "
                     f"records lie outside it and are not drawn (the histograms add them at the "
                     f"edges).")
@@ -1690,7 +1728,7 @@ def report_nighttime_negatives(data, randunc_col: str = 'FC_RANDUNC_HF',
     table = _table()
     for col in ("USTAR", "night records", "negative", "below", "records", "%", "sum"):
         table.add_column(col, justify="right" if col not in ("USTAR", "below") else "left")
-    for scenario in data.levels.filteredseries_level33_qcf:
+    for scenario in _report_scenarios(data, data.levels.filteredseries_level33_qcf):
         _, nee, sigma = _nighttime_frame(data, scenario, randunc_col)
         z = nee / sigma
         neg = nee < 0
@@ -1701,7 +1739,8 @@ def report_nighttime_negatives(data, randunc_col: str = 'FC_RANDUNC_HF',
                    'pct': 100 * sel.mean() if len(nee) else float('nan'),
                    'sum': nee[sel].sum() * gain}
             rows.append(row)
-            table.add_row(scenario, f"{len(nee):,}", f"{int(neg.sum()):,} ({100 * neg.mean():.1f} %)",
+            table.add_row(_scenario_name(data, scenario), f"{len(nee):,}",
+                          f"{int(neg.sum()):,} ({100 * neg.mean():.1f} %)",
                           row['below'], f"{row['records']:,}", f"{row['pct']:.1f}",
                           f"{row['sum']:+,.1f}")
         table.add_section()
@@ -1791,7 +1830,7 @@ def plot_nighttime_negatives(data, ustar_scenario: str | None = None,
 
     n = len(nee)
     cp.figure_title(
-        fig, f"Negative nighttime {q['flux']}, USTAR scenario {q['scenario']}",
+        fig, f"Negative nighttime {q['flux']}, USTAR scenario {q['name']}",
         f"{n:,} nighttime records used for gap-filling: {int((nee < 0).sum()):,} negative "
         f"({100 * (nee < 0).mean():.1f} %), {int(below.sum()):,} of them below -{z:g} times their "
         f"random uncertainty ({100 * below.mean():.1f} %). Median uncertainty "

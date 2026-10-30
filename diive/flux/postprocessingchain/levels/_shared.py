@@ -85,14 +85,51 @@ def select_scenarios(data: FluxLevelData, scenarios=None) -> dict[str, pd.Series
             raise KeyError(f"Unknown USTAR scenario(s) {unknown}. "
                            f"Level 3.3 has: {list(filtered)}.")
         return {s: filtered[s] for s in dict.fromkeys(scenarios)}
+    helpers = reference_helpers(data)
+    return {s: v for s, v in filtered.items() if s not in helpers}
+
+
+def reference_helpers(data: FluxLevelData) -> set[str]:
+    """Labels of the REF versions that serve only the REF selection.
+
+    The 40 versions ``reference=True`` adds, without the requested percentiles
+    and without the scenario the REF maps to (once ``run_level41_ustar_reference``
+    ran). Empty without ``reference=True``.
+    """
     rec = getattr(data.levels, 'ustar_scenarios', None)
     if rec is None or not rec.reference_labels:
-        return dict(filtered)
+        return set()
     helpers = set(rec.reference_labels) - set(rec.main_labels)
     ref = getattr(data.levels, 'ustar_reference', None)
     if ref is not None:
         helpers.discard(ref.scenario)
-    return {s: v for s, v in filtered.items() if s not in helpers}
+    return helpers
+
+
+def scenario_name(data: FluxLevelData, scenario: str) -> str:
+    """Name of a USTAR scenario in reports and plots: the scenario the REF maps
+    to is named as REF, e.g. ``CUT_REF (CUT_4875)``."""
+    ref = data.levels.ustar_reference
+    if ref is not None and scenario == ref.scenario:
+        return f"{ref.label} ({scenario})"
+    return scenario
+
+
+def middle_scenario(data: FluxLevelData, labels) -> str:
+    """The scenario of ``labels`` nearest the 50th percentile, e.g. ``CUT_50``.
+
+    Taken by percentile, not by list position: of ``CUT_16``, ``CUT_50``,
+    ``CUT_84`` and a REF scenario the middle position is ``CUT_84``. Without
+    known percentiles (free labels of ``run_level33_constant_ustar``) the middle
+    position is used.
+    """
+    labels = list(labels)
+    rec = getattr(data.levels, 'ustar_scenarios', None)
+    percentiles = rec.percentiles if rec is not None else {}
+    known = [s for s in labels if s in percentiles]
+    if known:
+        return min(known, key=lambda s: abs(percentiles[s] - 50))
+    return labels[len(labels) // 2]
 
 
 def append_level_id(level_ids: list[str], idstr: str) -> list[str]:

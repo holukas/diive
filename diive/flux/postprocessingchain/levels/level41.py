@@ -26,6 +26,7 @@ from diive.flux.postprocessingchain.levels._rerun import (
 from diive.flux.postprocessingchain.levels._shared import (
     append_level_id,
     assert_aligned_index,
+    middle_scenario,
     require_level33,
     select_scenarios,
     warn_scenario_overwrite,
@@ -354,7 +355,8 @@ def _run_level41_ml(
             instance.use_features(shared)
 
     if n_estimators_cv:
-        _set_n_estimators_from_blocked_cv(instances, n_estimators_cv, verbose)
+        _set_n_estimators_from_blocked_cv(instances, n_estimators_cv, verbose,
+                                          middle=middle_scenario(data, instances))
 
     for ustar_scen, ustar_flux in filteredseries_l33.items():
         instance = instances[ustar_scen]
@@ -394,11 +396,11 @@ def _run_level41_ml(
 
 
 def _set_n_estimators_from_blocked_cv(instances: dict, settings: bool | dict,
-                                      verbose: int) -> None:
+                                      verbose: int, middle: str) -> None:
     """Choose one number of trees by blocked cross-validation and give it to every model.
 
-    Runs on the training records of each yearly pool of one scenario (the middle one unless
-    ``settings['scenario']`` names it). All yearly models of all scenarios hold out the same
+    Runs on the training records of each yearly pool of one scenario (``middle``, the one
+    nearest the 50th percentile, unless ``settings['scenario']`` names it). All yearly models of all scenarios hold out the same
     timestamps (``test_records_``), so these pools contain no test record of any model. Every
     model of every scenario then gets that number of trees and no early stopping. Setting the
     models up again keeps their train/test split.
@@ -406,7 +408,7 @@ def _set_n_estimators_from_blocked_cv(instances: dict, settings: bool | dict,
     from diive.gapfilling.tree_selection import select_n_estimators_blocked_cv
     cv = {} if settings is True else dict(settings)
     labels = list(instances)
-    scenario = cv.pop('scenario', None) or labels[len(labels) // 2]
+    scenario = cv.pop('scenario', None) or middle
     if scenario not in instances:
         raise ValueError(f"Scenario {scenario!r} for the tree selection not found. Available: {labels}")
     ref = instances[scenario]
@@ -560,8 +562,9 @@ def run_level41_xgb(
             neither the feature selection nor the tree selection sees a record that a
             model is tested on, and the test scores stay out-of-sample.
             ``n_estimators`` sets the largest number tested. True uses the defaults
-            (middle scenario, 14-day blocks, 5 folds, the minimum of the median error
-            curve). A dict changes them, e.g. ``{'block_days': 7, 'scenario': 'CUT_50'}``.
+            (the scenario nearest the 50th percentile, 14-day blocks, 5 folds, the
+            minimum of the median error curve). A dict changes them, e.g.
+            ``{'block_days': 7, 'scenario': 'CUT_50'}``.
             The result is ``tree_selection_`` of each scenario's model, shown by
             ``report_tree_selection`` and ``plot_tree_selection``. Default False.
         scenarios: As in :func:`run_level41_rf`.

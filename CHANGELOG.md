@@ -285,6 +285,10 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   every mouse move.
 - **Ridgeline and Shifted distribution plots:** densities on a range much narrower than the data
   no longer take minutes and gigabytes, and unevenly spaced points get correct densities.
+- **Flux chain reports with REF:** with `reference=True` the reports and plots leave out the 40
+  versions that only serve the REF selection and show the REF scenario as `CUT_REF`, and the
+  default scenario is the one nearest the 50th percentile (`CUT_50`), not `CUT_84`. The tree
+  selection of `n_estimators_cv` uses the same default.
 
 ## [0.92.0] - 2026-10-21
 

@@ -313,6 +313,22 @@ class TestLevel33GivenThresholds(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, 'Unknown USTAR scenario'):
             select_scenarios(d, ['CUT_99'])
 
+        # Reports show the requested scenarios and the REF, not the 40 REF versions, and the
+        # middle scenario is the one nearest the 50th percentile, not the middle position (L422).
+        from diive.flux.postprocessingchain import reports
+        from diive.flux.postprocessingchain.levels._shared import middle_scenario, scenario_name
+        shown = [lab for lab in labels if lab in ('CUT_16', 'CUT_50', 'CUT_84', ref.scenario)]
+        self.assertEqual(middle_scenario(d, shown), 'CUT_50')
+        self.assertEqual(middle_scenario(d, ['CUT_16', 'CUT_84']), 'CUT_16')
+        self.assertEqual(scenario_name(d, ref.scenario), f"CUT_REF ({ref.scenario})")
+        self.assertEqual(scenario_name(d, 'CUT_50'), 'CUT_50')
+        self.assertEqual(list(reports.report_gapfilling_input(d, verbose=0).index), shown)
+        self.assertEqual(list(reports.report_gaps(d, verbose=0).index), shown)
+        self.assertEqual(reports.report_annual_sums(d, verbose=0).shape[1], 4)
+        self.assertEqual([lab for _, lab, _ in reports._gapfilled_series(d)],
+                         [scenario_name(d, s) for s in shown])
+        self.assertEqual(len(reports._gapfilled_series(before_ref)), 3)
+
         # Re-running MDS drops the stale REF
         d2 = run_level41_mds(d, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa', mode='oneflux')
         self.assertIsNone(d2.levels.ustar_reference)
