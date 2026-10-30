@@ -390,10 +390,14 @@ class UstarThresholdConstantScenarios:
         ax_nt = fig.add_subplot(gs[2, 0], sharex=ax_dtnt)
         ax_stacked = fig.add_subplot(gs[3, 0], sharex=ax_dtnt)
 
+        # One bar per scenario, labelled by its threshold; the column names are too long for the axis
+        x = np.arange(len(counts))
+        labels = ['none' if c == self.series.name else c.rsplit('_CUT', 1)[-1] for c in counts.index]
+
         # Generate bar plots
-        bar_dtnt = ax_dtnt.bar(counts.index, counts, label='daytime + nighttime', width=.9, fc='#9CCC65')
-        bar_dt = ax_dt.bar(counts_daytime.index, counts_daytime, label='daytime', width=.9, fc='#FFA726')
-        bar_nt = ax_nt.bar(counts_nighttime.index, counts_nighttime, label='nighttime', width=.9, fc='#42A5F5')
+        bar_dtnt = ax_dtnt.bar(x, counts, label='daytime + nighttime', width=.9, fc='#9CCC65')
+        bar_dt = ax_dt.bar(x, counts_daytime, label='daytime', width=.9, fc='#FFA726')
+        bar_nt = ax_nt.bar(x, counts_nighttime, label='nighttime', width=.9, fc='#42A5F5')
 
         # Show text in bar plots
         axes_lst = [ax_dtnt, ax_dt, ax_nt]
@@ -405,16 +409,17 @@ class UstarThresholdConstantScenarios:
             plt.setp(a.get_xticklabels(), visible=False)
 
         # Stacked bar
-        bar_stacked = ax_stacked.bar(counts_nighttime.index, counts_nighttime,
+        bar_stacked = ax_stacked.bar(x, counts_nighttime,
                                      width=.9, label='nighttime', fc='#42A5F5')
-        bar_stacked = ax_stacked.bar(counts_daytime.index, counts_daytime,
+        bar_stacked = ax_stacked.bar(x, counts_daytime,
                                      width=.9, bottom=counts_nighttime, label='daytime', fc='#FFA726')
+        ax_stacked.set_xticks(x, labels)
         pf.default_legend(ax=ax_stacked)
 
         # Figure title
         title = "Available values after applying different constant USTAR thresholds"
         fig.suptitle(title, fontsize=theme.FIGHEADER_FONTSIZE)
-        fig.text(0.5, 0.01, 'USTAR thresholds', ha='center', size=20)
+        fig.text(0.5, 0.01, 'USTAR threshold (m s-1)', ha='center', size=20)
         fig.text(0.02, 0.5, 'Available values', va='center', rotation='vertical', size=20)
 
         fig.show()

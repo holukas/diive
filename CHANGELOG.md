@@ -292,6 +292,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 - **POOLED nighttime uncertainty:** `nighttime_uncertainty` finds nighttime by potential radiation,
   as the negative-nighttime test does, and `POOLED` is the documented 1.4826 times the median
   absolute deviation of the nighttime values within 15 days.
+- **USTAR scenario plot:** `UstarThresholdConstantScenarios(...).calc(showplot=True)` labels
+  each bar with its threshold instead of the full column name, which made the labels overlap.
 
 ## [0.92.0] - 2026-10-21
 
