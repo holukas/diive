@@ -150,6 +150,13 @@ there with a probability of at most Phi(-z). A night runs from noon to noon and 
 date of its evening; nights with fewer than `min_records` (6) values are not tested. Use the same
 uncertainty as for the per-record test, for example the pooled spread.
 
+An error shared by all records of a night does not average out, for example the error of a bias
+correction applied to the flux of an open-path analyser. `systematic` adds it in quadrature to the
+standard error, `sqrt((sqrt(pi / 2) * sigma / sqrt(n)) ** 2 + systematic ** 2)`; the default of 0
+leaves the random part alone. If the records of a night are autocorrelated, widen `sigma` by
+`sqrt((1 + r) / (1 - r))` for a lag-1 autocorrelation `r`: the standard error is then that of
+`n (1 - r) / (1 + r)` independent records.
+
 (ustar-filter)=
 ## Level 3.3: USTAR filter
 

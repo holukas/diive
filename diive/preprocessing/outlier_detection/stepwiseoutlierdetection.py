@@ -371,19 +371,22 @@ class StepwiseOutlierDetection:
 
     def flag_outliers_negative_nights_test(self, uncertainty: Series | str, z: float = 2.0,
                                            min_records: int = 6, showplot: bool = False,
-                                           verbose: bool = False):
+                                           verbose: bool = False, systematic: float = 0.0):
         """Flag all records of nights whose median lies below -z standard errors. See
         ``NegativeNights``.
 
         Catches nights shifted below zero as a whole, which the per-record
         ``flag_outliers_negative_night_test`` lets through because each record lies within a few
-        uncertainties of zero. ``uncertainty`` is handled as in that test. Daytime records are
+        uncertainties of zero. ``uncertainty`` is handled as in that test. ``systematic`` is an
+        uncertainty shared by all records of a night (e.g. of a bias correction), added in
+        quadrature to the standard error of the night median; 0 by default. Daytime records are
         never flagged.
         """
         uncertainty = self._like_series(uncertainty, name='uncertainty')
         self._run_test(NegativeNights, {}, idstr=self.idstr, uncertainty=uncertainty,
                        lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset, z=z,
-                       min_records=min_records, showplot=showplot, verbose=verbose)
+                       min_records=min_records, systematic=systematic, showplot=showplot,
+                       verbose=verbose)
 
     def flag_outliers_hampel_test(self, window_length: int | str = 48 * 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,

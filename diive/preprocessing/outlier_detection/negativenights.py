@@ -21,6 +21,11 @@ A night is the run of nighttime records between one noon and the next, so it is 
 date of its evening. Daytime records are never tested. A night with fewer than ``min_records``
 values, or without an uncertainty, is not tested.
 
+An error shared by all records of a night, for example that of a bias correction applied to the
+flux, does not average out over the night. ``systematic`` adds it in quadrature to the standard
+error of the median: ``sqrt((sqrt(pi / 2) * sigma / sqrt(n)) ** 2 + systematic ** 2)``. With the
+default of 0 the standard error is that of the random errors alone.
+
 Quality flags (overall_flag):
   - flag=0: daytime record, or record of a night whose median is not clearly below zero (valid)
   - flag=2: record of a night whose median lies below ``-z`` standard errors (removed)
@@ -61,7 +66,8 @@ class NegativeNights(FlagBase):
                  min_records: int = 6,
                  idstr: str = None,
                  showplot: bool = False,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 systematic: float = 0.0):
         """Set up the test.
 
         Args:
@@ -80,12 +86,19 @@ class NegativeNights(FlagBase):
             idstr: Identifier suffix for output variable names.
             showplot: If True, draw the diagnostic figure.
             verbose: If True, print the counts.
+            systematic: Uncertainty shared by all records of a night, in the units of
+                ``series``, e.g. that of a bias correction of the flux. It is added in quadrature
+                to the standard error of the night median and does not shrink with the number of
+                records. 0 (default): the standard error holds the random errors only.
         """
         super().__init__(series=series, flagid=self.flagid, idstr=idstr)
         if z <= 0:
             raise ValueError(f"z must be positive, got {z}.")
         if min_records < 2:
             raise ValueError(f"min_records must be at least 2, got {min_records}.")
+        if not np.isfinite(systematic) or systematic < 0:
+            raise ValueError(f"systematic must be zero or positive, got {systematic}.")
+        self.systematic = float(systematic)
         self.uncertainty = uncertainty.reindex(self.series.index).astype(float)
         self.uncertainty_name = uncertainty.name
         self.z = z
@@ -129,7 +142,8 @@ class NegativeNights(FlagBase):
         table = DataFrame({'records': groups['value'].count(),
                            'median': groups['value'].median(),
                            'sigma': groups['sigma'].median()})
-        table['se'] = MEDIAN_SE_FACTOR * table['sigma'] / np.sqrt(table['records'])
+        table['se'] = np.sqrt((MEDIAN_SE_FACTOR * table['sigma'] / np.sqrt(table['records'])) ** 2
+                              + self.systematic ** 2)
         table['limit'] = -self.z * table['se']
         table['tested'] = (table['records'] >= self.min_records) & table['sigma'].notna()
         table['removed'] = table['tested'] & (table['median'] < table['limit'])
@@ -191,10 +205,13 @@ class NegativeNights(FlagBase):
         nice_date_ticks(ax=ax_t)
 
         n_rec = int(removed['records'].sum())
+        se_text = "sqrt(pi/2) x uncertainty / sqrt(n)"
+        if self.systematic > 0:
+            se_text += f", with {self.systematic:g} shared by the night added in quadrature"
         cp.figure_title(
             fig, f"Negative nights: {name}",
             f"{len(removed):,} of {len(t):,} tested nights removed ({n_rec:,} records): their median "
-            f"lies below -{self.z:g} standard errors (sqrt(pi/2) x uncertainty / sqrt(n)). "
+            f"lies below -{self.z:g} standard errors ({se_text}). "
             f"Nights with fewer than {self.min_records} values are not tested.")
         fig.show()
         self._fig = fig

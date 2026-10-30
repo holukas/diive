@@ -121,7 +121,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   whose median lies below `-z` standard errors of that median (`sqrt(pi / 2) * sigma / sqrt(n)`).
   They catch whole nights of apparent uptake, for example from an open-path analyser in fog, which
   the per-record negative-night test lets through. Nights with fewer than `min_records` values are
-  not tested.
+  not tested. `systematic=` adds an uncertainty shared by all records of a night, e.g. of a bias
+  correction, in quadrature to the standard error; it does not shrink with `n` (default 0).
 
 ### Changed
 

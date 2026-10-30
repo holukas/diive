@@ -1382,6 +1382,19 @@ class TestNegativeNights(unittest.TestCase):
         self.assertEqual(t.overall_flag[day], 0)
         self.assertEqual(int(t.nights['removed'].sum()), 1)
 
+    def test_systematic_uncertainty_widens_the_limit(self):
+        from diive.preprocessing.outlier_detection import NegativeNights
+        values, sigma, shifted, _, _ = self._series()
+        t0 = NegativeNights(series=values, uncertainty=sigma, z=2, **self.COORDS).run()
+        t1 = NegativeNights(series=values, uncertainty=sigma, z=2, systematic=1.0, **self.COORDS).run()
+        tested = t0.nights['tested']
+        expected = np.sqrt(t0.nights.loc[tested, 'se'] ** 2 + 1.0)
+        np.testing.assert_allclose(t1.nights.loc[tested, 'se'], expected)
+        # The shifted night (median about -1.5) lies within 2 x sqrt(se^2 + 1) of zero: kept.
+        self.assertFalse((t1.overall_flag == 2).any())
+        with self.assertRaises(ValueError):
+            NegativeNights(series=values, uncertainty=sigma, systematic=-1, **self.COORDS)
+
     def test_short_nights_are_not_tested(self):
         from diive.preprocessing.outlier_detection import NegativeNights
         values, sigma, shifted, _, _ = self._series()
