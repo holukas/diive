@@ -289,6 +289,9 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   versions that only serve the REF selection and show the REF scenario as `CUT_REF`, and the
   default scenario is the one nearest the 50th percentile (`CUT_50`), not `CUT_84`. The tree
   selection of `n_estimators_cv` uses the same default.
+- **POOLED nighttime uncertainty:** `nighttime_uncertainty` finds nighttime by potential radiation,
+  as the negative-nighttime test does, and `POOLED` is the documented 1.4826 times the median
+  absolute deviation of the nighttime values within 15 days.
 
 ## [0.92.0] - 2026-10-21
 

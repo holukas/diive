@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import numpy as np
 import pandas as pd
 
 from diive.core.utils.console import rule
@@ -22,6 +23,7 @@ from diive.flux.postprocessingchain.levels._rerun import (
     record_added_columns,
 )
 from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
 
 
 def nighttime_uncertainty(
@@ -51,12 +53,16 @@ def nighttime_uncertainty(
     - ``MAX``: the larger of the two for each record, or the one available where the other is
       missing. A value is then called clearly below zero only when neither uncertainty explains it.
     - ``POOLED``: the robust spread (1.4826 times the median absolute deviation) of all nighttime
-      values within ``pooled_days`` days on either side, at nighttime records only. It holds the
+      values within ``pooled_days`` days on either side, at nighttime records only, from at least
+      20 values. It holds the
       real night-to-night variation of respiration besides the random error, so it is larger than
       the noise. Unlike FS and PAS20 it does not grow with a few bad records: PAS20 is the spread
       of similar fluxes, so in a short noisy stretch, e.g. while an analyser fails, the bad values
       widen their own uncertainty and pass the test; in a month of nights they hardly move the
       median.
+
+    Nighttime is defined as in the negative-nighttime test: potential radiation below the
+    detector's ``nighttime_threshold``, so POOLED and the table judge the records the test judges.
 
     PAS20 and POOLED are computed from the series the detector holds now, so call this after the
     other outlier tests have been accepted: outliers would otherwise widen them. Records without a value
@@ -119,12 +125,14 @@ def nighttime_uncertainty(
                         'PAS20': pas.randunc_series.reindex(series.index).where(has)})
     out['MAX'] = out[['FS', 'PAS20']].max(axis=1)
 
-    night = data.fpc_df['NIGHTTIME'].reindex(series.index) == 1
-    value = series[night & has]
-    # A time window, so missing records do not stretch it; at least 20 nights' values.
-    roll = dict(window=f'{2 * pooled_days + 1}D', center=True, min_periods=20)
-    median = value.rolling(**roll).median()
-    out['POOLED'] = (1.4826 * (value - median).abs().rolling(**roll).median()).reindex(series.index)
+    # The night of the negative-nighttime test (potential radiation), not the chain's NIGHTTIME,
+    # which uses measured SW_IN when it is given.
+    *_, night = create_daytime_nighttime_flags(
+        timestamp_index=series.index, lat=outlier_detector.site_lat, lon=outlier_detector.site_lon,
+        utc_offset=outlier_detector.utc_offset,
+        nighttime_threshold=outlier_detector.nighttime_threshold)
+    value = series[night.to_numpy() & has.to_numpy()]
+    out['POOLED'] = _pooled_spread(value, pooled_days).reindex(series.index)
     table = _table()
     table.add_column("uncertainty")
     table.add_column("median at night", justify="right")
@@ -148,6 +156,26 @@ def nighttime_uncertainty(
     _print_report(f"Random uncertainty of the {len(value):,} nighttime records", table,
                   notes, verbose=verbose)
     return out
+
+
+def _pooled_spread(value: pd.Series, days: int, min_values: int = 20) -> pd.Series:
+    """1.4826 times the median absolute deviation of the values within ``days`` days on either
+    side of each value (ends included), NaN with fewer than ``min_values``.
+
+    A time window, so missing records do not stretch it. Every deviation is taken from the
+    median of the same window.
+    """
+    t = value.index.to_numpy()
+    v = value.to_numpy(dtype=float)
+    half = np.timedelta64(days, 'D')
+    lo = np.searchsorted(t, t - half, side='left')
+    hi = np.searchsorted(t, t + half, side='right')
+    out = np.full(len(v), np.nan)
+    for i, (a, b) in enumerate(zip(lo, hi)):
+        if b - a >= min_values:
+            window = v[a:b]
+            out[i] = 1.4826 * np.median(np.abs(window - np.median(window)))
+    return pd.Series(out, index=value.index)
 
 
 def make_level32_detector(

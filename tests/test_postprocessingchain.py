@@ -1153,19 +1153,25 @@ class TestChainReports(unittest.TestCase):
         import numpy as np
         import pandas as pd
         from diive.flux.postprocessingchain import make_level32_detector, nighttime_uncertainty
+        from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
         args = dict(randunc_col='FC_RANDUNC_HF', ta='TA_1_1_1', vpd='VPD_kPa', swin='SW_IN_1_1_1',
                     verbose=0)
         data, sod = make_level32_detector(self.data)
         clean = nighttime_uncertainty(data, sod, **args)['POOLED']
-        night = self.data.fpc_df['NIGHTTIME'] == 1
-        self.assertFalse(clean[~night.reindex(clean.index, fill_value=False)].notna().any())
-        # The value against a manual computation, at one night record in the middle.
+        # Night as in the negative-nighttime test: potential radiation, not the chain's NIGHTTIME
+        # from measured SW_IN (L424).
         series = sod.series_hires_cleaned
-        values = series[night.reindex(series.index, fill_value=False) & series.notna()]
-        t = values.index[len(values) // 2]
-        window = values[t - pd.Timedelta(days=15):t + pd.Timedelta(days=15)]
-        expected = 1.4826 * np.median(np.abs(window - window.median()))
-        self.assertAlmostEqual(float(clean[t]), float(expected), places=9)
+        *_, night = create_daytime_nighttime_flags(
+            series.index, lat=sod.site_lat, lon=sod.site_lon, utc_offset=sod.utc_offset,
+            nighttime_threshold=sod.nighttime_threshold)
+        night = pd.Series(night.to_numpy(), index=series.index)
+        self.assertFalse(clean[~night].notna().any())
+        # 1.4826 x MAD of the night values within 15 days, at records across the year (L424).
+        values = series[night & series.notna()]
+        for t in values.index[[100, len(values) // 3, len(values) // 2, -100]]:
+            window = values[t - pd.Timedelta(days=15):t + pd.Timedelta(days=15)]
+            expected = 1.4826 * np.median(np.abs(window - window.median()))
+            self.assertAlmostEqual(float(clean[t]), float(expected), places=9)
 
         bad = values.index[len(values) // 2: len(values) // 2 + 3]
         df = self.data.fpc_df.copy()
