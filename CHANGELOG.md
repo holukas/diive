@@ -116,6 +116,12 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   (`flag_signal_strength_eddypro_test`, `run_level2(signal_strength=)`) takes
   `method='discard outside'` with a `(lower, upper)` threshold and keeps the records from the lower
   to the upper limit, both included. An LI-7500 AGC, for example, is good from about 40 to 90.
+- **Nights shifted below zero:** `NegativeNights` and
+  `StepwiseOutlierDetection.flag_outliers_negative_nights_test()` remove every record of a night
+  whose median lies below `-z` standard errors of that median (`sqrt(pi / 2) * sigma / sqrt(n)`).
+  They catch whole nights of apparent uptake, for example from an open-path analyser in fog, which
+  the per-record negative-night test lets through. Nights with fewer than `min_records` values are
+  not tested.
 
 ### Changed
 

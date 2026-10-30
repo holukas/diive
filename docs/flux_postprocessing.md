@@ -137,6 +137,19 @@ noise alone would explain.
 
 Compute the uncertainties after the other tests are accepted, so that outliers do not widen them.
 
+(negative-nights)=
+### Nights shifted below zero
+
+The per-record test lets through a night that is shifted below zero as a whole, by a few units:
+each record lies within a few uncertainties of zero, but the night cannot. An open-path analyser in
+fog or rime does this for hours. `flag_outliers_negative_nights_test` therefore tests whole nights:
+it removes every record of a night whose median lies below `-z` standard errors of that median,
+`-z * sqrt(pi / 2) * sigma / sqrt(n)`, where `sigma` is the median uncertainty of the night's
+records and `n` their number. With a true value of zero or more, noise alone puts a night median
+there with a probability of at most Phi(-z). A night runs from noon to noon and is labelled with the
+date of its evening; nights with fewer than `min_records` (6) values are not tested. Use the same
+uncertainty as for the per-record test, for example the pooled spread.
+
 (ustar-filter)=
 ## Level 3.3: USTAR filter
 
