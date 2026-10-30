@@ -283,6 +283,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   before 0.93.0.
 - **GUI, Spectrogram hover:** the tooltip shows the value under the cursor instead of failing on
   every mouse move.
+- **Ridgeline and Shifted distribution plots:** densities on a range much narrower than the data
+  no longer take minutes and gigabytes, and unevenly spaced points get correct densities.
 
 ## [0.92.0] - 2026-10-21
 

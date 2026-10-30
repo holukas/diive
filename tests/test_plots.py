@@ -1454,12 +1454,29 @@ class TestPlotClasses(unittest.TestCase):
             'direct, narrow bandwidth': (grid, 0.001),
             'decreasing points': (grid[::-1], 1.0),
             'all points equal': (np.full(50, 3.0), 1.0),
+            'unevenly spaced points': (np.geomspace(0.5, 40, 300), 2.0),
+            'first and last point equal': (np.array([3.0, 10.0, 3.0]), 1.0),
         }
         for name, (x, bw) in cases.items():
             with self.subTest(case=name):
                 want = direct(x, bw)
                 got = gaussian_kde_on_grid(data, x, bw)
                 self.assertLess(np.abs(got - want).max(), 1e-12 * want.max())
+
+    def test_gaussian_kde_on_grid_narrower_than_the_data_is_fast(self):
+        # Samples far outside the points widen the binning grid; the cost guard must count
+        # them, or the binned sum convolves millions of nodes (L427).
+        import time
+        import numpy as np
+        from diive.core.plotting import kde
+        rng = np.random.default_rng(3)
+        data = rng.normal(0, 1000, 20_000)
+        x = np.linspace(-1, 1, 1000)
+        start = time.perf_counter()
+        got = kde.gaussian_kde_on_grid(data, x, 100.0)
+        self.assertLess(time.perf_counter() - start, 5.0)
+        want = kde._sum_direct(np.sort(data), x, 100.0) / (data.size * 100.0 * np.sqrt(2 * np.pi))
+        self.assertLess(np.abs(got - want).max(), 1e-12 * want.max())
 
     def test_shifted_distribution_labels_both_periods(self):
         from diive.core.plotting.shifted_distribution import ShiftedDistributionPlot

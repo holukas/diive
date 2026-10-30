@@ -44,7 +44,8 @@ def gaussian_kde_on_grid(data: np.ndarray, x: np.ndarray, bw: float) -> np.ndarr
       spaced at most half a bandwidth. Its kernel is written as a Taylor series
       around the node (Hermite polynomials), so the sums become a few
       convolutions of per-node moments. The cost grows with the grid size, not
-      with the number of samples times points.
+      with the number of samples times points. Unevenly spaced points always take
+      the direct sum.
 
     Args:
         data: Samples, finite values only.
@@ -55,6 +56,11 @@ def gaussian_kde_on_grid(data: np.ndarray, x: np.ndarray, bw: float) -> np.ndarr
     x = np.asarray(x, dtype=float)
     norm = len(data) * bw * math.sqrt(2 * math.pi)
     step = (x[-1] - x[0]) / (len(x) - 1) if len(x) > 1 else 0.0
+    # The binned sum reads the density at every k-th node, so it needs evenly spaced points.
+    # Allow the rounding of np.linspace, and far less than a bandwidth.
+    off_grid = np.abs(x - (x[0] + np.arange(len(x)) * step)).max(initial=0.0)
+    if off_grid > 1e-10 * bw + 8 * np.finfo(float).eps * np.abs(x).max(initial=0.0):
+        return _sum_direct(data, x, bw) / norm
     if step == 0:  # all points equal: one sum is enough
         return np.full(len(x), _sum_direct(data, x[:1], bw)[0] / norm)
     if step < 0:  # decreasing points (e.g. a reversed axis)
@@ -63,13 +69,26 @@ def gaussian_kde_on_grid(data: np.ndarray, x: np.ndarray, bw: float) -> np.ndarr
     lo = np.searchsorted(data, x - reach, side="left")
     hi = np.searchsorted(data, x + reach, side="right")
     k = math.ceil(2 * step / bw)  # grid nodes per point step
-    n_nodes = (len(x) - 1) * k + 2 * min(math.ceil(reach * k / step), (len(x) - 1) * k + 1)
+    n_nodes = _binned_size(data[lo.min():hi.max()], x, bw, step / k)
     # The direct sum costs one exp per pair, the binned one some 17 convolutions over the grid
     if (hi - lo).sum() <= 10 * n_nodes or n_nodes > _NODES:
         total = _sum_direct(data, x, bw, lo, hi)
     else:
         total = _sum_binned(data[lo.min():hi.max()], x, bw, step, k)
     return total / norm
+
+
+def _binned_size(data_sorted, x, bw, delta):
+    """Length of the arrays ``_sum_binned`` convolves: the nodes of the points and the samples,
+    plus the kernel's reach on either side.
+
+    Samples within reach of the points can lie far outside them (a grid narrower than the
+    data), so the nodes span the samples too.
+    """
+    lo = min(data_sorted[0], x[0]) if len(data_sorted) else x[0]
+    hi = max(data_sorted[-1], x[-1]) if len(data_sorted) else x[-1]
+    n_nodes = math.ceil((hi - lo) / delta) + 1
+    return n_nodes + 2 * min(math.ceil(_REACH * bw / delta), n_nodes)
 
 
 def _sum_direct(data_sorted, x, bw, lo=None, hi=None):
