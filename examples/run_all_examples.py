@@ -139,6 +139,7 @@ EXAMPLE_FILES = [
     'flux/lowres/flux_uncertainty.py',
     'flux/lowres/flux_ustar_detection.py',
     'flux/lowres/flux_ustar_method_comparison.py',
+    'flux/lowres/flux_ustar_data_availability.py',
     # Gap-filling
     'gapfilling/gapfill_interpolate_generous.py',
     'gapfilling/gapfill_interpolate_conservative.py',

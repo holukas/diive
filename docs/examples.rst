@@ -4,7 +4,7 @@
 Example Gallery
 ===============
 
-The 112 runnable scripts under ``examples/`` are rendered here as galleries, one per
+The 113 runnable scripts under ``examples/`` are rendered here as galleries, one per
 topic. Each page shows the full source and can be downloaded as a ``.py`` file or a
 Jupyter notebook.
 

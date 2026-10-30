@@ -123,6 +123,9 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   the per-record negative-night test lets through. Nights with fewer than `min_records` values are
   not tested. `systematic=` adds an uncertainty shared by all records of a night, e.g. of a bias
   correction, in quadrature to the standard error; it does not shrink with `n` (default 0).
+- **Example, u* threshold and data availability:** a new example shows how much NEE data a range
+  of constant u* thresholds removes, by day and by night, and the gaps the detected CUT
+  percentiles leave.
 
 ### Changed
 

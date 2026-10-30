@@ -319,6 +319,9 @@ class UstarThresholdConstantScenarios:
             scenarios. Records of *series* where USTAR was below the respective
             threshold or missing are set to missing.
 
+    Example:
+        See `examples/flux/lowres/flux_ustar_data_availability.py`.
+
     """
 
     def __init__(self, series: Series, ustar: Series, swinpot: Series):

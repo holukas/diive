@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use diive for time series processing, gap-filling, quality control, and visualization.
 
-**112 examples across 10 organized folders by functional domain.**
+**113 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -62,7 +62,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (17 examples)
+├── flux/                  # Eddy covariance flux processing (18 examples)
 │   ├── postprocessingchain/
 │   │   ├── postprocessingchain_level2.py
 │   │   ├── postprocessingchain_runchain.py
@@ -74,7 +74,7 @@ examples/
 │   │   ├── partitioning_daytime_reddyproc.py
 │   │   ├── partitioning_daytime_oneflux.py
 │   │   └── partitioning_comparison.py
-│   ├── lowres/            # Low-resolution processing (8 examples)
+│   ├── lowres/            # Low-resolution processing (9 examples)
 │   │   ├── flux_timelag_analysis.py
 │   │   ├── flux_common.py
 │   │   ├── flux_hqflux.py
@@ -82,7 +82,8 @@ examples/
 │   │   ├── flux_selfheating_production.py
 │   │   ├── flux_uncertainty.py
 │   │   ├── flux_ustar_detection.py
-│   │   └── flux_ustar_method_comparison.py
+│   │   ├── flux_ustar_method_comparison.py
+│   │   └── flux_ustar_data_availability.py
 ├── gapfilling/            # Gap-filling methods (12 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
@@ -138,7 +139,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 112 examples in parallel with up to 12 workers and reports run times and errors.
+This runs all 113 examples in parallel with up to 12 workers and reports run times and errors.
 
 ## Finding Examples
 

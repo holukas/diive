@@ -78,7 +78,7 @@ Recipe and details: [`packaging/README.md`](packaging/README.md).
 
 ### 4. Examples, notebooks, and tests
 
-- **`examples/`** — 112 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
+- **`examples/`** — 113 runnable, API-only scripts in Sphinx-Gallery format (`# %%`
   cells, no file I/O). Run one with `uv run python examples/gapfilling/gapfill_randomforest.py`.
   Catalogued in `examples/CATALOG.md`. **Never run the whole suite** during development.
 - **`notebooks/`** — workflow notebooks, for example for the flux post-processing chain and file
@@ -106,7 +106,7 @@ fast local build.
 ```
 diive/        core library + gui/                     ← the engine and its surfaces
 packaging/    PyInstaller build for the Windows exe
-examples/     112 runnable API examples
+examples/     113 runnable API examples
 notebooks/    workflow Jupyter notebooks
 tests/        unit + integration tests
 docs/         Sphinx documentation source (published on Read the Docs)

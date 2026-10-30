@@ -31,8 +31,9 @@ Measurement Uncertainty & Turbulence
 - **flux_uncertainty.py** — Random uncertainty estimation using the PAS20 method (Pastorello et al. 2020)
 - **flux_ustar_detection.py** — u* threshold detection as in ONEFlux: moving point (Papale et al. 2006) and change point (Barr et al. 2013) thresholds per year, pooled
 - **flux_ustar_method_comparison.py** — Compare the four u* detection modes and the share of nighttime NEE records each threshold removes
+- **flux_ustar_data_availability.py** — Share of NEE records kept after u* filtering over a range of constant thresholds, by day and by night (``UstarThresholdConstantScenarios``), and the gaps the CUT percentiles leave
 
-Both u* examples use ``UstarThresholdDetection``. ``mode`` selects the method: ``'oneflux'`` (default), ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Each calendar year is bootstrapped on its own data. ``run()`` returns the **VUT** (one threshold per year, p16/p50/p84 for ONEFlux) and ``get_cut_threshold()`` the **CUT** (one threshold for all years). As in ONEFlux, the VUT of a year pools the thresholds of the year and its two neighbours.
+The first two u* examples use ``UstarThresholdDetection``. ``mode`` selects the method: ``'oneflux'`` (default), ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Each calendar year is bootstrapped on its own data. ``run()`` returns the **VUT** (one threshold per year, p16/p50/p84 for ONEFlux) and ``get_cut_threshold()`` the **CUT** (one threshold for all years). As in ONEFlux, the VUT of a year pools the thresholds of the year and its two neighbours.
 
 Running Examples
 ----------------

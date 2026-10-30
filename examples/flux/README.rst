@@ -44,6 +44,7 @@ Low-Resolution Flux Processing
 - **lowres/flux_uncertainty.py** — Random uncertainty estimation (PAS20 method)
 - **lowres/flux_ustar_detection.py** — u* threshold detection as in ONEFlux (moving point and change point pooled), VUT and CUT
 - **lowres/flux_ustar_method_comparison.py** — Comparison of the u* detection modes ``oneflux``, ``oneflux_mp``, ``oneflux_cp`` and ``reddyproc``
+- **lowres/flux_ustar_data_availability.py** — Share of NEE records a u* threshold removes, by day and by night, and the gaps of the USTAR scenarios
 
 Related Documentation
 ---------------------
@@ -145,6 +146,7 @@ Running Examples
    uv run python examples/flux/lowres/flux_uncertainty.py
    uv run python examples/flux/lowres/flux_ustar_detection.py
    uv run python examples/flux/lowres/flux_ustar_method_comparison.py
+   uv run python examples/flux/lowres/flux_ustar_data_availability.py
 
    # Run all flux examples
    uv run python examples/run_all_examples.py

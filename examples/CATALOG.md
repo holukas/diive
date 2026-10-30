@@ -207,6 +207,7 @@ See: [features/README.rst](features/README.rst)
 | [**flux_uncertainty.py**](flux/lowres/flux_uncertainty.py) | Random uncertainty estimation (PAS20 method) |
 | [**flux_ustar_detection.py**](flux/lowres/flux_ustar_detection.py) | u* threshold detection as in ONEFlux (`UstarThresholdDetection`, moving point and change point pooled), VUT and CUT, bootstrap thresholds per method |
 | [**flux_ustar_method_comparison.py**](flux/lowres/flux_ustar_method_comparison.py) | Compare the u* detection modes `oneflux`, `oneflux_mp`, `oneflux_cp` and `reddyproc`, with the share of nighttime NEE records each CUT p50 removes |
+| [**flux_ustar_data_availability.py**](flux/lowres/flux_ustar_data_availability.py) | Impact of the u* threshold on data availability: share of NEE records kept by day and by night over a range of constant thresholds (`UstarThresholdConstantScenarios`), and the gaps of the CUT_16/50/84 scenarios |
 
 See: [flux/README.rst](flux/README.rst)
 

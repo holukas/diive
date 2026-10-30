@@ -20,7 +20,7 @@ Quick Links
 
 - :doc:`installation` — Installation guide
 - :doc:`getting_started` — Quick start tutorial
-- :doc:`examples` — Example gallery (112 examples)
+- :doc:`examples` — Example gallery (113 examples)
 - :doc:`flux_postprocessing` — Flux post-processing chain: methods
 - :doc:`api_reference` — API reference
 
