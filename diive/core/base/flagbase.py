@@ -64,7 +64,7 @@ _TEST_NAMES = {
     'ABSLIM': 'Absolute limits', 'TRIMLOW': 'Lower limit', 'MANUALREMOVAL': 'Manual removal',
     'HAMPEL': 'Hampel filter', 'LOCALSD': 'Local standard deviation', 'ZSCORE': 'z-score',
     'LOF': 'Local outlier factor', 'INCRZ': 'Increments z-score', 'USTAR': 'USTAR filter',
-    'NEGNIGHT': 'Negative nighttime values',
+    'NEGNIGHT': 'Negative nighttime values', 'NEGNIGHTS': 'Negative nights',
 }
 
 

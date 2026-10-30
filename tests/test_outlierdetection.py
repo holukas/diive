@@ -1352,6 +1352,65 @@ class TestNegativeNighttime(unittest.TestCase):
         plt.close(t.fig)
 
 
+class TestNegativeNights(unittest.TestCase):
+    """All records of a night shifted below zero are removed; noisy nights and daytime are not."""
+    COORDS = dict(lat=47.286417, lon=7.733750, utc_offset=1)
+
+    def _series(self):
+        from diive.preprocessing.outlier_detection.common import create_daytime_nighttime_flags
+        from diive.preprocessing.outlier_detection.negativenights import night_of
+        index = pd.date_range('2022-11-01 00:15', periods=48 * 10, freq='30min', name='TIMESTAMP_MIDDLE')
+        _, _, is_day, is_night = create_daytime_nighttime_flags(index, **self.COORDS)
+        rng = np.random.default_rng(3)
+        values = pd.Series(2.0 + rng.normal(0, 1, len(index)), index=index, name='NEE')
+        nights = night_of(index)
+        shifted = is_night.to_numpy() & np.asarray(nights == pd.Timestamp('2022-11-04'))
+        values[shifted] = -1.5 + rng.normal(0, 1, int(shifted.sum()))   # a whole night shifted below zero
+        single = index[is_night.to_numpy() & np.asarray(nights == pd.Timestamp('2022-11-06'))][5]
+        values[single] = -5.0                                         # one low value in a normal night
+        day = index[is_day.to_numpy()][3]
+        values[day] = -30.0                                           # daytime: never tested
+        return values, pd.Series(1.0, index=index), index[shifted], single, day
+
+    def test_only_the_shifted_night_is_removed(self):
+        from diive.preprocessing.outlier_detection import NegativeNights
+        values, sigma, shifted, single, day = self._series()
+        t = NegativeNights(series=values, uncertainty=sigma, z=2, **self.COORDS).run()
+        rejected = t.overall_flag[t.overall_flag == 2].index
+        self.assertEqual(list(rejected), list(shifted))
+        self.assertEqual(t.overall_flag[single], 0)
+        self.assertEqual(t.overall_flag[day], 0)
+        self.assertEqual(int(t.nights['removed'].sum()), 1)
+
+    def test_short_nights_are_not_tested(self):
+        from diive.preprocessing.outlier_detection import NegativeNights
+        values, sigma, shifted, _, _ = self._series()
+        values[shifted[3:]] = np.nan   # three values left in the shifted night
+        t = NegativeNights(series=values, uncertainty=sigma, z=2, min_records=6, **self.COORDS).run()
+        self.assertFalse((t.overall_flag == 2).any())
+
+    def test_stepwise_detector_adds_the_flag(self):
+        from diive.preprocessing.outlier_detection import StepwiseOutlierDetection
+        values, sigma, shifted, _, _ = self._series()
+        sod = StepwiseOutlierDetection(dfin=values.to_frame(), col='NEE', site_lat=self.COORDS['lat'],
+                                       site_lon=self.COORDS['lon'], utc_offset=1)
+        sod.flag_outliers_negative_nights_test(uncertainty=sigma, z=2)
+        sod.addflag()
+        self.assertEqual(list(sod.flags.columns), ['FLAG_NEE_OUTLIER_NEGNIGHTS_TEST'])
+        self.assertTrue(sod.series_hires_cleaned[shifted].isna().all())
+
+    def test_plot(self):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from diive.preprocessing.outlier_detection import NegativeNights
+        values, sigma, _, _, _ = self._series()
+        for unc in (sigma, sigma * np.nan):
+            t = NegativeNights(series=values, uncertainty=unc, z=2, showplot=True, **self.COORDS).run()
+            self.assertIsNotNone(t.fig)
+            plt.close(t.fig)
+
+
 class TestHampelTimeOfDay(unittest.TestCase):
     """by_time_of_day=True judges a value against the same time of day."""
 

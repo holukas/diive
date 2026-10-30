@@ -23,6 +23,7 @@ from diive.preprocessing.outlier_detection.localsd import LocalSD
 from diive.preprocessing.outlier_detection.lof import LocalOutlierFactor
 from diive.preprocessing.outlier_detection.manualremoval import ManualRemoval
 from diive.preprocessing.outlier_detection.negativenight import NegativeNighttime
+from diive.preprocessing.outlier_detection.negativenights import NegativeNights
 from diive.preprocessing.outlier_detection.trim import TrimLow
 from diive.preprocessing.outlier_detection.zscore import zScore, zScoreRolling
 
@@ -367,6 +368,22 @@ class StepwiseOutlierDetection:
         self._run_test(NegativeNighttime, {}, idstr=self.idstr, uncertainty=uncertainty,
                        lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset, z=z,
                        level_window=level_window, showplot=showplot, verbose=verbose)
+
+    def flag_outliers_negative_nights_test(self, uncertainty: Series | str, z: float = 2.0,
+                                           min_records: int = 6, showplot: bool = False,
+                                           verbose: bool = False):
+        """Flag all records of nights whose median lies below -z standard errors. See
+        ``NegativeNights``.
+
+        Catches nights shifted below zero as a whole, which the per-record
+        ``flag_outliers_negative_night_test`` lets through because each record lies within a few
+        uncertainties of zero. ``uncertainty`` is handled as in that test. Daytime records are
+        never flagged.
+        """
+        uncertainty = self._like_series(uncertainty, name='uncertainty')
+        self._run_test(NegativeNights, {}, idstr=self.idstr, uncertainty=uncertainty,
+                       lat=self.site_lat, lon=self.site_lon, utc_offset=self.utc_offset, z=z,
+                       min_records=min_records, showplot=showplot, verbose=verbose)
 
     def flag_outliers_hampel_test(self, window_length: int | str = 48 * 13, n_sigma: float = 5.5,
                                   n_sigma_daytime: float = None, n_sigma_nighttime: float = None,
