@@ -187,6 +187,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   and theme changes, hover, variable lists, the Overview, the Events tab, Seasonal trend and
   Spectrogram need less time. The flux chain modules load in the background after startup.
 - **Faster moving point method:** `UstarMovingPointDetection` runs about 6 times faster.
+- **Faster VM97 flags:** reading the VM97 test flags of EddyPro at Level 2 is about 9 times
+  faster, with identical flags.
 - **Examples:** the USTAR examples show `UstarThresholdDetection` and compare its four modes.
 - **Dependencies:** numba is now a direct dependency (it came with shap before). Intel Macs get
   numba below 0.63, the last versions with wheels for them.

@@ -572,6 +572,18 @@ class TestEddyProFlags(unittest.TestCase):
         # A real flag at that position is still read, so the guard is not a blanket veto.
         self.assertEqual(extract(df, 'C', 1, is_hard_flag=False).iloc[3], 1.0)
 
+    def test_text_codes_read_like_numbers(self):
+        # Codes read as text (object column) give the same flags as numeric codes,
+        # and text that is no number is not testable.
+        from diive.preprocessing.qaqc.eddyproflags import (
+            _extract_and_convert_flag_from_multidigit as extract)
+        num = pd.DataFrame({'C': [800000000, 811000000, 0, np.nan]})
+        txt = pd.DataFrame({'C': ['800000000', '811000000', '0', 'abc']}, dtype=object)
+        for position in (1, 2, 3):
+            with self.subTest(position=position):
+                pd.testing.assert_series_equal(extract(txt, 'C', position),
+                                               extract(num, 'C', position))
+
     def test_scalar_zero_code_is_flag_zero(self):
         # Finding L25: a raw code of 0 (no flag raised) must extract as flag 0.
         # It used to become NaN, because the float->string round-trip made it

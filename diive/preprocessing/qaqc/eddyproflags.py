@@ -50,7 +50,7 @@ def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
         A Series containing the extracted and converted flag (0=good, 1=soft warning, 2=bad).
     """
     flag = df[column_name].copy()
-    flag = flag.apply(pd.to_numeric, errors='coerce').astype(float)
+    flag = pd.to_numeric(flag, errors='coerce').astype(float)
     # A negative code is not a valid EddyPro flag, and the digit is read out of the
     # string form, where the minus sign shifts every position: -9999 becomes
     # '-9999.0', whose character 6 is '0', i.e. a junk sentinel read as "good".
@@ -60,7 +60,7 @@ def _extract_and_convert_flag_from_multidigit(df: DataFrame, column_name: str,
     flag = flag.replace(0, 800000000)  # 0 = no flag raised (use multi-digit value, see above)
     flag = flag.astype(str)
     flag = flag.str[int(position)]
-    flag = flag.apply(pd.to_numeric, errors='coerce')  # Use coerce to handle non-numeric characters like '.'
+    flag = pd.to_numeric(flag, errors='coerce')  # Use coerce to handle non-numeric characters like '.'
     flag = flag.replace(9, np.nan)
     if is_hard_flag:
         flag = flag.replace(1, 2)  # Hard flag 1 corresponds to bad value (2)
