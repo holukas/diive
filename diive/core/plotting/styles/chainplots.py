@@ -12,7 +12,7 @@ import numpy as np
 from pandas import Series
 
 from diive.core.plotting.styles._material_design_colors import (
-    amber, blue, bluegray, deeporange, indigo, red, teal,
+    amber, blue, bluegray, deeporange, gray, indigo, red, teal,
 )
 
 INK = bluegray(900)          # titles, axis labels
@@ -113,7 +113,9 @@ def zscore_axis(ax, series: Series, which: str = 'y') -> None:
 
 #: Colours of the overall quality flag: 0 passed, 1 passed with a warning, 2 rejected.
 QCF_COLORS = ['#26A69A', amber(600), red(500)]
-NAN_COLOR = bluegray(50)
+# Missing values in heatmaps. A neutral mid grey: a pale one is hard to tell from the pale yellow
+# in the middle of HEATMAP_CMAP.
+NAN_COLOR = gray(500)
 # Default colormap of heatmaps, fluxes included: blue for low values, red for high ones.
 HEATMAP_CMAP = 'RdYlBu_r'
 

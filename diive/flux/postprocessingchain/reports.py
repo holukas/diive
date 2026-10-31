@@ -1328,7 +1328,7 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
             r = ranks.to_numpy(dtype=float)
             # Darker is more important; ranks below top_n get a grey cell and grey text.
             vmax = top_n * 1.6
-            cmap = plt.get_cmap('Blues_r').with_extremes(over=cp.NAN_COLOR)
+            cmap = plt.get_cmap('Blues_r').with_extremes(over=cp.GRID)
             ax.imshow(np.where(r > top_n, vmax + 1, r), cmap=cmap, vmin=1, vmax=vmax,
                       aspect='auto', interpolation='none')
             for (i, j), v in np.ndenumerate(r):
