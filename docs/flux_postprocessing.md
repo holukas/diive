@@ -174,8 +174,9 @@ records left depend on the USTAR scenario and on the quality flags accepted by d
 (`daytime_accept_qcf_below`, `nighttime_accept_qcf_below`; with 2, QCF 0 and 1 are kept). They are
 what the gap-filling starts from: columns ending in `_L3.3_<scenario>_QCF`. The highest-quality
 records, QCF 0, passed every test without a warning; use them for analyses that need measured
-values only: columns ending in `_L3.3_<scenario>_QCF0`. `report_gapfilling_input` and
-`plot_gapfilling_input` show both, `report_gaps` the gaps left.
+values only: columns ending in `_L3.3_<scenario>_QCF0`. `report_gapfilling_input`,
+`plot_gapfilling_input` (heatmaps) and `plot_gapfilling_input_timeseries` show both,
+`report_gaps` the gaps left.
 
 (xgboost-gapfilling)=
 ## Level 4.1: gap-filling with XGBoost

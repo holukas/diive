@@ -1552,6 +1552,47 @@ def plot_gapfilling_input(data, units: str = '', showplot: bool = True) -> None:
         plt.show()
 
 
+def plot_gapfilling_input_timeseries(data, units: str = '', showplot: bool = True) -> None:
+    """Time series of the records the gap-filling uses and of the highest-quality records.
+
+    The same records as :func:`plot_gapfilling_input`, drawn as points over time in one colour,
+    one panel per USTAR scenario and record set, on a shared y-axis that spans all values.
+
+    Args:
+        data: Chain container after ``run_level33_*``.
+        units: Unit of the flux, for the y-axis label.
+        showplot: Call ``plt.show()`` after drawing.
+    """
+    import matplotlib.pyplot as plt
+    from diive.core.plotting.plotfuncs import nice_date_ticks
+    from diive.core.plotting.styles import chainplots as cp
+
+    g = _gapfilling_input(data)
+    scenarios = list(g['used'])
+    n = len(g['measured'])
+    rows = [(g['used'][s], s, "used for gap-filling") for s in scenarios]
+    rows += [(g['best'][s], s, "highest quality (QCF 0)") for s in scenarios]
+    fig, axes = plt.subplots(len(rows), 1, figsize=(15, 2.6 * len(rows) + 0.8), sharex=True,
+                             sharey=True, layout='constrained', squeeze=False)
+    axes = axes[:, 0]
+    for ax, (series, scenario, label) in zip(axes, rows):
+        sel = series.dropna()
+        ax.plot(sel.index, sel.to_numpy(), color=cp.INK, alpha=0.5, **cp.POINTS)
+        ax.axhline(0, color=cp.MUTED, linewidth=0.7, zorder=1)
+        cp.style_axes(ax)
+        ax.set_ylabel(units or 'flux')
+        cp.panel_label(ax, f"{_scenario_name(data, scenario)}: {label}, {len(sel):,} records "
+                           f"({100 * len(sel) / n:.0f}%)")
+    nice_date_ticks(ax=axes[-1])
+    m = data.meta
+    cp.figure_title(fig, "Records for gap-filling, per USTAR scenario, over time",
+                    f"Records the gap-filling uses (QCF below {m.daytime_accept_qcf_below} by day, "
+                    f"below {m.nighttime_accept_qcf_below} by night) and the highest-quality "
+                    f"records (QCF 0). Shares of all {n:,} records.")
+    if showplot:
+        plt.show()
+
+
 def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = '',
                           method: str | None = None, showplot: bool = True) -> None:
     """Heatmaps of the flux by quality class, and of the gap-filled result.

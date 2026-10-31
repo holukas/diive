@@ -1120,6 +1120,17 @@ class TestChainReports(unittest.TestCase):
         finally:
             plt.close('all')
 
+    def test_plot_gapfilling_input_timeseries_draws_two_rows(self):
+        import matplotlib.pyplot as plt
+        from diive.flux.postprocessingchain import plot_gapfilling_input_timeseries
+        try:
+            plot_gapfilling_input_timeseries(self.data, units='umol m-2 s-1', showplot=False)
+            fig = plt.gcf()
+            panels = [ax for ax in fig.axes if ax.lines]
+            self.assertEqual(len(panels), 2 * len(self.data.levels.filteredseries_level33_qcf))
+        finally:
+            plt.close('all')
+
     def test_nighttime_uncertainty_gives_four_uncertainties(self):
         from diive.flux.postprocessingchain import make_level32_detector, nighttime_uncertainty
         data, sod = make_level32_detector(self.data)

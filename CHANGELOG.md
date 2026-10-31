@@ -85,7 +85,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   measured records, those removed by the tests and the outlier detection, those removed by the USTAR
   filter, and the records left for gap-filling, split into QCF 0 and 1 and into day and night.
   `plot_gapfilling_input` shows the records for gap-filling and the highest-quality records (QCF 0)
-  as heatmaps, one column per scenario. `report_gaps` reports the gaps left per scenario.
+  as heatmaps, one column per scenario, and `plot_gapfilling_input_timeseries` the same records as
+  time series in one colour. `report_gaps` reports the gaps left per scenario.
 - **Gap-filling methods compared:** `report_gapfilling_comparison` gives, per USTAR scenario, the
   sums of two methods (e.g. MDS and XGBoost), their difference split into daytime and nighttime gaps
   and by gap length, and the scores of both on the same held-out records. `plot_gapfilling_comparison`
