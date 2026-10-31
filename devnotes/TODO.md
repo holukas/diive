@@ -63,3 +63,10 @@ and score the gap-filling methods on them.
 
 **Status:** idea (2026-10-30). Start, end, length and peak of the growing and respiratory
 seasons from smoothed (Savitzky-Golay) daily GPP and RECO (Liu et al. 2020).
+
+## Parallel MDS scenarios
+
+**Status:** idea (2026-10-31), for later. `run_level41_mds` fills each u* scenario one after the
+other (43 with the REF). The scenarios are independent, so running them in parallel processes
+would cut Level 4.1 by roughly the number of cores, with bitwise identical results. Adds to the
+compiled MDS loop (#443).
