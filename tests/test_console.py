@@ -276,3 +276,30 @@ class TestModuleVerbosityMakesBareCallsReachable(unittest.TestCase):
         import diive as dv
         self.assertTrue(callable(dv.set_verbosity))
         self.assertTrue(callable(dv.get_verbosity))
+
+
+class TestProgress(unittest.TestCase):
+    """`Progress` prints the first step, then at most one step per `every` seconds, and the end."""
+
+    def _run(self, verbose, times):
+        p = con.Progress("Loop", total=len(times) - 1, verbose=verbose, every=30)
+        clock = iter(times)
+        p._clock = lambda: next(clock)
+        p._t0 = 0.0
+        with con.console.capture() as cap:
+            for i in range(len(times) - 1):
+                p.step(f"item {i}")
+            p.done()
+        return cap.get()
+
+    def test_steps_are_rate_limited_and_the_end_is_reported(self):
+        out = self._run(verbose=1, times=[0, 10, 20, 35, 40, 70, 75])
+        self.assertIn("step 1 of 6 (item 0)", out)
+        self.assertNotIn("step 2 of 6", out)
+        self.assertIn("step 4 of 6 (item 3), 35 s so far", out)
+        self.assertIn("step 6 of 6 (item 5), 1 min 10 s so far", out)
+        self.assertIn("Loop: 6 of 6 done in 1 min 15 s", out)
+
+    def test_it_is_shown_at_the_errors_only_level_and_silent_at_zero(self):
+        self.assertIn("step 1 of 1", self._run(verbose=1, times=[0, 1]))
+        self.assertEqual(self._run(verbose=0, times=[0, 1]).strip(), "")

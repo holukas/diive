@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
-from diive.core.utils.console import detail, info
+from diive.core.utils.console import Progress, detail, info
 
 #: Settings of the model that are not XGBoost booster parameters.
 _NOT_BOOSTER = ('n_estimators', 'early_stopping_rounds', 'shap_max_rows', 'test_size', 'below_zero')
@@ -128,7 +128,10 @@ def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: d
     seed = random_state if random_state is not None else model_kwargs.get('random_state')
 
     curves, mae, rows = {}, {}, {}
+    progress = Progress(f"Tree selection by blocked cross-validation, {target_col}", len(pools),
+                        verbose=verbose)
     for label, df in pools.items():
+        progress.step(label)
         df = df.dropna()
         info(f"Blocked cross-validation for {label}: {len(df):,} records, {n_folds} folds of "
              f"{block_days:g}-day blocks, up to {max_trees} trees ...", verbose=verbose)
@@ -141,6 +144,7 @@ def select_n_estimators_blocked_cv(pools: dict, target_col: str, model_kwargs: d
         rows[label] = (len(df), float(df[target_col].var()))
         detail(f"{label}: minimum RMSE {curves[label].min():.3f} after "
                f"{int(curves[label].argmin()) + 1} trees", verbose=verbose)
+    progress.done()
 
     curves = DataFrame(curves, index=pd.RangeIndex(1, max_trees + 1, name='trees'))
     relative = curves / curves.min()

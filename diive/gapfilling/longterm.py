@@ -19,7 +19,7 @@ from xgboost import XGBRegressor
 from diive.core.ml.common import MlRegressorGapFillingBase
 from diive.core.plotting.styles.LightTheme import colorwheel_48
 from diive.core.times.neighbors import neighboring_years
-from diive.core.utils.console import detail, info
+from diive.core.utils.console import Progress, detail, info
 
 #: Seed of the long-term models when the caller gives no ``random_state``.
 DEFAULT_RANDOM_STATE = 42
@@ -297,11 +297,15 @@ class LongTermGapFillingBase:
     def reduce_features_across_years(self, shap_threshold_factor: float = 0.5):
         """Reduce features and detect features that were selected in at least one year."""
         features_reduced_across_years = []
+        progress = Progress(f"Feature reduction, {self.target_col}", len(self._yearpools),
+                            verbose=self.verbose)
         for year, year_dict in self._yearpools.items():
+            progress.step(str(year))
             info(f"Reducing features for {year} ...", verbose=self.verbose)
             rfts = self.results_yearly_[year]
             rfts.reduce_features(shap_threshold_factor=shap_threshold_factor)
             features_reduced_across_years.append(rfts.accepted_features_)
+        progress.done()
 
         # Flatten common_features (list of lists)
         features_reduced_across_years = [item for sublist in features_reduced_across_years for item in sublist]
@@ -331,12 +335,16 @@ class LongTermGapFillingBase:
 
     def fillgaps(self):
         """Train the model for each year and fill its gaps."""
+        progress = Progress(f"Training and gap-filling, {self.target_col}", len(self._yearpools),
+                            verbose=self.verbose)
         for year, _df in self._yearpools.items():
+            progress.step(str(year))
             info(f"Training model for {year} ...", verbose=self.verbose)
             rfts = self.results_yearly_[year]  # Get instance with model from dict
             rfts.trainmodel(showplot_scores=False, showplot_importance=False)
             info(f"Gap-filling {year} ...", verbose=self.verbose)
             rfts.fillgaps(showplot_scores=False, showplot_importance=False)
+        progress.done()
         self._collect()
 
     def showplot_feature_ranks_per_year(self, title: str = None, subtitle: str = None):

@@ -239,3 +239,67 @@ def vspace(text: str = "", *, verbose: int | bool | None = None,
     """
     if _vlevel(verbose) >= min_level and not _is_jupyter():
         console.print(text)
+
+
+def _elapsed(seconds: float) -> str:
+    """Format a duration as ``'45 s'``, ``'3 min 05 s'`` or ``'1 h 02 min'``."""
+    s = int(round(seconds))
+    if s < 60:
+        return f"{s} s"
+    if s < 3600:
+        return f"{s // 60} min {s % 60:02d} s"
+    return f"{s // 3600} h {(s % 3600) // 60:02d} min"
+
+
+class Progress:
+    """Rate-limited progress lines for a long loop: which step, how far, how long so far.
+
+    Prints the first step, then a step only when ``every`` seconds have passed since the
+    last line, and a closing line from :meth:`done`. The lines appear from
+    ``VERBOSE_ERROR`` (1) on, so a run that keeps the console quiet still shows that it
+    is working and where; ``VERBOSE_SILENT`` (0) switches them off.
+
+    Example:
+        >>> p = Progress("Feature reduction", total=len(years), verbose=1)
+        >>> for year in years:
+        ...     p.step(str(year))
+        ...     reduce(year)
+        >>> p.done()
+    """
+
+    def __init__(self, label: str, total: int, *, verbose: int | bool | None = None,
+                 every: float = 30.0, min_level: int = VERBOSE_ERROR):
+        """
+        Args:
+            label: What the loop does, the start of every line.
+            total: Number of steps.
+            verbose: Verbosity of the caller.
+            every: Least number of seconds between two step lines.
+            min_level: Least verbosity at which the lines appear.
+        """
+        import time
+        self._clock = time.monotonic
+        self.label = label
+        self.total = total
+        self.every = every
+        self._show = _vlevel(verbose) >= min_level
+        self._i = 0
+        self._t0 = self._clock()
+        self._last = None
+
+    def step(self, what: str = '') -> None:
+        """Count the step that starts now; print it if ``every`` seconds have passed."""
+        self._i += 1
+        now = self._clock()
+        if self._show and (self._last is None or now - self._last >= self.every):
+            what = f" ({what})" if what else ''
+            console.print(f"  [cyan]>[/cyan] {self.label}: step {self._i} of {self.total}{what}, "
+                          f"{_elapsed(now - self._t0)} so far")
+            self._last = now
+
+    def done(self, what: str = '') -> None:
+        """Print the closing line with the total time."""
+        if self._show:
+            what = f", {what}" if what else ''
+            console.print(f"  [green]v[/green] {self.label}: {self._i} of {self.total} done in "
+                          f"{_elapsed(self._clock() - self._t0)}{what}")

@@ -87,6 +87,10 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   `plot_gapfilling_input` shows the records for gap-filling and the highest-quality records (QCF 0)
   as heatmaps, one column per scenario, and `plot_gapfilling_input_timeseries` the same records as
   time series in one colour. `report_gaps` reports the gaps left per scenario.
+- **Progress of long gap-filling runs:** the feature reduction, the tree selection by blocked
+  cross-validation and the training and gap-filling of the long-term models report which step
+  they are on and the time so far, at most every 30 seconds, from `verbose=1` on (before, a run at
+  `verbose=1` showed nothing for many minutes). The helper is `diive.core.utils.console.Progress`.
 - **Gap-filling methods compared:** `report_gapfilling_comparison` gives, per USTAR scenario, the
   sums of two methods (e.g. MDS and XGBoost), their difference split into daytime and nighttime gaps
   and by gap length, and the scores of both on the same held-out records. `plot_gapfilling_comparison`
