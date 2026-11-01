@@ -101,13 +101,13 @@ class UstarReddyProcDetection:
        temperature class: 7 temperature classes of equal size, equal
        temperatures (within 1e-8) kept together (DP:968-1000). A class is used
        only if ``|cor(USTAR, TA)| < 0.5`` (DP:499-506). Within it, 20 u*
-       classes of at least ``floor(n / 20)`` records, equal u* (within 1e-14)
-       kept together, a short rest merged into the last class, ids above 20
-       set to 20 (DP:924-1053). If the first class has a mean u* above
+       classes (``ustar_classes``) of at least ``floor(n / 20)`` records, equal
+       u* (within 1e-14) kept together, a short rest merged into the last
+       class, ids above 20 set to 20 (DP:924-1053). If the first class has a mean u* above
        0.2 m s-1 the temperature class gives no threshold (DP:532-538).
     4. Moving point test Fw2 (DP:1129-1167): the threshold is the mean u* of
        the first class whose mean NEE, and that of the next class, reach 95 %
-       of the mean NEE of the following 10 classes. At least 3 classes must
+       of the mean NEE of the following 10 classes (``plateau_fwd``). At least 3 classes must
        follow.
     5. Season: median over the temperature classes, missing if fewer than
        20 % of them gave a value (DP:251-256). Year: maximum over its seasons
@@ -186,6 +186,8 @@ class UstarReddyProcDetection:
                  ustar_col: str,
                  swin_col: str,
                  season_start_months=(3, 6, 9, 12),
+                 ustar_classes: int = N_USTAR_CLASSES,
+                 plateau_fwd: int = PLATEAU_FWD,
                  verbose: int = 1):
         """
         Args:
@@ -199,13 +201,26 @@ class UstarReddyProcDetection:
                 filter.
             season_start_months: Months in which a season starts
                 (REddyProc ``usCreateSeasonFactorMonth`` ``startMonth``).
+            ustar_classes: Number of u* classes per temperature class
+                (REddyProc ``usControlUstarSubsetting`` ``UstarClasses``,
+                default 20).
+            plateau_fwd: Number of following u* classes the plateau test
+                compares with (REddyProc ``usControlUstarEst``
+                ``ustPlateauFwd``, default 10). The plateau test compares a
+                fixed number of classes, so more classes or a shorter window
+                compare with a narrower u* range: on nighttime NEE that keeps
+                rising with u*, the threshold then comes out lower.
             verbose: Console verbosity (0 silent, 1 errors, 2 progress, 3 debug).
         """
         if not isinstance(df.index, pd.DatetimeIndex):
             raise TypeError("'df' must have a DatetimeIndex.")
         if len(df) < 2:
             raise ValueError("'df' needs at least two records.")
+        if int(ustar_classes) < 2 or int(plateau_fwd) < 1:
+            raise ValueError("'ustar_classes' must be at least 2 and 'plateau_fwd' at least 1.")
         self.verbose = verbose
+        self.ustar_classes = int(ustar_classes)
+        self.plateau_fwd = int(plateau_fwd)
         self.cols = dict(nee=nee_col, ta=ta_col, ustar=ustar_col, swin=swin_col)
         missing = [c for c in self.cols.values() if c not in df.columns]
         if missing:
@@ -280,8 +295,8 @@ class UstarReddyProcDetection:
 
         def run_subset(p):
             out = K.estimate_subset(
-                nee[p], ust[p], ta[p], N_TA_CLASSES, N_USTAR_CLASSES, MIN_RECORDS_SEASON,
-                MIN_RECORDS_TEMP, CORR_CHECK, FIRST_USTAR_MEAN_CHECK, PLATEAU_FWD,
+                nee[p], ust[p], ta[p], N_TA_CLASSES, self.ustar_classes, MIN_RECORDS_SEASON,
+                MIN_RECORDS_TEMP, CORR_CHECK, FIRST_USTAR_MEAN_CHECK, self.plateau_fwd,
                 PLATEAU_CRIT, MIN_N_USTAR_PLATEAU)
             if out[-1] == K.ERR_TEMP_BREAK:
                 raise ValueError(

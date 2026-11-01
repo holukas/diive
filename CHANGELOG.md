@@ -20,7 +20,10 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 - **Change point method:** `UstarChangePointDetection` ports the ONEFlux change point detection
   (Barr et al. 2013) and gives the same thresholds as ONEFlux.
 - **REddyProc method:** `UstarReddyProcDetection` ports the REddyProc 1.3.4 USTAR threshold
-  estimation and its bootstrap, with the same results as REddyProc.
+  estimation and its bootstrap, with the same results as REddyProc. `ustar_classes` and
+  `plateau_fwd` set REddyProc's `UstarClasses` and `ustPlateauFwd` (defaults 20 and 10). More u*
+  classes or a shorter plateau window make the test compare a narrower u* range and give lower
+  thresholds where nighttime NEE keeps rising with u*.
 - **ONEFlux random draws:** `random_state='oneflux'` draws the change point resamples as ONEFlux
   does, so the change point thresholds equal those of ONEFlux.
 - **Nighttime-only USTAR filtering:** `nighttime_only=True` in the Level 3.3 functions, the USTAR

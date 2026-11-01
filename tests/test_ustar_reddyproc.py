@@ -222,6 +222,18 @@ class TestAgainstReddyProc(unittest.TestCase):
         np.testing.assert_array_equal(self.det17.boot_samples_.to_numpy()[1:],
                                       self.fx['lae2017_boot_rows'])
 
+    def test_ustar_classes_and_plateau_window(self):
+        # Native REddyProc 1.3.4 on the 2017 records with
+        # usControlUstarSubsetting(UstarClasses = 30L), usControlUstarEst(ustPlateauFwd = 9L)
+        from diive.flux.lowres.ustar_reddyproc_detection import UstarReddyProcDetection
+        r_ustar = [0.4193706, 0.4193706, 0.22939925, 0.4193706, 0.25560075,
+                   0.208008833333333, 0.4193706]
+        det = UstarReddyProcDetection(self.df17, **LAE_COLS, ustar_classes=30, plateau_fwd=9,
+                                      verbose=0).run()
+        np.testing.assert_allclose(det.thresholds_['ustar'].to_numpy(), r_ustar, rtol=1e-12)
+        with self.assertRaises(ValueError):
+            UstarReddyProcDetection(self.df17, **LAE_COLS, ustar_classes=1, verbose=0)
+
     def test_end_timestamps_give_same_result(self):
         from diive.flux.lowres.ustar_reddyproc_detection import UstarReddyProcDetection
         df = self.df17.copy()
