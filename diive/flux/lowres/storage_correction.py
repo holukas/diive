@@ -45,7 +45,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
                  screen_storage_term: bool = False,
                  storage_screening: dict | None = None,
                  concentration_col: str | None = None,
-                 restart_screening: dict | None = None):
+                 restart_screening: dict | None = None,
+                 concentration_valid: str | pd.Series | None = None):
         """Initialize the storage corrector.
 
         Args:
@@ -107,10 +108,25 @@ class FluxStorageCorrectionSinglePointEddyPro:
                 holds before a gap (``before_gaps``, True): an analyser losing its signal can
                 drift away from the real concentration, and the jump back falls into the gap, so
                 the records before the gap that are not within the band are discarded too. A
-                gap is at least ``min_gap`` (1) missing records. Needs
+                gap is at least ``min_gap`` (1) missing records. With ``skip_after_gaps``
+                (0) set to n, the concentration of the first n records after each gap counts
+                as missing too, for an analyser that is known to return slowly. Needs
                 ``gapfill_storage_term=True``. Default None (no restart screening).
             restart_screening: Settings that replace the defaults above, e.g.
-                ``{'n_sigma': 4, 'max_records': 24}`` or ``{'before_gaps': False}``.
+                ``{'n_sigma': 4, 'max_records': 24}``, ``{'before_gaps': False}`` or
+                ``{'skip_after_gaps': 3}``.
+            concentration_valid: Which concentration readings to use, as a boolean column of
+                ``df`` or a boolean Series (True = valid). A reading marked False counts as
+                missing: the storage values that use it (its own and that of the next record)
+                are discarded (flag 3), and the restart screening treats it as part of a gap.
+                Where a run of such storage values lies between two valid readings, the run is
+                replaced by its mean: the measured values sum to the change between the two
+                valid readings, so the invalid ones cancel out and the sum is kept. Other runs
+                are filled with the rolling median. Use it for readings known to be wrong, e.g. an open-path analyser
+                with a wet or blocked optical path (high AGC, rain), which can read tens of
+                ppm too high and return to the real concentration only after the gap; the
+                return would count as a one-sided storage flux. Records without a value in
+                the mask count as valid. Needs ``concentration_col``. Default None.
 
         Attributes:
             results: DataFrame with corrected flux and gap-filling info.
@@ -125,7 +141,9 @@ class FluxStorageCorrectionSinglePointEddyPro:
             storage_restarts_: Timestamps of the first record after each gap whose
                 concentration had not recovered (a restart with a transient).
             storage_discarded_: Timestamps of the measured storage values discarded after
-                the restarts.
+                the restarts, and where they use an invalid concentration reading.
+            storage_invalid_: Timestamps of the concentration readings set aside by
+                ``concentration_valid`` and ``skip_after_gaps``.
         """
         self.df = df.copy()
         self.fluxcol = fluxcol
@@ -185,10 +203,18 @@ class FluxStorageCorrectionSinglePointEddyPro:
                                  "storage values must be filled, or their flux records are lost.")
         self.concentration_col = None if set_storage_to_zero else concentration_col
         self.restart_screening = {'min_gap': 1, 'window_days': 7, 'n_sigma': 3.0,
-                                  'max_records': 48, 'before_gaps': True,
+                                  'max_records': 48, 'before_gaps': True, 'skip_after_gaps': 0,
                                   **(restart_screening or {})}
+        if concentration_valid is not None and not set_storage_to_zero:
+            if self.concentration_col is None:
+                raise ValueError("concentration_valid needs a concentration_col.")
+            if isinstance(concentration_valid, str) and concentration_valid not in df.columns:
+                raise KeyError(f"concentration_valid={concentration_valid!r} not found in df.")
+        self.concentration_valid = None if set_storage_to_zero else concentration_valid
         self.storage_restarts_ = pd.DatetimeIndex([])
         self.storage_discarded_ = pd.DatetimeIndex([])
+        self.storage_invalid_ = pd.DatetimeIndex([])
+        self._bridged = pd.Series(dtype=float)
 
         # Name of gapfilled storage column and its flag
         self.gapfilled_strgcol = None
@@ -305,7 +331,8 @@ class FluxStorageCorrectionSinglePointEddyPro:
             if self.concentration_col is not None:
                 n_discarded = int((fluxavailable[self.flag_isgapfilled] == 3).sum())
                 info(f"Restarts: {n_discarded:,} storage value(s) at measured fluxes discarded "
-                     f"after {len(self.storage_restarts_):,} analyser restart(s) and filled")
+                     f"after {len(self.storage_restarts_):,} analyser restart(s) or at "
+                     f"{len(self.storage_invalid_):,} invalid concentration reading(s), and filled")
             info(f"Output corrected flux: {n_flux_corrected:,}  ({n_isorig} original + {n_isfilled} gap-filled)")
 
             # Statistics if gap-filled values exist
@@ -383,15 +410,35 @@ class FluxStorageCorrectionSinglePointEddyPro:
         s = self.restart_screening
         strg = self._results[self.strgcol]
         conc = self.df[self.concentration_col].reindex(strg.index).astype(float)
+        measured = conc.notna()
+        if self.concentration_valid is not None:
+            conc = conc.where(self._concentration_valid_mask(strg.index))
+
+        def gap_ends(missing):
+            run_len = missing.groupby((missing != missing.shift()).cumsum()).transform('size')
+            return run_len, (~missing & missing.shift(1, fill_value=False)
+                             & (run_len.shift(1, fill_value=0) >= s['min_gap']))
+
+        missing = conc.isna()
+        run_len, gap_end = gap_ends(missing)
+        if int(s['skip_after_gaps']) > 0:
+            skip = np.zeros(len(conc), dtype=bool)
+            miss = missing.to_numpy()
+            for start in np.flatnonzero(gap_end.to_numpy()):
+                for i in range(start, min(start + int(s['skip_after_gaps']), len(conc))):
+                    if miss[i]:
+                        break
+                    skip[i] = True
+            conc = conc.where(~skip)
+            missing = conc.isna()
+            run_len, gap_end = gap_ends(missing)
+        # Readings the mask or the skip set aside. The storage value of such a record and that of
+        # the next record use the reading, so both are discarded below.
+        invalid = measured & missing
+
         ref, scale = self._time_of_day_reference(conc, int(s['window_days']))
         # Without a reference (too few days) the record cannot be judged and counts as recovered.
         recovered = ((conc - ref).abs() <= s['n_sigma'] * scale) | ref.isna() | scale.isna()
-
-        missing = conc.isna()
-        run_id = (missing != missing.shift()).cumsum()
-        run_len = missing.groupby(run_id).transform('size')
-        gap_end = (~missing & missing.shift(1, fill_value=False)
-                   & (run_len.shift(1, fill_value=0) >= s['min_gap']))
 
         miss, ok = missing.to_numpy(), recovered.to_numpy()
         discard = np.zeros(len(conc), dtype=bool)
@@ -419,15 +466,47 @@ class FluxStorageCorrectionSinglePointEddyPro:
                     break
             else:  # neither recovered nor another gap within max_records
                 n_capped += 1
+        uses_invalid = (invalid | invalid.shift(1, fill_value=False)) & strg.notna()
+        discard |= uses_invalid.to_numpy()
         discard &= strg.notna().to_numpy()
+        self._bridged = self._bridge_invalid(strg, conc, uses_invalid)
         self.storage_restarts_ = strg.index[restarts]
         self.storage_discarded_ = strg.index[discard]
+        self.storage_invalid_ = strg.index[invalid.to_numpy()]
+        if len(self.storage_invalid_):
+            info(f"Storage term {self.strgcol}: {len(self.storage_invalid_):,} reading(s) of "
+                 f"{self.concentration_col} set aside as invalid")
         info(f"Storage term {self.strgcol}: {len(self.storage_restarts_):,} analyser restart(s) "
              f"after a gap in {self.concentration_col}; {len(self.storage_discarded_):,} storage "
-             f"value(s) discarded where the concentration was off next to a gap")
+             f"value(s) discarded where the concentration was off or invalid next to a gap")
         if n_capped:
             warn(f"Storage term {self.strgcol}: after {n_capped} restart(s) the concentration had "
                  f"not recovered within {s['max_records']} records; the screening stopped there.")
+
+    @staticmethod
+    def _bridge_invalid(strg: pd.Series, conc: pd.Series, uses_invalid: pd.Series) -> pd.Series:
+        """Replacement values for the storage values that use invalid readings, where the stretch
+        lies between two valid readings.
+
+        Over a run of consecutive storage values, the measured values sum to the concentration
+        change from the reading before the run to its last reading. If both of these are valid,
+        the invalid readings in between cancel out of the sum, so the run is replaced by its mean
+        (as a linear interpolation of the concentration would give). Runs next to a gap, where one
+        end is not a valid reading, are left to the rolling median.
+        """
+        run_id = (uses_invalid != uses_invalid.shift()).cumsum()
+        out = []
+        for _, run in strg[uses_invalid].groupby(run_id[uses_invalid]):
+            i, j = strg.index.get_loc(run.index[0]), strg.index.get_loc(run.index[-1])
+            if i > 0 and pd.notna(conc.iloc[i - 1]) and pd.notna(conc.iloc[j]):
+                out.append(pd.Series(run.mean(), index=run.index))
+        return pd.concat(out) if out else pd.Series(dtype=float)
+
+    def _concentration_valid_mask(self, index: pd.DatetimeIndex) -> pd.Series:
+        """``concentration_valid`` on ``index``; records without a value in it count as valid."""
+        v = self.df[self.concentration_valid] if isinstance(self.concentration_valid, str) \
+            else self.concentration_valid
+        return v.reindex(index).astype('boolean').fillna(True).astype(bool)
 
     @staticmethod
     def _time_of_day_reference(conc: pd.Series, window_days: int) -> tuple[pd.Series, pd.Series]:
@@ -629,6 +708,12 @@ class FluxStorageCorrectionSinglePointEddyPro:
         replacement = self._screened_block_means()
         self.storage_replaced_ = replacement.index
         strg_series[self.storage_replaced_] = replacement
+        # Stretches over invalid concentration readings between two valid ones: their mean (flag 3).
+        bridged = getattr(self, '_bridged', pd.Series(dtype=float))
+        if len(bridged):
+            strg_series[bridged.index] = bridged
+            info(f"Storage term {self.strgcol}: {len(bridged):,} value(s) over invalid readings "
+                 f"between two valid ones replaced by the mean of their stretch")
         if len(self.storage_replaced_):
             info(f"Storage term {self.strgcol}: {len(self.storage_replaced_):,} value(s) replaced by "
                  f"the mean of their block (spikes and one record on either side)")

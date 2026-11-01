@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pandas as pd
+
 from diive.core.utils.console import rule
 from diive.flux.postprocessingchain.container import FluxLevelData
 from diive.flux.postprocessingchain.levels._qcf import finalize_level
@@ -59,6 +61,7 @@ def run_level31(
         storage_screening: dict | None = None,
         concentration_col: str | None = None,
         restart_screening: dict | None = None,
+        concentration_valid: str | pd.Series | None = None,
 ) -> FluxLevelData:
     """
     Level-3.1: Apply single-point storage correction and compute the L3.1 QCF.
@@ -127,7 +130,14 @@ def run_level31(
             concentration and return to it over hours; the return would count as a one-sided
             storage flux. Needs ``gapfill_storage_term=True``. Default None.
         restart_screening: Settings that replace the defaults of the restart screening, e.g.
-            ``{'n_sigma': 4}``. See ``FluxStorageCorrectionSinglePointEddyPro``.
+            ``{'n_sigma': 4}`` or ``{'skip_after_gaps': 3}`` (the concentration of the first 3
+            records after each gap counts as missing). See
+            ``FluxStorageCorrectionSinglePointEddyPro``.
+        concentration_valid: A boolean column of the input data, or a boolean Series, that
+            marks the concentration readings to use (True = valid). Readings marked False count as missing: the storage
+            values that use them are discarded and filled (flag 3). For readings known to be
+            wrong, e.g. an open-path analyser with a wet or blocked optical path. Needs
+            ``concentration_col``. Default None.
 
     Returns:
         Updated FluxLevelData; see the field list above for what is populated.
@@ -158,6 +168,7 @@ def run_level31(
         storage_screening=storage_screening,
         concentration_col=concentration_col,
         restart_screening=restart_screening,
+        concentration_valid=concentration_valid,
     )
     level31.storage_correction()
 

@@ -28,7 +28,8 @@ records, times the height of the air column below. It is only as good as the con
 `run_level31` can screen it in two steps before it is added. The values both steps remove are
 filled with a rolling median, as missing values are, so every measured flux keeps a storage term.
 The flag column `FLAG_..._ISFILLED` records what happened to each value: 0 measured, 1 filled
-because missing, 2 replaced by a spike block mean, 3 discarded next to a gap and filled.
+because missing, 2 replaced by a spike block mean, 3 discarded next to a gap or at an invalid
+concentration reading and filled.
 
 (storage-restarts)=
 ### Next to gaps in the concentration
@@ -49,6 +50,28 @@ storage values up to and including the first normal record are discarded: the fi
 still uses the concentration before it. Before a gap (`before_gaps`, on by default), the records
 outside the band are discarded. At most `max_records` (48) records are discarded per gap. Settings
 go into `restart_screening`.
+
+Some readings are known to be wrong before any test. An open-path analyser with a wet or blocked
+optical path can read tens of ppm too high. The episode usually ends in a gap, and after the gap the
+reading returns to the real concentration over a few records. That decay is slow enough to stay
+inside the band, so the screening above accepts it, and it enters the storage term as a one-sided
+flux. Two options handle this:
+
+- `concentration_valid`: a boolean column of the input (True = valid). Readings marked False count
+  as missing. The storage values that use them, their own and that of the next record, are
+  discarded (flag 3), and the screening above treats them as part of a gap. Where a run of such
+  values lies between two valid readings, it is replaced by its mean: the measured values of the
+  run sum to the change between the two valid readings, so the invalid readings cancel out and the
+  sum is kept, as with a linear interpolation of the concentration. A run next to a gap is filled
+  with the rolling median; filling all of them that way would add the positive median of the night
+  to the sum. Build the
+  mask from what marks the problem at the site, e.g. the AGC of an LI-7500, rain in the previous
+  hours, or saturated air.
+- `restart_screening={'skip_after_gaps': n}`: the first n readings after each gap count as missing
+  too.
+
+`storage_invalid_` lists the readings set aside. Check the cumulative storage term again with
+`plot_screening`.
 
 Check the result with `plot_screening`: the cumulative storage term at measured fluxes should
 stay near zero over a year. What remains of a drift usually lies in periods where the analyser was

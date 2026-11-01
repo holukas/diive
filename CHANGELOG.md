@@ -250,6 +250,16 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   gap was not, and at CH-LAE this added up to −150 gC m-2 over ten years. Settings in
   `restart_screening`; `storage_restarts_` and `storage_discarded_` list what was found, and
   `screening_summary` and `plot_screening` report it.
+- **Invalid concentration readings for the storage term:** `concentration_valid` (a boolean column
+  or Series, True = valid) in `FluxStorageCorrectionSinglePointEddyPro` and `run_level31` marks
+  readings known to be wrong. They count as missing: the storage values that use them are discarded
+  and filled (flag 3), and `storage_invalid_` lists them. `restart_screening={'skip_after_gaps': n}`
+  also sets aside the first n readings after each gap. A run of discarded values between two valid
+  readings is replaced by its mean, which keeps its sum; runs next to a gap get the rolling median.
+  An open-path analyser with a wet optical path can read tens of ppm high and return only after the
+  gap, a decay that the band of the restart screening accepts. At CH-LAE the LI-7500 storage term
+  summed to −25 to −196 gC m-2 per year; with AGC above 55, rain in the previous 3 h, RH ≥ 99.5 %
+  and 3 records after each gap set aside it sums to −5 to +39 (mean +13).
 - **Hampel plot title:** names what was tested (values or double differences, per time of day or
   not), so two Hampel tests on one series can be told apart.
 - **Outlier overview:** `showplot_overview` puts its legend below the figure, where a second legend

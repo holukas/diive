@@ -1598,6 +1598,87 @@ class TestStorageRestarts(unittest.TestCase):
             FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
                                                     gapfill_storage_term=False,
                                                     concentration_col='CO2_MOLAR_DENSITY')
+        with self.assertRaises(ValueError):
+            FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                    concentration_valid=df['FC'].notna())
+        with self.assertRaises(KeyError):
+            FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                    concentration_col='CO2_MOLAR_DENSITY',
+                                                    concentration_valid='VALID_X')
+
+
+class TestStorageInvalidConcentration(unittest.TestCase):
+    """concentration_valid and skip_after_gaps set aside wrong concentration readings."""
+
+    H = 40.0
+
+    def _df(self):
+        """20 days of a concentration with a daily cycle. Records 400-405 read 20 mmol m-3 high
+        (a wet optical path), then a 4-record gap, then the reading returns from 10 high over 3
+        records. The band of the restart screening is wide enough to accept the return."""
+        import numpy as np
+        import pandas as pd
+        rng = np.random.default_rng(5)
+        index = pd.date_range('2022-07-01 00:15', periods=48 * 20, freq='30min', name='TIMESTAMP_MIDDLE')
+        hour = index.hour + index.minute / 60
+        conc = pd.Series(16.5 + 0.8 * np.cos(2 * np.pi * (hour - 5) / 24) + rng.normal(0, 0.05, len(index)),
+                         index=index)
+        conc.iloc[400:406] += 20
+        conc.iloc[406:410] = np.nan
+        conc.iloc[410:413] += [10, 4, 1]
+        conc.iloc[600:604] += [20, 25, 25, 20]  # a wet episode without a gap
+        strg = self.H * conc.diff() * 1000 / 1800
+        valid = pd.Series(True, index=index)
+        valid.iloc[400:406] = False
+        valid.iloc[600:604] = False
+        return pd.DataFrame({'FC': rng.normal(-5, 2, len(index)), 'SC_SINGLE': strg,
+                             'CO2_MOLAR_DENSITY': conc, 'CONC_VALID': valid}, index=index)
+
+    def _run(self, skip=0, **kwargs):
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df = self._df()
+        # n_sigma 1000: the band of the restart screening alone accepts every reading.
+        sc = FluxStorageCorrectionSinglePointEddyPro(
+            df=df, fluxcol='FC', basevar='CO2', concentration_col='CO2_MOLAR_DENSITY',
+            restart_screening={'n_sigma': 1000, 'skip_after_gaps': skip}, **kwargs)
+        sc.storage_correction()
+        return df, sc
+
+    def test_stretch_between_valid_readings_keeps_its_sum(self):
+        df, sc = self._run(concentration_valid='CONC_VALID')
+        r = sc.results
+        block = df.index[600:605]  # the storage values that use readings 600-603
+        self.assertTrue((r.loc[block, sc.flag_isgapfilled] == 3).all())
+        self.assertAlmostEqual(r.loc[block, sc.gapfilled_strgcol].sum(), df.loc[block, 'SC_SINGLE'].sum())
+        self.assertTrue((r.loc[block, sc.gapfilled_strgcol].abs() < 5).all())
+
+    def test_invalid_readings_are_set_aside(self):
+        df, sc = self._run(concentration_valid='CONC_VALID')
+        self.assertTrue(set(df.index[400:406]) | set(df.index[600:604]) == set(sc.storage_invalid_))
+        # Their storage values use them and are discarded and filled (record 406 is in the gap).
+        self.assertTrue(set(df.index[400:406]) <= set(sc.storage_discarded_))
+        self.assertTrue((sc.results.loc[df.index[400:406], sc.flag_isgapfilled] == 3).all())
+
+    def test_skip_after_gaps(self):
+        df, sc = self._run(skip=3, concentration_valid='CONC_VALID')
+        self.assertTrue(set(df.index[410:413]) <= set(sc.storage_invalid_))
+        self.assertTrue(set(df.index[411:414]) <= set(sc.storage_discarded_))
+        s = sc.screening_summary()
+        self.assertLess(abs(s['sum_used']), 0.2 * abs(s['sum_unscreened']))
+
+    def test_all_valid_changes_nothing(self):
+        import pandas as pd
+        from diive.flux.lowres.storage_correction import FluxStorageCorrectionSinglePointEddyPro
+        df = self._df()
+        a = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                    concentration_col='CO2_MOLAR_DENSITY')
+        a.storage_correction()
+        b = FluxStorageCorrectionSinglePointEddyPro(df=df, fluxcol='FC', basevar='CO2',
+                                                    concentration_col='CO2_MOLAR_DENSITY',
+                                                    concentration_valid=pd.Series(True, index=df.index))
+        b.storage_correction()
+        self.assertTrue(a.results.equals(b.results))
+        self.assertEqual(len(b.storage_invalid_), 0)
 
 
 
