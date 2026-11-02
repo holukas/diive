@@ -8611,6 +8611,34 @@ def test_surface3d_export_state_cleared_when_render_shows_nothing(app, monkeypat
     assert xyz_tab._grid_height is None and xyz_tab._grid_style is None
 
 
+def test_surfacexyz_lost_role_does_not_repeat_a_kept_role(app, monkeypatch):
+    # A data push keeps each role whose column is still there (L338). A role that lost
+    # its column is seeded again, but never to a column a kept role holds (L426): by
+    # position it took 'b', which X already shows.
+    pytest.importorskip("pyvista")
+    import numpy as np
+
+    _stub_pyvista_canvas(monkeypatch)
+    from diive.gui.tabs.surfacexyz import SurfaceXYZTab
+
+    rng = np.random.RandomState(0)
+    idx = pd.date_range("2024-01-01", periods=300, freq="30min", name="TIMESTAMP_MIDDLE")
+    df = pd.DataFrame(rng.rand(len(idx), 4), columns=list("abcd"), index=idx)
+    tab = SurfaceXYZTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    QApplication.processEvents()
+    combos = tab.picker.combos()
+    for key, col in (("x", "b"), ("y", "c"), ("z", "d")):
+        combos[key].setCurrentText(col)
+    QApplication.processEvents()
+    assert tab.picker.picks() == {"x": "b", "y": "c", "z": "d"}
+
+    tab.on_data_loaded(df.drop(columns="c").assign(e=rng.rand(len(idx))))
+    QApplication.processEvents()
+    assert tab.picker.picks() == {"x": "b", "y": "a", "z": "d"}
+
+
 def test_surface3d_rolling_window_is_n_rows_wide():
     # "Y cell (days)" is documented (docstring + tooltip) as the *window width*,
     # so a rolling window of n must span exactly n rows. `i-half : i+half+1` with

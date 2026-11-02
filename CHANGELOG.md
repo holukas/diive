@@ -319,6 +319,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   absolute deviation of the nighttime values within 15 days.
 - **USTAR scenario plot:** `UstarThresholdConstantScenarios(...).calc(showplot=True)` labels
   each bar with its threshold instead of the full column name, which made the labels overlap.
+- **GUI, X/Y/Z surface tab:** after a column is removed, the role that lost it no longer takes the
+  column another role already shows.
 
 ## [0.92.0] - 2026-10-21
 

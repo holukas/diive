@@ -89,15 +89,21 @@ class SurfaceXYZTab(Surface3DTab):
         # A data push (e.g. a column added in another tab) keeps each role
         # while its variable is still in the data (L338). `seed` keeps those picks.
         cols = {str(c) for c in df.columns}
-        kept = {k for k, v in self.picker.picks().items() if v in cols}
+        picks = self.picker.picks()
+        kept = {k for k, v in picks.items() if v in cols}
         self.picker.seed(df.columns)
-        # Seed the other roles (all of them on the first load) to three
-        # distinct numeric columns for a sensible first view.
+        # Seed the other roles (all of them on the first load) to distinct numeric
+        # columns for a sensible first view, skipping those the kept roles hold (L426).
         numeric = [str(c) for c in df.select_dtypes(include="number").columns]
+        used = {picks[k] for k in kept}
+        free = iter(c for c in numeric if c not in used)
         combos = self.picker.combos()
-        for key, col in zip(("x", "y", "z"), numeric[:3], strict=False):
+        for key in ("x", "y", "z"):
             if key in kept:
                 continue
+            col = next(free, None)
+            if col is None:
+                break
             combo = combos[key]
             combo.blockSignals(True)
             combo.setCurrentText(col)
