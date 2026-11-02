@@ -1147,7 +1147,8 @@ class FluxLevelData:
 
         import diive.core.plotting.styles.chainplots as cp
 
-        _COLORS = {'rf': cp.SCENARIO_COLORS[1], 'xgb': cp.CLEANED, 'mds': '#26A69A'}
+        # Each method's own hue, as in the other chain plots; RF and XGBoost were both blue (L430).
+        _COLORS = {m: shades[1] for m, shades in cp.METHOD_COLORS.items()}
         _LABELS = {'rf': 'Random Forest', 'xgb': 'XGBoost', 'mds': 'MDS'}
 
         # Two-phase: draw into a caller-supplied ax (GUI embedding) or own a

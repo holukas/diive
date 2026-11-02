@@ -1719,8 +1719,39 @@ class TestModelOverview(unittest.TestCase):
         from diive.flux.postprocessingchain import plot_feature_ranks_per_year
         plt.close('all')
         try:
-            plot_feature_ranks_per_year(self.data)
+            plot_feature_ranks_per_year(self.data, showplot=False)
             self.assertEqual(len(plt.gcf().axes), 2)  # one panel per XGBoost scenario
+        finally:
+            plt.close('all')
+
+    def test_overview_note_gives_the_split_used(self):
+        # The note gave "75 / 25 %" whatever test_size was (L430).
+        from unittest import mock
+        from diive.core.ml.feature_engineer import FeatureEngineer
+        from diive.flux.postprocessingchain import reports, run_level41_xgb
+        engineer = FeatureEngineer(target_col='_target_', features_lag=[-1, 1], verbose=0)
+        data = run_level41_xgb(self.data, features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'],
+                               engineer=engineer, n_estimators=20, test_size=0.4,
+                               random_state=42, verbose=0)
+        with mock.patch.object(reports, '_print_report') as printed:
+            out = reports.report_model_overview(data, verbose=0)
+        test_pct = 100 * out['test'].sum() / (out['train'].sum() + out['test'].sum())
+        self.assertGreater(test_pct, 35)
+        note = printed.call_args.args[2][1]
+        self.assertIn(f"{100 - test_pct:.0f} / {test_pct:.0f} % split", note)
+
+    def test_cumulative_comparison_gives_each_method_its_own_hue(self):
+        # RF and XGBoost were drawn in nearly the same blue (L430).
+        import matplotlib.pyplot as plt
+        from diive.core.plotting.styles import chainplots as cp
+        plt.close('all')
+        try:
+            self.data.plot_cumulative_comparison(ustar_scenario='CUT_16', show_measured=False,
+                                                 showplot=False)
+            colours = {line.get_label(): line.get_color() for line in plt.gcf().axes[0].lines
+                       if not line.get_label().startswith('_')}
+            self.assertEqual(colours['gap-filled, MDS'], cp.METHOD_COLORS['mds'][1])
+            self.assertEqual(colours['gap-filled, XGBoost'], cp.METHOD_COLORS['xgb'][1])
         finally:
             plt.close('all')
 

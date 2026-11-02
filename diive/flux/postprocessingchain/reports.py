@@ -534,10 +534,11 @@ def report_model_overview(data, verbose: int | bool | None = None) -> DataFrame:
                       r['trained on'], str(r['features']), f"{r['train']:,}", f"{r['test']:,}",
                       trees, f"{r['final fit']:,}", f"{r['test R2']:.3f}", f"{r['test RMSE']:.2f}",
                       f"{r['filled']:,}", f"{r['fallback']:,}")
+    test_pct = 100 * out['test'].sum() / (out['train'].sum() + out['test'].sum())
     notes = [
         "Each year has its own model, trained on that year and its neighbours ('trained on').",
-        "train / test: a random 75 / 25 % split of the complete records; the test scores come from "
-        "the 25 %, which the model did not see.",
+        f"train / test: a random {100 - test_pct:.0f} / {test_pct:.0f} % split of the complete "
+        f"records; the test scores come from the {test_pct:.0f} %, which the model did not see.",
     ]
     early_stopping = any(p.get('early_stopping_rounds') for p in params.values())
     selection = _tree_selection(data)
@@ -1264,7 +1265,7 @@ def _driver_groups(features, drivers: list) -> dict:
     return groups
 
 
-def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
+def plot_feature_ranks_per_year(data, top_n: int = 15, showplot: bool = True) -> None:
     """Plot the most important features of each ML gap-filler, one panel per USTAR scenario.
 
     With one year of data each panel is a bar chart of the ``top_n`` features by mean
@@ -1277,6 +1278,7 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
     Args:
         data: Chain container after at least one ``run_level41_*``.
         top_n: Number of features shown in each panel.
+        showplot: Call ``plt.show()`` after drawing. Set False for headless use.
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -1357,7 +1359,8 @@ def plot_feature_ranks_per_year(data, top_n: int = 15) -> None:
                     + (f", as the rank in each year (1 = most important; grey: below rank {top_n})"
                        if multi_year else "")
                     + ". Names starting with '.' are features engineered from the drivers.")
-    plt.show()
+    if showplot:
+        plt.show()
 
 
 def _quality_classes(data, ustar_scenario: str | None, method: str | None = None) -> dict:
