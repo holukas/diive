@@ -32,8 +32,10 @@ daily or finer.
 
 ## Footprint
 
-**Status:** idea (2026-10-30). Footprint estimates, e.g. the flux footprint prediction of
-Kljun et al. (2015), and a QC flag for records with too little footprint over the target area.
+**Status:** model done (2026-11-04, [#444](https://github.com/holukas/diive/issues/444)),
+flag open. `ffp_footprint` and `ffp_climatology` (`flux/lowres/footprint.py`) reproduce the FFP
+of Kljun et al. (2015) bitwise, harness `diive-data/references/footprint_parity/`. Still open: a
+QC flag for records with too little footprint over the target area, and a GUI tab.
 
 ## Wind-direction sector flags
 
