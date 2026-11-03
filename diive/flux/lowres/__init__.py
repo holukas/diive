@@ -3,12 +3,13 @@ FLUX - LOW-RESOLUTION PROCESSING
 =================================
 
 30-min flux analysis: quality control, storage correction, USTAR filtering, uncertainty,
-time lags and the open-path self-heating correction.
+time lags, footprints and the open-path self-heating correction.
 
 Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.flux.lowres.common import detect_fluxbasevar
+from diive.flux.lowres.footprint import FFPClimatology, FFPFootprint, ffp_climatology, ffp_footprint
 from diive.flux.lowres.hqflux import analyze_highest_quality_flux
 from diive.flux.lowres.selfheating import ScopApplicator
 from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
@@ -25,6 +26,10 @@ from diive.flux.lowres.ustar_reddyproc_detection import UstarReddyProcDetection
 __all__ = [
     'detect_fluxbasevar',
     'analyze_highest_quality_flux',
+    'ffp_footprint',
+    'ffp_climatology',
+    'FFPFootprint',
+    'FFPClimatology',
     'ScopApplicator',
     'TimeLagAnalysis',
     'RandomUncertaintyPAS20',

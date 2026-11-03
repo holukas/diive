@@ -2,7 +2,7 @@
 FLUX: EDDY COVARIANCE PROCESSING
 =================================
 
-Low-resolution flux analysis, USTAR filtering, NEE partitioning and uncertainty.
+Low-resolution flux analysis, USTAR filtering, NEE partitioning, uncertainty and footprints.
 High-frequency raw-data tooling moved to the dyco package: https://github.com/holukas/dyco
 Swiss FluxNet post-processing chain for levels L2-L4.2.
 
@@ -30,6 +30,10 @@ from diive.flux.postprocessingchain import (
     init_flux_data,
     run_chain,
 )
+from diive.flux.lowres.footprint import FFPClimatology
+from diive.flux.lowres.footprint import FFPFootprint
+from diive.flux.lowres.footprint import ffp_climatology
+from diive.flux.lowres.footprint import ffp_footprint
 from diive.flux.lowres.timelag_analysis import TimeLagAnalysis
 from diive.flux.lowres.uncertainty import JointUncertaintyPAS20
 from diive.flux.lowres.uncertainty import RandomUncertaintyPAS20
@@ -72,6 +76,10 @@ __all__ = [
     'add_driver',
     'init_flux_data',
     'run_chain',
+    'ffp_footprint',
+    'ffp_climatology',
+    'FFPFootprint',
+    'FFPClimatology',
     'TimeLagAnalysis',
     'RandomUncertaintyPAS20',
     'JointUncertaintyPAS20',

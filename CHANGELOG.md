@@ -134,6 +134,9 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 - **Example, u* threshold and data availability:** a new example shows how much NEE data a range
   of constant u* thresholds removes, by day and by night, and the gaps the detected CUT
   percentiles leave.
+- **Flux footprint:** `ffp_footprint` and `ffp_climatology` calculate the flux footprint
+  prediction (FFP) of Kljun et al. (2015) for a single record and as a climatology of many records,
+  with the same results as the authors' Python code.
 
 ### Changed
 
