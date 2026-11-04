@@ -157,7 +157,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 - **[CRITICAL] Always pass `verbose=` when the caller has one**, even inside an `if self.verbose >= N:` guard. A bare `detail(msg)` resolves to the module default (PROGRESS), below `detail`'s own DEBUG level, so it never prints.
 - **[CRITICAL] Docstrings and example text are reStructuredText, and Read the Docs fails on any warning** (`fail_on_warning: true`). The v0.92.0 docs build failed with 24 such warnings. Rules: a blank line before every list or indented block (also after a line ending in `:`); an Args/Returns entry continues on lines indented one level deeper, never split a name list over two lines; code goes after `::` and a blank line; write `|x|` and names ending in `_` (`FLAG_`) inside double backticks or rephrase, otherwise they are substitutions or links. After editing docstrings or `examples/` text, run `.\docs\build_docs.ps1 -NoGallery` (warnings fail it, as on Read the Docs).
 - **Module docstring:** `MODULE_NAME: DESCRIPTIVE_TITLE`, `===` underline, one-line scope, then `Part of the diive library: https://github.com/holukas/diive`.
-- **Written text** (docs, comments, commit messages, examples): use the `/llm-detox` skill.
+- **Written text** (docs, comments, commit messages, examples): use the `/detox-llm` skill.
 - **CHANGELOG** follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/): headings `## [x.y.z] - YYYY-MM-DD`, sections Added, Changed, Deprecated, Removed, Fixed (Fixed last), a 2-3 sentence summary on top of each release, short user-level entries (one sentence, no internals or file paths), and "(changes results)" on entries that change results.
 - **Examples** (Sphinx Gallery): `# %%` cells, no file I/O, one year of data. `showplot=True` is fine: the gallery captures those figures (run examples unattended with `MPLBACKEND=Agg`). New example: register in `examples/run_all_examples.py` + `examples/CATALOG.md`, category README, source docstring "Example" section, `examples/README.md` count, CHANGELOG, verify it runs.
 
@@ -176,7 +176,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 
 **[CRITICAL] NEVER COMMIT CHANGES.** The user stages and commits exclusively.
 
-**[CRITICAL] NEVER RUN THE EXAMPLE SUITE** (115 examples, several minutes each). Run single examples with `MPLBACKEND=Agg` — 16 end in a bare `plt.show()` that blocks headless:
+**[CRITICAL] NEVER RUN THE EXAMPLE SUITE** (115 examples, several minutes each). Run single examples with `MPLBACKEND=Agg` — 33 call a bare `plt.show()` that blocks without it:
 
 ```bash
 MPLBACKEND=Agg uv run python examples/gapfilling/gapfill_randomforest.py
