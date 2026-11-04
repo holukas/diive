@@ -11,9 +11,9 @@ The chain follows the levels of the Swiss FluxNet flux processing chain:
 | L2 | Quality flags from the EddyPro output | `run_level2` |
 | L3.1 | Adds the storage term | `run_level31` |
 | L3.2 | Removes outliers | `make_level32_detector`, `run_level32` |
-| L3.3 | Removes records with weak turbulence (USTAR filter) | `run_level33_constant_ustar` |
-| L4.1 | Fills the gaps | `run_level41_xgb`, `run_level41_xgb_wetnight`, `run_level41_rf`, `run_level41_mds` |
-| L4.2 | Partitions NEE into GPP and RECO | `run_level42_partitioning` |
+| L3.3 | Removes records with weak turbulence (USTAR filter), with detected or given thresholds | `run_level33_ustar_detection`, `run_level33_constant_ustar`, `run_level33_variable_ustar` |
+| L4.1 | Fills the gaps, and selects the REF USTAR scenario of NEE | `run_level41_xgb`, `run_level41_xgb_wetnight`, `run_level41_rf`, `run_level41_mds`, `run_level41_ustar_reference` |
+| L4.2 | Partitions NEE into GPP and RECO, and selects the REF of GPP and RECO | `run_level42_partitioning`, `run_level42_ustar_reference` |
 | | Random, USTAR and joint uncertainty | `RandomUncertaintyPAS20`, `JointUncertaintyPAS20` |
 
 Each step takes the chain container and returns a new one, so a step can be repeated without

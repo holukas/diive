@@ -27,7 +27,7 @@ Core Concepts
    Forest, XGBoost, the MDS meteorological-similarity method and linear interpolation.
 
 **Quality Control & Outlier Detection**
-   Outliers and bad measurements are flagged before analysis. diive has nine
+   Outliers and bad measurements are flagged before analysis. diive has eleven
    detection methods, including Hampel filters, z-scores, local standard deviation and
    Local Outlier Factor. Every detector returns both a flag series and a filtered
    series, so nothing is deleted silently.
@@ -303,7 +303,7 @@ The repository ships runnable example scripts under
 - **visualization**: time series, heatmaps, histograms, diel cycles, ridgelines, wind roses
 - **gapfilling**: Random Forest, XGBoost, MDS, linear interpolation, long-term filling
 - **preprocessing**: outlier detection, corrections, stepwise screening
-- **flux**: post-processing chain, u* threshold detection, NEE partitioning, uncertainty
+- **flux**: post-processing chain, u* threshold detection, NEE partitioning, uncertainty, flux footprint
 - **analysis**: correlation, decomposition, gap statistics, harmonic analysis
 - **times**, **features**, **fits**, **io**, **events**: supporting tools
 
@@ -321,7 +321,7 @@ with one page per namespace:
 - :ref:`dv.gapfilling <api_gapfilling>`: ``FeatureEngineer``, ``RandomForestTS``, ``XGBoostTS``, ``FluxMDS``
 - :ref:`dv.plotting <api_plotting>`: ``TimeSeries``, ``HeatmapDateTime``, ``DielCycle``, ``FormatStyle``
 - :ref:`dv.analysis <api_analysis>`: ``SeasonalTrendDecomposition``, ``GapStats``, ``Histogram``
-- :ref:`dv.flux <api_flux>`: post-processing chain, u* filtering, partitioning, uncertainty
+- :ref:`dv.flux <api_flux>`: post-processing chain, u* filtering, partitioning, uncertainty, footprint
 - :ref:`dv.times <api_times>`: ``TimestampSanitizer``, ``DetectFrequency``, resampling
 - :ref:`dv.variables <api_variables>`, :ref:`dv.corrections <api_corrections>`,
   :ref:`dv.qaqc <api_qaqc>`, :ref:`dv.events <api_events>`

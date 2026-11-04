@@ -918,7 +918,7 @@ Examples and documentation
 
 **Q: Where are the examples?**
 
-A: In the ``examples/`` folder of the repository, 112 scripts sorted by domain:
+A: In the ``examples/`` folder of the repository, 115 scripts sorted by domain:
    ``analysis``, ``events``, ``features``, ``fits``, ``flux``, ``gapfilling``,
    ``io``, ``preprocessing``, ``times``, ``visualization``. They are plain
    standalone Python files, so clone the repository, edit them, and run them:
@@ -939,7 +939,7 @@ A: There is a runner:
 
       uv run python examples/run_all_examples.py
 
-   It runs all 112 of them and several take minutes, so expect a long wall time.
+   It runs all 115 of them and several take minutes, so expect a long wall time.
 
 **Q: The example does not cover my use case**
 
