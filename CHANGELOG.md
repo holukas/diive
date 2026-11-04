@@ -138,6 +138,11 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   prediction (FFP) of Kljun et al. (2015) for a single record and as a climatology of many records,
   with the same results as the authors' Python code. The climatology runs on all cores
   (`n_jobs`) and skips the cells a footprint cannot reach, so it is much faster than that code.
+- **Footprint plot:** `FootprintPlot` maps a single footprint or a footprint climatology with
+  labelled source-area contours, the tower, the footprint peak, range rings and a north arrow. For a
+  single footprint it adds the crosswind-integrated and cumulative profile. A new example shows a
+  single footprint, a climatology from measured data, and unstable and stable footprints side by
+  side.
 
 ### Changed
 
