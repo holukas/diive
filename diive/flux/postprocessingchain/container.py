@@ -646,19 +646,21 @@ class LevelResults:
     level41_mds: dict[str, Any] = field(default_factory=dict)
     level41_rf: dict[str, Any] = field(default_factory=dict)
     level41_xgb: dict[str, Any] = field(default_factory=dict)
+    level41_xgbwn: dict[str, Any] = field(default_factory=dict)
+    """XGBoost with a Lloyd-Taylor fill of the wet night gaps (``run_level41_xgb_wetnight``)."""
     ustar_reference: 'UstarReference | None' = None
     """REF u* scenario selected by ``run_level41_ustar_reference`` (ONEFlux
     model efficiency over the MDS gap-filled versions); ``None`` otherwise."""
 
     def has_level41(self) -> bool:
         """True if any L4.1 method has produced results."""
-        return bool(self.level41_mds or self.level41_rf or self.level41_xgb)
+        return bool(self.level41_mds or self.level41_rf or self.level41_xgb or self.level41_xgbwn)
 
     def level41_methods(self) -> dict[str, dict[str, Any]]:
         """Return all L4.1 method dicts that have results, keyed by short method name.
 
-        Keys are ``'mds'``, ``'rf'``, ``'xgb'`` — matching the suffixes of the
-        underlying ``level41_*`` attributes and the keys used by
+        Keys are ``'mds'``, ``'rf'``, ``'xgb'``, ``'xgbwn'`` — matching the suffixes of
+        the underlying ``level41_*`` attributes and the keys used by
         ``gapfilled_cols()`` and the plot helpers.
         """
         out: dict[str, dict[str, Any]] = {}
@@ -668,6 +670,8 @@ class LevelResults:
             out['rf'] = self.level41_rf
         if self.level41_xgb:
             out['xgb'] = self.level41_xgb
+        if self.level41_xgbwn:
+            out['xgbwn'] = self.level41_xgbwn
         return out
 
     # Level-4.2 — NEE -> GPP + RECO partitioning. One dict per partitioning
@@ -1474,6 +1478,9 @@ class FluxLevelData:
         if lvl.level41_xgb:
             out['xgb'] = {scen: _check('xgb', scen, inst.gapfilled_.name)
                           for scen, inst in lvl.level41_xgb.items()}
+        if lvl.level41_xgbwn:
+            out['xgbwn'] = {scen: _check('xgbwn', scen, inst.gapfilled_.name)
+                            for scen, inst in lvl.level41_xgbwn.items()}
 
         if _missing:
             raise RuntimeError(

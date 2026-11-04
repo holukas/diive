@@ -597,6 +597,79 @@ def run_level41_xgb(
     )
 
 
+def run_level41_xgb_wetnight(
+        data: FluxLevelData,
+        *,
+        features: list[str],
+        engineer: 'FeatureEngineer',
+        wet: str | pd.Series,
+        ta: str | pd.Series,
+        dry: str | pd.Series | None = None,
+        min_records: int = 30,
+        reduce_features: bool = False,
+        shared_features: bool = True,
+        n_estimators_cv: bool | dict = False,
+        scenarios: list[str] | None = None,
+        verbose: int = 0,
+        **xgb_kwargs,
+) -> FluxLevelData:
+    """
+    Level-4.1: Gap-fill with long-term XGBoost, and the wet night gaps from a Lloyd-Taylor model.
+
+    The XGBoost fill is that of :func:`run_level41_xgb`, unchanged. The night gaps marked by
+    ``wet`` are then filled from a Lloyd-Taylor model fitted to the measured dry nights of
+    each year (see
+    :class:`~diive.gapfilling.wetnight.LongTermGapFillingXGBoostWetNightTS`). Use it for an
+    open-path analyser, which cannot measure in rain and fog and whose machine-learning fill
+    of these nights is too low. Night is the night flag of the chain (``NIGHTTIME``).
+
+    The columns end in ``_gfXGWN``, so this can run next to :func:`run_level41_xgb`
+    (``_gfXG``) for a comparison. Flag 3 marks the wet night gaps filled from the model.
+
+    Args:
+        data: FluxLevelData after ``run_level33_constant_ustar()``.
+        features, engineer, reduce_features, shared_features, n_estimators_cv, scenarios,
+            verbose, **xgb_kwargs: As in :func:`run_level41_xgb`.
+        wet: Boolean series, or a column of ``data.full_df``, True where a record counts as
+            wet (rain in the previous hours, a wet-window signal, an overcast sky; the
+            caller decides).
+        ta: Air temperature (degC), a series or a column of ``data.full_df``.
+        dry: The measured nights the model is fitted to, as ``wet``. Default: not wet.
+        min_records: Fewest dry nights for a monthly reference respiration and for a yearly fit.
+
+    Returns:
+        Updated FluxLevelData; instances in ``data.levels.level41_xgbwn[ustar_scenario]``.
+    """
+    rule("Level 4.1: Gap-Filling (XGBoost, Lloyd-Taylor for wet nights)")
+    from functools import partial
+    from diive.gapfilling.wetnight import LongTermGapFillingXGBoostWetNightTS
+
+    def _series(v, name):
+        if v is None or isinstance(v, pd.Series):
+            return v
+        if v not in data.full_df.columns:
+            raise KeyError(f"{name}: column {v!r} not found in data.full_df.")
+        return data.full_df[v]
+
+    if 'NIGHTTIME' not in data.fpc_df.columns:
+        raise KeyError("The night flag NIGHTTIME is missing in data.fpc_df.")
+    factory = partial(LongTermGapFillingXGBoostWetNightTS, wet=_series(wet, 'wet'), ta=_series(ta, 'ta'),
+                      night=data.fpc_df['NIGHTTIME'] == 1, dry=_series(dry, 'dry'), min_records=min_records)
+    return _run_level41_ml(
+        data,
+        model_factory=factory,
+        features=features,
+        engineer=engineer,
+        reduce_features=reduce_features,
+        verbose=verbose,
+        model_kwargs=xgb_kwargs,
+        results_attr='level41_xgbwn',
+        scenarios=scenarios,
+        shared_features=shared_features,
+        n_estimators_cv=n_estimators_cv,
+    )
+
+
 def run_level41_ustar_reference(
         data: FluxLevelData,
         *,

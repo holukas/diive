@@ -68,7 +68,7 @@ _LEVEL_FIELDS: dict[str, tuple[str, ...]] = {
 # Additive-level (L4.1 + L4.2) LevelResults fields — always reset by a cascade
 # from any earlier level.
 _ADDITIVE_FIELDS: tuple[str, ...] = (
-    'level41_mds', 'level41_rf', 'level41_xgb', 'ustar_reference',
+    'level41_mds', 'level41_rf', 'level41_xgb', 'level41_xgbwn', 'ustar_reference',
     'level42_nt_of', 'level42_nt_rp', 'level42_dt_rp', 'level42_dt_of',
     'partitioning_reference',
 )

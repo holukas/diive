@@ -40,6 +40,7 @@ from diive.flux.postprocessingchain.levels.level41 import (
     run_level41_rf,
     run_level41_ustar_reference,
     run_level41_xgb,
+    run_level41_xgb_wetnight,
 )
 from diive.flux.postprocessingchain.levels.level42 import (
     run_level42_daytime_oneflux,
@@ -68,6 +69,7 @@ __all__ = [
     'run_level41_mds',
     'run_level41_rf',
     'run_level41_xgb',
+    'run_level41_xgb_wetnight',
     'run_level41_ustar_reference',
     'run_level42_nighttime_oneflux',
     'run_level42_nighttime_reddyproc',

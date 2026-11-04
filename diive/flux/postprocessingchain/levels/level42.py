@@ -68,7 +68,7 @@ from diive.flux.postprocessingchain.levels._shared import (
 )
 
 _LEVEL42_IDSTR = 'L4.2'
-_GAPFILL_METHODS = ('mds', 'rf', 'xgb')
+_GAPFILL_METHODS = ('mds', 'rf', 'xgb', 'xgbwn')
 
 
 def _require_full_df_cols(data: FluxLevelData, cols: dict[str, str]) -> None:

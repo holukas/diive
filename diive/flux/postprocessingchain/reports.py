@@ -34,7 +34,8 @@ from diive.flux.postprocessingchain.levels._shared import (
 )
 
 # Long names for the short method keys used throughout the chain.
-_METHOD_LABELS = {'mds': 'MDS', 'rf': 'Random Forest', 'xgb': 'XGBoost'}
+_METHOD_LABELS = {'mds': 'MDS', 'rf': 'Random Forest', 'xgb': 'XGBoost',
+                  'xgbwn': 'XGBoost, Lloyd-Taylor wet nights'}
 
 # The score columns shown in the console tables, in order. MSE repeats RMSE, and MAPE is
 # meaningless for a flux that crosses zero, so both stay in the CSV output only.

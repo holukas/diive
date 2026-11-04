@@ -12,7 +12,7 @@ import numpy as np
 from pandas import Series
 
 from diive.core.plotting.styles._material_design_colors import (
-    amber, blue, bluegray, deeporange, gray, indigo, red, teal,
+    amber, blue, bluegray, deeporange, gray, indigo, purple, red, teal,
 )
 
 INK = bluegray(900)          # titles, axis labels
@@ -32,8 +32,9 @@ SCENARIO_COLORS = [blue(300), blue(600), indigo(900), bluegray(500), amber(700)]
 #: same hue for its years.
 METHOD_COLORS = {'mds': [deeporange(200), deeporange(500), deeporange(900)],
                  'xgb': [blue(300), blue(600), indigo(900)],
-                 'rf': [teal(200), teal(500), teal(900)]}
-METHOD_CMAPS = {'mds': 'Oranges', 'xgb': 'Blues', 'rf': 'Greens'}
+                 'rf': [teal(200), teal(500), teal(900)],
+                 'xgbwn': [purple(200), purple(500), purple(900)]}
+METHOD_CMAPS = {'mds': 'Oranges', 'xgb': 'Blues', 'rf': 'Greens', 'xgbwn': 'Purples'}
 
 #: One colour per outlier test in overview plots, in the order the tests ran.
 TEST_COLORS = [red(600), '#FB8C00', '#8E24AA', blue(600), '#00897B', '#6D4C41', '#D81B60']
