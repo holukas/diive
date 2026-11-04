@@ -43,8 +43,9 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Calculates z-scores of three types of increments:
-# - Forward: difference from previous value
-# - Backward: difference to next value
+#
+# - Forward: absolute difference from previous value
+# - Backward: absolute difference to next value
 # - Combined: sum of forward and backward
 #
 # Values flagged in all three increment types are removed.

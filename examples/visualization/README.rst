@@ -11,7 +11,7 @@ Examples by Plot Type
 Heatmaps
 ~~~~~~~~
 
-- **plot_heatmap_datetime_basic.py** — Datetime heatmaps (vertical/horizontal layouts, value overlay on 6-hourly grids)
+- **plot_heatmap_datetime_basic.py** — Datetime heatmaps (vertical/horizontal layouts)
 - **plot_heatmap_advanced.py** — Year-month heatmaps: aggregation method comparison (mean/max/std), rank mode, multi-variable side-by-side
 - **plot_heatmap_xyz_basic.py** — Pre-aggregated 2D heatmaps from GridAggregator (mean and std, flux binned by temperature and VPD)
 
@@ -31,7 +31,7 @@ Time Series
 Diurnal & Cumulative Patterns
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- **plot_dielcycle.py** — Diurnal cycles grouped by month or season
+- **plot_dielcycle.py** — Diurnal cycles by month and for all data
 - **plot_cumulative_basic.py** — Cumulative flux over time with scenario comparison
 - **plot_cumulative_year.py** — Yearly cumulative sums with reference bands
 - **plot_waterfall.py** — Daily CO2 uptake/release waterfall building a running flux budget
@@ -57,8 +57,7 @@ Circular / Spiral
 - **plot_treering_temperature.py** — Tree-ring spiral: annual data as concentric rings, color = value,
   month labels around circumference, optional month lines and year separators, colorbar auto-extension
 - **plot_treering_line_temperature.py** — Tree-ring radial line plot: each year as a line trace around
-  a full circle; radial displacement encodes value; single-color and per-year colormap variants with
-  optional fill between baseline and line
+  its own ring. The radial displacement and the line color both show the value
 - **plot_windrose_basic.py** — Wind rose: a variable aggregated into wind-direction sectors
   (mean/median/min/max/sum/std/count) drawn as polar bars; baseline handles negative aggregates; the
   per-sector results table is available on ``.results`` and printed as a Rich table
@@ -72,7 +71,7 @@ Circular / Spiral
 Other Plots
 ~~~~~~~~~~~
 
-- **plot_other_plots.py** — Long-term anomalies and trend visualization
+- **plot_other_plots.py** — Yearly anomalies against a reference period
 
 Two-Phase Design
 ----------------

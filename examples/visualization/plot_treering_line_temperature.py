@@ -3,12 +3,12 @@
 Tree-Ring Air Temperature Line Plot
 ==========================================
 
-Circular spiral plot showing daily air temperature as overlapping annual line traces.
+Radial line plot of daily air temperature. Each year is one line around a full circle.
 
-Both the radial position and the line color encode the same data value: low temperatures
-are blue and near the center, high temperatures are red and near the outer edge.
-All years share the same y-axis so lines overlap naturally. Early years (cooler) appear
-blue; recent years (warmer) appear red.
+The oldest year is at the center and the newest at the outer edge. Within its ring,
+each line moves outward for higher values and inward for lower values. The line color
+shows the same value: low temperatures are blue, high temperatures are red. With a
+small ``ring_width`` the lines of neighbouring years overlap.
 """
 
 # %%

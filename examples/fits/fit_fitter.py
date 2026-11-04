@@ -73,7 +73,7 @@ bf = dv.analysis.BinFitterCP(
     xcol=xcol,
     ycol=ycol,
     n_predictions=1000,
-    n_bins_x=10,  # Bin into 10 equal-width bins
+    n_bins_x=10,  # Bin into 10 quantile bins
     bins_y_agg='mean',
     fit_type='quadratic_offset'  # y = ax² + bx + c
 )

@@ -33,7 +33,7 @@ import diive as dv
 # Create 30-minute time series for 3 days
 dates = pd.date_range('2024-01-01', periods=144, freq='30min')
 
-# Realistic sonic temperature (280-310 K, ~7-37°C) with diurnal pattern
+# Realistic sonic temperature (285-305 K, ~12-32°C) with diurnal pattern
 sonic_temp = pd.Series(
     295 + 10 * np.sin(np.arange(144) * 2 * np.pi / 48),
     index=dates,

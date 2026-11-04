@@ -137,7 +137,7 @@ rfts = dv.gapfilling.RandomForestTS(
     target_col=TARGET_COL,
     verbose=0,
     below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip to 0
-    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # Use 'zero' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
     # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,
@@ -177,7 +177,7 @@ xgbts = dv.gapfilling.XGBoostTS(
     target_col=TARGET_COL,
     verbose=0,
     below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip to 0
-    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # Use 'zero' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
     # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=50,
     random_state=42,

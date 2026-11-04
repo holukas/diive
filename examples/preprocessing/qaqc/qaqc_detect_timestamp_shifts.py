@@ -9,7 +9,7 @@ measured shortwave radiation against theoretical potential radiation.
 Three detection methods are demonstrated:
 
 - **FFT phase shift** — fast spectral comparison of the 24-hour diurnal cycle
-- **Cross-correlation** — high-precision 1-minute lag search via scipy
+- **Cross-correlation** — 1-minute lag search for the highest Pearson correlation
 - **Noon shift** — quick peak-time delta heuristic
 
 All three methods share the same sign convention:
@@ -110,9 +110,9 @@ plt.show()
 # %%
 # Method 2: Cross-correlation
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Upsamples each day to 1-minute resolution, then uses scipy.signal.correlate
-# to find the lag that maximises the Pearson correlation with potential
-# radiation.  More precise than FFT; slower on very long datasets.
+# Upsamples each day to 1-minute resolution, then tests every lag in the
+# search window and keeps the lag with the highest Pearson correlation with
+# potential radiation.  More precise than FFT, but slower on very long datasets.
 
 crosscorr_results = dts.crosscorr(
     max_shift_min=120,  # search window: +/- 2 hours

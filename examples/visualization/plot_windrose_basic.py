@@ -43,7 +43,7 @@ rose = dv.plotting.WindRosePlot(
     series=df['co2_flux'],  # Data: variable to aggregate
     wind_dir=df['wind_dir'],  # Data: wind direction in degrees
     agg='mean',  # Data: per-sector aggregation
-    n_sectors=64,  # Data: 16 compass sectors (N, NNE, NE, ...)
+    n_sectors=64,  # Data: 64 sectors of 5.625 degrees
     verbose=True,  # prints the Rich per-sector report
 )
 

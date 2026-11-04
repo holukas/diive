@@ -83,7 +83,7 @@ data = init_flux_data(
     site_lat=46.583056,  # CH-AWS (Alp Weissenstein)
     site_lon=9.790639,
     utc_offset=1,
-    nighttime_threshold=20,  # W m-2; SW_IN below this = nighttime
+    nighttime_threshold=20,  # W m-2, potential radiation below this = nighttime
     daytime_accept_qcf_below=2,
     nighttime_accept_qcf_below=2,
 )

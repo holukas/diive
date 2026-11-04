@@ -41,7 +41,7 @@ print(f"Temperature range: {ta.min():.1f} to {ta.max():.1f}°C")
 lv = dv.variables.latent_heat_of_vaporization(ta=ta)
 
 print(f"\nLatent heat range: {lv.min():.0f} to {lv.max():.0f} J/kg")
-print(f"At 20°C: {lv.iloc[20]:.0f} J/kg (typical reference)")
+print(f"At {ta.iloc[20]:.1f}°C: {lv.iloc[20]:.0f} J/kg")
 print(f"Temperature effect: {(lv.iloc[0] - lv.iloc[-1]):.0f} J/kg difference over 40°C range")
 
 # %%

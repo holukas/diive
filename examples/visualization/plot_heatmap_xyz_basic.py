@@ -60,7 +60,7 @@ hm.plot(
     ax=None,  # Create new figure
     format_style=dv.plotting.FormatStyle(title='NEE binned by Temperature and VPD', show_grid=True),
     figsize=(10, 8),  # Figure size
-    cmap='RdYlGn',  # Colormap (red=low uptake, green=high)
+    cmap='RdYlGn',  # Colormap (red = negative NEE = uptake, green = release)
     vmin=-5,  # Minimum color value (umol/m2/s)
     vmax=5,  # Maximum color value
     cb_digits_after_comma=1,  # Colorbar precision

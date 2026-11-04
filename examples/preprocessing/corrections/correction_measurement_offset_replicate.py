@@ -110,11 +110,13 @@ print(f"  Mean absolute difference: {mae_simple:.4f}")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # **Replicate-based detection (MeasurementOffsetFromReplicate):**
+#
 # - Offset value is unknown
 # - Reference/replicate data is available
 # - Want to find optimal offset automatically
 #
 # **Direct offset application:**
+#
 # - Offset is known (from calibration, documentation)
 # - No reference data available
 # - Need quick correction without computation

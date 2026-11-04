@@ -15,7 +15,7 @@ Best for: Tracking time intervals between occurrences of conditions.
 # ^^^^^^^^^^^^^^^^^^^^^^^
 #
 # The TimeSince class counts the number of consecutive records since the last time
-# a measurement fell outside specified limits. This is useful for tracking duration
+# a measurement fell inside specified limits. This is useful for tracking duration
 # of conditions like dry periods, frost periods, or warm spells.
 #
 # Key parameter: `include_lim` controls whether the limit is inclusive or exclusive:
@@ -67,7 +67,7 @@ print(
 # - UPPER_LIMIT: Upper limit from settings (if specified)
 # - LOWER_LIMIT: Lower limit from settings
 # - FLAG_IS_OUTSIDE_RANGE: Binary flag (1=outside limits, 0=inside limits)
-# - TIMESINCE_*: Cumulative count of records since last occurrence outside limits
+# - TIMESINCE_*: Count of records since the last value inside the limits
 
 ts_prec_full_results = ts_prec.get_full_results()
 

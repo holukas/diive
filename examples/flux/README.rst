@@ -45,6 +45,7 @@ Low-Resolution Flux Processing
 - **lowres/flux_ustar_detection.py** — u* threshold detection as in ONEFlux (moving point and change point pooled), VUT and CUT
 - **lowres/flux_ustar_method_comparison.py** — Comparison of the u* detection modes ``oneflux``, ``oneflux_mp``, ``oneflux_cp`` and ``reddyproc``
 - **lowres/flux_ustar_data_availability.py** — Share of NEE records a u* threshold removes, by day and by night, and the gaps of the USTAR scenarios
+- **lowres/flux_footprint.py** — Flux footprint after Kljun et al. (2015) for a single record and as a footprint climatology (``ffp_footprint``, ``ffp_climatology``)
 
 Related Documentation
 ---------------------
@@ -62,9 +63,10 @@ Available classes and functions in ``dv.flux``:
 - **UstarBootstrapThresholds**, **UstarVekuriThresholdDetection** — deprecated, use ``UstarThresholdDetection``
 - **ScopApplicator** — SCOP self-heating correction for open-path IRGA. Not re-exported on ``dv.flux``; import it from ``diive.flux.lowres`` (``from diive.flux.lowres import ScopApplicator``).
 - **run_chain / FluxConfig** — Single-call driver for the full L2→L4.2 flux post-processing pipeline; one ``FluxConfig`` per flux variable. L4.2 partitioning is opt-in via the ``partition_*`` flags (``partition_nighttime_oneflux``, ``partition_daytime_oneflux``, …) or via ``partition_method`` + ``partition_mode`` for one variant
-- **Composable level callables** — ``init_flux_data``, ``run_level2``, ``run_level31``, ``make_level32_detector`` + ``run_level32``, ``run_level33_constant_ustar`` / ``run_level33_variable_ustar`` / ``run_level33_ustar_detection`` (mode ``'cut'``/``'vut'``), ``run_level41_mds`` / ``_rf`` / ``_xgb``, ``run_level42_nighttime_oneflux`` / ``_nighttime_reddyproc`` / ``_daytime_reddyproc`` / ``_daytime_oneflux``, or ``run_level42_partitioning`` (``method`` + ``mode``); pure functions on a typed ``FluxLevelData`` container. Import them from ``diive.flux.postprocessingchain`` — only ``init_flux_data``, ``add_driver``, ``run_chain`` and ``FluxConfig`` are also re-exported on ``dv.flux``
+- **Composable level callables** — ``init_flux_data``, ``run_level2``, ``run_level31``, ``make_level32_detector`` + ``run_level32``, ``run_level33_constant_ustar`` / ``run_level33_variable_ustar`` / ``run_level33_ustar_detection`` (mode ``'cut'``/``'vut'``), ``run_level41_mds`` / ``_rf`` / ``_xgb`` / ``_xgb_wetnight``, ``run_level42_nighttime_oneflux`` / ``_nighttime_reddyproc`` / ``_daytime_reddyproc`` / ``_daytime_oneflux``, or ``run_level42_partitioning`` (``method`` + ``mode``); pure functions on a typed ``FluxLevelData`` container. Import them from ``diive.flux.postprocessingchain`` — only ``init_flux_data``, ``add_driver``, ``run_chain`` and ``FluxConfig`` are also re-exported on ``dv.flux``
 - **Partitioning ports** — ``NighttimePartitioningOneFlux`` (``*_NT_OF``), ``NighttimePartitioningReddyProc`` (``*_NT_RP``), ``DaytimePartitioningReddyProc`` (``*_DT_RP``), ``DaytimePartitioningOneFlux`` (``*_DT_OF``), plus the ``partition_nee_*`` function wrappers. The standalone classes behind Level 4.2; usable on their own dataframe outside the chain
 - **PartitioningNEE / partition_nee** — One entry point for the four ports: ``method='nighttime'`` or ``'daytime'``, ``mode='oneflux'`` (default, the ICOS and FLUXNET2015 approach) or ``'reddyproc'``
+- **ffp_footprint / ffp_climatology** — Flux footprint after Kljun et al. (2015) for one record or many records (footprint climatology)
 - **add_driver(data, series)** — Add a computed driver column to ``data.full_df``, where L4.1 gap-filling and the L4.2 ``partition_*`` drivers read from (not ``fpc_df``)
 - Flux variable detection and nomenclature
 
@@ -147,6 +149,7 @@ Running Examples
    uv run python examples/flux/lowres/flux_ustar_detection.py
    uv run python examples/flux/lowres/flux_ustar_method_comparison.py
    uv run python examples/flux/lowres/flux_ustar_data_availability.py
+   uv run python examples/flux/lowres/flux_footprint.py
 
    # Run all flux examples
    uv run python examples/run_all_examples.py

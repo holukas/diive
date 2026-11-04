@@ -90,7 +90,8 @@ print(f"  Poor angle: {(flag_aoa == 2).sum()}")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Extract 8 individual quality tests from EddyPro VM97 codes.
-# Tests evaluate stationarity, amplitude, dropout, limits, etc.
+# The tests check spikes, amplitude resolution, dropouts, absolute limits,
+# skewness and kurtosis, and discontinuities.
 
 from diive.preprocessing.qaqc import flags_vm97_eddypro_fluxnetfile_tests
 

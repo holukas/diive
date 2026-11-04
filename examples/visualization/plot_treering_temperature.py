@@ -45,8 +45,8 @@ tr = dv.plotting.TreeRingPlot(
 # The shared chrome (here just the title) goes in a FormatStyle; on this polar
 # plot only the title + title font fields apply. The colorbar (cmap, cb_label,
 # vmin/vmax, ...) is not chrome FormatStyle owns, so it stays a direct argument.
-# vmin/vmax are clipped relative to the data range (-23 to +28 deg C), so the
-# colorbar automatically extends with arrows at both ends.
+# vmin/vmax clip the colour range. When they cut off part of the data range,
+# the colorbar gets an arrow at that end. Uncomment them below to try it.
 style = dv.plotting.FormatStyle(
     title='Air temperature at ICOS Ecosystem Station Davos (2013-2022)'
 )
@@ -54,8 +54,8 @@ tr.plot(
     format_style=style,
     figsize=(10, 10),  # Styling: figure size
     cmap='RdYlBu_r',  # Styling: blue=cold, red=warm
-    # vmin=-15,  # Styling: clips data below -23 -> downward arrow added
-    # vmax=15,  # Styling: clips data above +28 -> upward arrow added
+    # vmin=-15,  # Styling: clips daily means below -15 -> downward arrow added
+    # vmax=15,  # Styling: clips daily means above +15 -> upward arrow added
     show_month_labels=True,  # Styling: month names around the ring
     show_month_lines=False,  # Styling: thin radial lines at month boundaries
     show_year_labels=True,  # Styling: year numbers on rings

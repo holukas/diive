@@ -7,7 +7,7 @@ Contents
 --------
 
 - **qc_overall_flag.py** — Overall Quality Control Flag (QCF) combining multiple test flags
-- **qc_eddypro_flags.py** — EddyPro quality flag extraction (signal strength, VM97 tests, completeness)
+- **qc_eddypro_flags.py** — EddyPro quality flag extraction (signal strength, wind steadiness, angle of attack, VM97 tests, completeness)
 - **qaqc_detect_timestamp_shifts.py** — Detect clock/timestamp errors by comparing measured vs potential shortwave radiation (FFT phase shift, cross-correlation, noon-shift peak detection)
 
 Related Documentation
@@ -30,6 +30,9 @@ The EddyPro flag functions are not re-exported by ``dv.qaqc``. Import them from
 ``diive.preprocessing.qaqc``:
 
 - ``flag_signal_strength_eddypro_test()`` — Signal quality
+- ``flag_steadiness_horizontal_wind_eddypro_test()`` — Steadiness of the horizontal wind
+- ``flag_angle_of_attack_eddypro_test()`` — Angle of attack
+- ``flag_fluxbasevar_completeness_eddypro_test()`` — Completeness of the flux base variable
 - ``flags_vm97_eddypro_fluxnetfile_tests()`` — Vickers & Mahrt (1997) raw data tests
 - ``flag_ssitc_eddypro_test()`` — Steady State and Integral Turbulence Characteristics
 - ``flag_spectral_correction_factor_eddypro_test()`` — Spectral correction assessment

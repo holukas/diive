@@ -181,7 +181,7 @@ Status Tracking
    # Row counts
    status['original_shape']                      # Input shape (rows, columns)
    status['final_shape']                         # Output shape (rows, columns)
-   status['rows_removed']                        # Rows removed (NaT + duplicates)
+   status['rows_removed']                        # Rows removed (NaT + duplicates + off-grid)
    status['rows_added_by_regularization']        # Rows added for gaps
    status['net_rows']                            # Output rows minus input rows (can be negative)
 
@@ -195,6 +195,7 @@ Status Tracking
    # Data quality
    status['rows_removed_nat']                    # Rows removed because of NaT
    status['rows_removed_duplicates']             # Duplicate timestamps removed
+   status['rows_removed_off_grid']               # Rows not on the time grid, removed by regularization
    status['timestamp_format']                    # TIMESTAMP_END, _START, or _MIDDLE
 
 Time Series Processing Pipeline
@@ -236,7 +237,7 @@ Extracts time-of-day patterns by grouping data by time of day and calculating th
 4. Temporal Matrices
 ~~~~~~~~~~~~~~~~~~~~
 
-Converts time series to year × month matrix format, ideal for heatmap visualization and long-term pattern analysis. Supports mean, sum, max, min aggregation and percentile ranking.
+Converts time series to year × month matrix format, ideal for heatmap visualization and long-term pattern analysis. Supports mean, sum, max, min aggregation and ranking (rank 1 = highest value of that month across years).
 
 **Use when:** Visualizing multi-year patterns, detecting trends across years, identifying warmest/coldest periods.
 

@@ -41,7 +41,7 @@ import diive as dv
 
 df = dv.load_exampledata_parquet()
 
-# Keep one growing season to keep the example fast; in practice use more data.
+# Keep one month (May 2020) to keep the example fast. In practice use more data.
 df = df.loc[(df.index.year == 2020) & (df.index.month >= 5) & (df.index.month <= 5)].copy()
 
 # Target: original (unfilled) net ecosystem exchange. Drop low-quality records so
@@ -50,8 +50,7 @@ target = df['NEE_CUT_REF_orig'].copy()
 target[df['QCF_NEE'] > 0] = float('nan')
 target.name = 'NEE'
 
-# Candidate drivers: air temperature, VPD, global radiation, soil water content,
-# plus a deliberately irrelevant column to show what "not a driver" looks like.
+# Candidate drivers: air temperature, VPD, global radiation and soil water content.
 drivers = df[['Tair_f', 'VPD_f', 'Rg_f', 'SWC_FF0_0.15_1']].copy()
 drivers.columns = ['TA', 'VPD', 'SW_IN', 'SWC']
 

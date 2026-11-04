@@ -86,7 +86,8 @@ print(f"Missing values in target: {df[TARGET_COL].isnull().sum()}")
 # degree-3+.
 #
 # *vectorize_timestamps* (seasonal/diurnal cycles): Essential for multi-year datasets.
-# Adds ~6 features (year, season, month, week, doy, hour) capturing temporal phase.
+# Adds 14 features: the year, the sine and cosine of season, month, week, day of
+# year and hour, and the combined year-month, year-day-of-year and year-week.
 # Diurnal cycle (hour) often most predictive for ecosystem fluxes.
 #
 # *add_continuous_record_number* (long-term drift): Allows model to capture linear
@@ -134,7 +135,7 @@ rfts = dv.gapfilling.RandomForestTS(
     target_col=TARGET_COL,
     verbose=1,
     below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip to 0
-    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # Use 'zero' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
     # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=3,
     random_state=42,

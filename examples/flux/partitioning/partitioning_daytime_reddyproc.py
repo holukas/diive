@@ -130,7 +130,7 @@ plt.show()
 # %%
 # Time-series comparison (shared axis)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Daily means of RECO and GPP over the year, diive (REddyProc method, solid) vs
+# Daily means of RECO and GPP over the season, diive (REddyProc method, solid) vs
 # REddyProc reference (dashed), all on one shared axis.
 
 

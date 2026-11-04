@@ -2,7 +2,7 @@ Low-Resolution Flux Processing Examples
 =======================================
 
 Low-resolution (30-minute) eddy-covariance flux processing, mostly with data from the Swiss FluxNet
-site CH-LAE (some examples use CH-DAV or CH-CHA).
+site CH-LAE (some examples use CH-DAV, CH-CHA or CH-AWS).
 Covers time lag detection, quality filtering, self-heating correction, uncertainty estimation, turbulence thresholds and flux footprints.
 
 Examples
@@ -38,7 +38,7 @@ Footprint
 
 - **flux_footprint.py** — Flux footprint after Kljun et al. (2015) with ``ffp_footprint`` and ``ffp_climatology``: a single record, how stability moves the footprint, and the footprint climatology of one month of measurements
 
-The first two u* examples use ``UstarThresholdDetection``. ``mode`` selects the method: ``'oneflux'`` (default), ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Each calendar year is bootstrapped on its own data. ``run()`` returns the **VUT** (one threshold per year, p16/p50/p84 for ONEFlux) and ``get_cut_threshold()`` the **CUT** (one threshold for all years). As in ONEFlux, the VUT of a year pools the thresholds of the year and its two neighbours.
+The three u* examples use ``UstarThresholdDetection``. ``mode`` selects the method: ``'oneflux'`` (default), ``'oneflux_mp'``, ``'oneflux_cp'`` or ``'reddyproc'``. Each calendar year is bootstrapped on its own data. ``run()`` returns the **VUT** (one threshold per year, p16/p50/p84 for ONEFlux) and ``get_cut_threshold()`` the **CUT** (one threshold for all years). As in ONEFlux, the VUT of a year pools the thresholds of the year and its two neighbours.
 
 Running Examples
 ----------------

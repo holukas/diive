@@ -8,7 +8,7 @@ Usage:
     python examples/run_all_examples.py
 
 Runs each example with ``MPLBACKEND=Agg`` so matplotlib writes figures without
-opening a window. Sixteen examples call ``plt.show()``. With a window backend
+opening a window. 33 examples call a bare ``plt.show()``. With a window backend
 each of them would block until its window is closed, run into the timeout and
 count as failed. To watch the plots, set ``MPLBACKEND`` yourself, for example
 ``MPLBACKEND=QtAgg``. Then someone has to close each window.

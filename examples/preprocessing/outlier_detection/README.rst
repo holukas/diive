@@ -38,6 +38,8 @@ See ``dv.outliers`` for available detection classes:
 - ``LocalOutlierFactor`` — Density-based detection
 - ``TrimLow`` — Symmetric trimmed-mean removal
 - ``ManualRemoval`` — Flag known problematic timestamps/periods
+- ``NegativeNighttime`` — Nighttime values below -z times their random uncertainty
+- ``NegativeNights`` — Whole nights with a median below -z standard errors
 
 ``StepwiseOutlierDetection`` (multi-stage orchestration) is not part of ``dv.outliers``.
 Import it from ``diive.preprocessing.outlier_detection``.

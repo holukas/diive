@@ -23,7 +23,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 
 | Example | Description |
 |---------|-------------|
-| [**plot_heatmap_datetime_basic.py**](visualization/plot_heatmap_datetime_basic.py) | Datetime heatmaps: vertical/horizontal orientations, value overlay on 6-hourly grids |
+| [**plot_heatmap_datetime_basic.py**](visualization/plot_heatmap_datetime_basic.py) | Datetime heatmaps: vertical/horizontal orientations |
 | [**plot_heatmap_advanced.py**](visualization/plot_heatmap_advanced.py) | Year-month heatmaps: aggregation method comparison (mean/max/std), rank mode, multi-variable side-by-side |
 | [**plot_heatmap_xyz_basic.py**](visualization/plot_heatmap_xyz_basic.py) | Pre-aggregated 2D heatmaps from GridAggregator: mean and std aggregation, flux binned by two variables |
 | [**plot_scatter_xy_basic.py**](visualization/plot_scatter_xy_basic.py) | 2D scatter plots for exploring variable relationships |
@@ -34,7 +34,7 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_cumulative_basic.py**](visualization/plot_cumulative_basic.py) | Cumulative flux across all time, scenario comparison |
 | [**plot_cumulative_year.py**](visualization/plot_cumulative_year.py) | Yearly cumulative sums with reference bands, annual budgets |
 | [**plot_waterfall.py**](visualization/plot_waterfall.py) | Daily CO2 uptake/release waterfall building a running flux budget |
-| [**plot_dielcycle.py**](visualization/plot_dielcycle.py) | Diurnal cycle analysis by month/season |
+| [**plot_dielcycle.py**](visualization/plot_dielcycle.py) | Diurnal cycles by month and for all data |
 | [**plot_hexbin_basic.py**](visualization/plot_hexbin_basic.py) | 2D hexagonal binning with percentile normalization, sparse-bin filtering (mincnt) |
 | [**plot_hexbin_advanced.py**](visualization/plot_hexbin_advanced.py) | Advanced hexbin with absolute values and overlays |
 | [**plot_histogram_basic.py**](visualization/plot_histogram_basic.py) | Distribution histograms with z-score overlay, custom bin edges |
@@ -42,9 +42,9 @@ New to diive? Start with the **[Cookbook](COOKBOOK.md)** — 6 minimal workflows
 | [**plot_ridgeline_basic.py**](visualization/plot_ridgeline_basic.py) | Ridge line plots with weekly grouping |
 | [**plot_ridgeline_advanced.py**](visualization/plot_ridgeline_advanced.py) | Ridge line plots with monthly grouping |
 | [**plot_shifted_distribution.py**](visualization/plot_shifted_distribution.py) | Distribution shift between a reference and comparison period with color-coded zones |
-| [**plot_other_plots.py**](visualization/plot_other_plots.py) | Specialized plot types (long-term anomalies, trends) |
+| [**plot_other_plots.py**](visualization/plot_other_plots.py) | Yearly anomalies against a reference period |
 | [**plot_treering_temperature.py**](visualization/plot_treering_temperature.py) | Tree-ring spiral plot: annual rings with color-coded values, month labels, year separators, colorbar extension |
-| [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around a full circle, single-color and per-year colormap variants with optional fill |
+| [**plot_treering_line_temperature.py**](visualization/plot_treering_line_temperature.py) | Tree-ring radial line plot: each year as a line trace around its own ring, colored by value |
 | [**plot_windrose_basic.py**](visualization/plot_windrose_basic.py) | Wind rose: a variable aggregated into wind-direction sectors (mean/median/min/max/sum/std/count) drawn as polar bars, with a per-sector results table |
 | [**plot_footprint.py**](visualization/plot_footprint.py) | `FootprintPlot`: map of a single flux footprint or footprint climatology (Kljun et al. 2015) with labelled source-area contours, peak and range rings, a crosswind-integrated profile, and unstable vs stable footprints side by side |
 | [**plot_compound_extremes.py**](visualization/plot_compound_extremes.py) | `CompoundExtremesPlot`: quadrant scatter of two z-scores coloured/marked by compound-extreme category with threshold lines (Wang et al., Fig. 2); from a fitted analysis, custom styling, or pre-classified data |
@@ -60,7 +60,7 @@ See: [visualization/README.rst](visualization/README.rst)
 | [**analysis_daily_correlation.py**](analysis/analysis_daily_correlation.py) | Daily correlation coefficients between time series, quality checks, relationship analysis |
 | [**analysis_driveranalysis.py**](analysis/analysis_driveranalysis.py) | _(experimental)_ Evidence-triangulation driver attribution by epistemic level: SHAP + ALE (association), lagged/scale-resolved/stratified importance (temporal), Granger (causal), with a convergence/divergence summary |
 | [**analysis_granger.py**](analysis/analysis_granger.py) | Granger causality testing for predictive relationships between time series |
-| [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | STL decomposition, trend isolation, seasonality extraction |
+| [**analysis_seasonaltrend.py**](analysis/analysis_seasonaltrend.py) | Seasonal-trend decomposition with the harmonic method: detrending, residual anomalies, deseasonalized series, trend |
 | [**analysis_decoupling.py**](analysis/analysis_decoupling.py) | Stratified binning to reveal how ecosystem responses change across temperature ranges |
 | [**analysis_gapfinder.py**](analysis/analysis_gapfinder.py) | Identify and characterize consecutive missing data periods in time series |
 | [**analysis_gapstats.py**](analysis/analysis_gapstats.py) | Extended gap analysis: monthly/annual breakdown, long-gap listing, Rich report, four-panel figure |
@@ -190,7 +190,7 @@ See: [features/README.rst](features/README.rst)
 
 | Example | Description |
 |---------|-------------|
-| [**partitioning_nighttime_oneflux.py**](flux/partitioning/partitioning_nighttime_oneflux.py) | Partition NEE into GPP and RECO with the nighttime method ONEFlux (Reichstein et al. 2005), a faithful Python port of ONEFlux (`NighttimePartitioningOneFlux`, `_NT_OF` columns); sanity-checked against the independent, ReddyProc-derived `Reco_CUT_REF`/`GPP_CUT_REF` columns |
+| [**partitioning_nighttime_oneflux.py**](flux/partitioning/partitioning_nighttime_oneflux.py) | Partition NEE into GPP and RECO with the nighttime method ONEFlux (Reichstein et al. 2005), a faithful Python port of ONEFlux (`NighttimePartitioningOneFlux`, `_NT_OF` columns); sanity-checked against the independent, ReddyProc-derived `Reco_CUT_REF`/`GPP_CUT_REF_f` columns |
 | [**partitioning_nighttime_reddyproc.py**](flux/partitioning/partitioning_nighttime_reddyproc.py) | Partition NEE into GPP and RECO with the nighttime method REddyProc (Reichstein et al. 2005), a faithful Python port of REddyProc's `sMRFluxPartition` (`NighttimePartitioningReddyProc`, `_NT_RP` columns); whole-record single-E0 processing; matches a native REddyProc run on identical inputs to about 1e-15 (the bundled `Reco_CUT_REF`/`GPP_CUT_REF_f` come from a different setup and are a plausibility check) |
 | [**partitioning_daytime_reddyproc.py**](flux/partitioning/partitioning_daytime_reddyproc.py) | Partition NEE into GPP and RECO with the daytime method REddyProc (Lasslop et al. 2010), a faithful Python port of REddyProc's `partitionNEEGL` (`DaytimePartitioningReddyProc`, `_DT_RP` columns); fits a rectangular-hyperbola light-response curve to daytime NEE with E0 fixed from nighttime, matching a native REddyProc run on identical inputs (half-hourly values mostly within 1e-4 µmol m⁻² s⁻¹, annual sums within 0.001 %) (GPP r≈0.97 vs the provenance-different bundled `GPP_DT_CUT_REF`) |
 | [**partitioning_daytime_oneflux.py**](flux/partitioning/partitioning_daytime_oneflux.py) | Partition NEE into GPP and RECO with the daytime method ONEFlux (Lasslop et al. 2010), a faithful Python port of ONEFlux's `flux_part_gl2010` / FLUXNET2015 (`DaytimePartitioningOneFlux`, `_DT_OF` columns); per-window light-response-curve fit with a measured-radiation day/night split (no latitude) and an internal NEE-uncertainty look-up, matching a native ONEFlux run on identical inputs fit for fit, RECO/GPP to about 1e-5 (provenance-different vs the bundled `GPP_DT_CUT_REF`) |

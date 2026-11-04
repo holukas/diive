@@ -61,7 +61,7 @@ dv.plotting.CumulativeYear(
     excl_years_from_reference=None,
 ).plot(format_style=style, highlight_year_color='#F44336')
 
-print("\nPlotted yearly cumulative sums with reference band (2015-2017 baseline)")
+print("\nPlotted yearly cumulative sums with reference band (2015-2019 reference)")
 
 # %%
 # Highlight specific year for comparison

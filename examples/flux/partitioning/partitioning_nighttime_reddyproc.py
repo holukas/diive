@@ -50,9 +50,8 @@ print(f"Period: {df.index.min().date()} to {df.index.max().date()} ({len(df)} re
 #   - site latitude, longitude and UTC offset (for solar-time potential
 #     radiation, which REddyProc uses to separate night from day)
 #
-# Note: REddyProc estimates one E0 for the entire record. A single year is shown
-# here for clarity, but for a true match to the reference columns partition the
-# full multi-year record at once.
+# Note: REddyProc estimates one E0 for the entire record, so the result depends
+# on the period passed in. A single year is shown here for clarity.
 
 part = dv.flux.NighttimePartitioningReddyProc(
     nee=df['NEE_CUT_REF_orig'],  # measured NEE (NaN where not measured)

@@ -68,8 +68,10 @@ print(f"Engineered features shape: {df_engineered.shape}")
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
 # Create one random forest model per year. Each model is trained on:
+#
 # - The target year's data
-# - Plus 2 neighboring years (year-1 and year+1)
+# - Plus the 2 nearest other years (year-1 and year+1, or the next two years at
+#   the start and end of the record)
 #
 # This neighboring-years strategy allows each year's model to capture that
 # year's seasonal patterns while benefiting from adjacent years' data.
@@ -79,7 +81,7 @@ gf = LongTermGapFillingRandomForestTS(
     target_col=TARGET_COL,
     verbose=2,
     below_zero=None,  # How to treat negative predictions: None=keep, 'zero'=clip to 0
-    # Use 'zero' or 'nan' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
+    # Use 'zero' for variables that cannot be negative (e.g. VPD, SW_IN, PPFD).
     # NEE can be negative (carbon uptake), so None is correct here.
     n_estimators=3,  # Reduced from standard 300 for speed (demo only)
     random_state=42,
@@ -95,7 +97,7 @@ gf = LongTermGapFillingRandomForestTS(
     shap_max_rows=5000,
 )
 
-# Create yearpools: each year gets its target year +/- 1 neighbors
+# Create yearpools: each year gets its target year and the 2 nearest other years
 gf.create_yearpools()
 
 # Initialize models for each year using their respective data pools
@@ -107,7 +109,8 @@ gf.initialize_yearly_models()
 #
 # Identifies features that are important across all years. Fits one model per
 # year using SHAP, prunes weak features, then re-initialises the year pools.
-# Skipped here for speed (only 3 features + n_estimators=3 leaves nothing to prune).
+# Skipped here for speed. With only 7 features and n_estimators=3 there is little
+# to prune.
 # Enable in production when working with many engineered features.
 #
 # gf.reduce_features_across_years()

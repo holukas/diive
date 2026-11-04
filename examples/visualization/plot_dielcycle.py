@@ -3,7 +3,7 @@
 Diel Cycle Analysis
 =======================
 
-Visualize diurnal (daily) cycles separated by month or season.
+Visualize diurnal (daily) cycles separated by month, and for all data together.
 Shows hourly mean values and seasonal changes in daily patterns.
 
 Best for: Understanding diurnal cycles and seasonal variation in fluxes
@@ -25,14 +25,14 @@ print(f"Loaded {len(series)} records from {df.index[0].date()} to {df.index[-1].
 # ^^^^^^^^^^^^^^^^^^^
 #
 # Show diurnal cycles separated by month to reveal seasonal patterns. The plot
-# chrome (title + y-axis units) is bundled into a shared
-# ``dv.plotting.FormatStyle``; per-plot rendering choices (here ``each_month``
-# and the legend column count) stay as direct ``plot()`` arguments.
+# chrome (title, y-axis units and the legend column count) is bundled into a
+# shared ``dv.plotting.FormatStyle``. Per-plot rendering choices (here
+# ``each_month``) stay as direct ``plot()`` arguments.
 
 dc = dv.plotting.DielCycle(series=series)
 
 style = dv.plotting.FormatStyle(
-    title=r'$\mathrm{Mean\ CO_2\ flux\ (2013-2024)}$',
+    title=r'$\mathrm{Mean\ CO_2\ flux\ (2013-2022)}$',
     yunits=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',
     legend_ncol=2,
 )

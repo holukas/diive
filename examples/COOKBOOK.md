@@ -86,7 +86,8 @@ Available methods on `StepwiseOutlierDetection`: `flag_outliers_hampel_test`,
 `flag_outliers_localsd_test`, `flag_outliers_zscore_test`,
 `flag_outliers_zscore_rolling_test`, `flag_outliers_lof_test`,
 `flag_outliers_abslim_test`, `flag_outliers_increments_zcore_test`,
-`flag_outliers_trim_low_test`, `flag_manualremoval_test`, `flag_missingvals_test`.
+`flag_outliers_trim_low_test`, `flag_outliers_negative_night_test`,
+`flag_outliers_negative_nights_test`, `flag_manualremoval_test`, `flag_missingvals_test`.
 
 Full example: [preprocessing/outlier_detection/outlier_stepwise.py](preprocessing/outlier_detection/outlier_stepwise.py)
 

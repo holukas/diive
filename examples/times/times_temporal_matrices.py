@@ -63,7 +63,7 @@ print(f"Coldest: {monthly_mean.index[min_year]} {month_names[min_month]} ({month
 # Matrix with ranking
 # ^^^^^^^^^^^^^^^^^^^
 #
-# Percentile ranking within each month (100=warmest, 0=coldest).
+# Rank of each year within each month (1 = warmest).
 
 monthly_rank = dv.times.resample_to_monthly_agg_matrix(series=series, agg='mean', ranks=True)
 

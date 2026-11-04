@@ -63,7 +63,7 @@ examples/
 ├── fits/                  # Data fitting (2 examples)
 │   ├── fit_fitter.py
 │   └── fit_binfittercp.py
-├── flux/                  # Eddy covariance flux processing (18 examples)
+├── flux/                  # Eddy covariance flux processing (19 examples)
 │   ├── postprocessingchain/
 │   │   ├── postprocessingchain_level2.py
 │   │   ├── postprocessingchain_runchain.py
@@ -75,17 +75,17 @@ examples/
 │   │   ├── partitioning_daytime_reddyproc.py
 │   │   ├── partitioning_daytime_oneflux.py
 │   │   └── partitioning_comparison.py
-│   ├── lowres/            # Low-resolution processing (10 examples)
-│   │   ├── flux_timelag_analysis.py
-│   │   ├── flux_common.py
-│   │   ├── flux_hqflux.py
-│   │   ├── flux_selfheating.py
-│   │   ├── flux_selfheating_production.py
-│   │   ├── flux_uncertainty.py
-│   │   ├── flux_ustar_detection.py
-│   │   ├── flux_ustar_method_comparison.py
-│   │   ├── flux_ustar_data_availability.py
-│   │   └── flux_footprint.py
+│   └── lowres/            # Low-resolution processing (10 examples)
+│       ├── flux_timelag_analysis.py
+│       ├── flux_common.py
+│       ├── flux_hqflux.py
+│       ├── flux_selfheating.py
+│       ├── flux_selfheating_production.py
+│       ├── flux_uncertainty.py
+│       ├── flux_ustar_detection.py
+│       ├── flux_ustar_method_comparison.py
+│       ├── flux_ustar_data_availability.py
+│       └── flux_footprint.py
 ├── gapfilling/            # Gap-filling methods (12 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
@@ -170,17 +170,17 @@ Browse by topic:
 
 | Domain | Files | Topics |
 |--------|-------|--------|
-| **Visualization** | 24 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, waterfall, wind rose, compound extremes, tree-ring spiral and radial line |
+| **Visualization** | 25 | Heatmaps, scatter, timeseries (+ interactive & range-tool), shifted distribution, histograms, ridgelines, cumulative, diurnal cycles, waterfall, wind rose, flux footprint, compound extremes, tree-ring spiral and radial line |
 | **Times** | 7 | Timestamp validation, frequency detection, diel cycles, temporal matrices |
 | **Analysis** | 14 | Correlation, daily correlation, driver attribution, decomposition, gap detection, gap statistics, spatial aggregation, harmonic analysis, conditional record selection, compound extremes |
 | **Events** | 1 | Instant/period event markers, 0/1 flag columns, plot overlays, custom category palette |
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
-| **Flux** | 17 | Time lag analysis, post-processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (2), self-heating (2), uncertainty |
+| **Flux** | 19 | Time lag analysis, flux variable naming, post-processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty, flux footprint |
 | **Gapfilling** | 12 | Linear interpolation (2), Random Forest (4 variants), XGBoost (2 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 19 | Corrections (7), outlier detection (9), QA/QC (3) |
-| **TOTAL** | **112** | |
+| **TOTAL** | **115** | |
 
 ## Running Options
 

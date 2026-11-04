@@ -184,7 +184,7 @@ print("\n" + "=" * 60)
 print("Parameter Tuning: Window Length")
 print("=" * 60)
 
-window_lengths = [24 * 2, 48 * 5, 48 * 13, 48 * 30]  # 2 days to 30 days
+window_lengths = [24 * 2, 48 * 5, 48 * 13, 48 * 30]  # 1 day to 30 days
 
 for win_len in window_lengths:
     ham_win = dv.outliers.Hampel(

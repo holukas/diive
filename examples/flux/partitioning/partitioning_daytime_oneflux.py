@@ -44,7 +44,7 @@ port. It selects any of the four partitioning ports with these two arguments.
 # the ONEFlux port tracks GPP closely and RECO with a stable bias - a provenance
 # artifact, not an algorithmic difference (on identical inputs, every fit is
 # bitwise identical to a native ONEFlux run under NumPy 1, and RECO/GPP differ
-# by at most 6e-6 umol m-2 s-1, float32 rounding).
+# by at most 8e-6 umol m-2 s-1, float32 rounding).
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -133,7 +133,7 @@ plt.show()
 # %%
 # Time-series comparison (shared axis)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-# Daily means of RECO and GPP over the year, diive (ONEFlux method, solid) vs
+# Daily means of RECO and GPP over the season, diive (ONEFlux method, solid) vs
 # reference (dashed), all on one shared axis.
 
 

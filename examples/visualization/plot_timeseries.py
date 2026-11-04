@@ -56,7 +56,7 @@ ts_with_units.plot(
     ax=None,
     color=None,  # Use default theme color
     format_style=dv.plotting.FormatStyle(
-        title='Net Ecosystem Exchange (2013-2022)',
+        title='Net Ecosystem Exchange (July 2022)',
         xlabel='Date',
         ylabel='CO₂ Flux',
         yunits=r'($\mathrm{µmol\ CO_2\ m^{-2}\ s^{-1}}$)',

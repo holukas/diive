@@ -19,7 +19,7 @@ Correlation & Covariance
 Decomposition & Trends
 ~~~~~~~~~~~~~~~~~~~~~~
 
-- **analysis_seasonaltrend.py** — STL decomposition separating trend and seasonality
+- **analysis_seasonaltrend.py** — Seasonal-trend decomposition with the harmonic method: detrending, residual anomalies, deseasonalized series and trend
 - **analysis_harmonic.py** — ``harmonic_analysis`` + ``spectrogram``: amplitude/phase of the diel and annual cycles, window effect, and a time-frequency map
 
 Extremes
@@ -30,7 +30,7 @@ Extremes
 Distribution & Ranges
 ~~~~~~~~~~~~~~~~~~~~~
 
-- **analysis_histogram_distribution.py** — Distribution analysis via histograms and percentiles
+- **analysis_histogram_distribution.py** — Histogram binning: fixed bins, one bin per unique value, fringe bin removal
 - **analysis_quantiles.py** — Percentile and quantile calculations
 - **analysis_optimumrange.py** — Find optimal ranges for ecosystem responses
 - **analysis_keep_records_where.py** — ``dv.keep_records_where``: keep records of a target where a condition variable falls in a [lower, upper] range; non-destructive, with masking vs dropping, one-sided ranges, and inverted selection
@@ -116,7 +116,7 @@ See ``dv.analysis`` for full API documentation:
 - ``DailyCorrelation`` — Daily correlation coefficients, summary statistics, anomaly detection
 - ``rank_drivers`` — Rank drivers against a target with lag scanning
 - ``GrangerCausality`` — Granger causality testing for predictive relationships
-- ``SeasonalTrendDecomposition`` — STL decomposition
+- ``SeasonalTrendDecomposition`` — STL, classical and harmonic decomposition
 - ``percentiles101`` — Percentile-based analysis
 - ``GapFinder`` — Gap detection and reporting
 - ``GapStats`` — Extended gap analysis: monthly/annual breakdowns, long-gap listing, Rich report, multi-panel figure

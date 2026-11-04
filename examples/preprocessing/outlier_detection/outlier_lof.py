@@ -37,7 +37,8 @@ print(f"  Range: {s_noise.min():.2f} to {s_noise.max():.2f}°C")
 # LOF with day/night separation
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Use separate contamination rates for daytime and nighttime.
+# Fit LOF to daytime and nighttime records separately, with the same
+# contamination for both periods. LOF has no per-period settings.
 # LOF identifies points with anomalous local density compared to neighbors.
 
 lof_dtnt = dv.outliers.LocalOutlierFactor(

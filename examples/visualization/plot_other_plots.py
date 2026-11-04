@@ -24,7 +24,7 @@ print(f"Loaded {len(df)} records from {df.index[0].date()} to {df.index[-1].date
 # Calculate annual air temperature
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Aggregate daily data to annual means for anomaly calculation.
+# Aggregate the half-hourly data to annual means for anomaly calculation.
 # Anomalies show deviations from a reference period baseline.
 
 series = df['Tair_f'].copy()

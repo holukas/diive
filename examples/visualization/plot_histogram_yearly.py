@@ -25,8 +25,8 @@ print(f"Loaded {len(df)} total records")
 # Compare distributions across different years to identify temporal patterns.
 # The chrome (x-label, grid) is identical for every year, so build one shared
 # ``FormatStyle`` and reuse it across all the per-year plots. Only the title
-# changes per year, passed as the legacy ``title=`` argument, which the plot
-# folds onto the shared style.
+# changes per year. ``style.merged(title=...)`` returns a copy of the shared
+# style with the new title.
 
 style = dv.plotting.FormatStyle(
     xlabel='NEE flux',  # Same x-axis label for every year

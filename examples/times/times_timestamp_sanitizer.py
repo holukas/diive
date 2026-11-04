@@ -54,15 +54,15 @@ print(f"  Net change: {status['net_rows']:+d} rows")
 print(f"  Frequency: {status['inferred_frequency']} (confidence: {status['frequency_confidence']:.0%})")
 
 # %%
-# Level 2: Minor issues (NaTs + duplicates)
+# Level 2: Minor issues (gaps + duplicates)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Introduces 3 NaT values and 1 duplicate timestamp.
+# Removes 3 records (gaps) and adds 1 duplicate timestamp.
 
 minor_series = series.copy()
 idx_name = minor_series.index.name
 
-# Add 3 NaT values
+# Remove 3 records (gaps)
 nat_positions = [50, 500, 1500]
 for pos in sorted(nat_positions, reverse=True):
     minor_series = minor_series.drop(minor_series.index[pos])
@@ -90,22 +90,22 @@ sanitizer = dv.times.TimestampSanitizer(
 result = sanitizer.get()
 status = sanitizer.get_status()
 
-print("\nLevel 2 - Minor issues (3 NaTs, 1 duplicate):")
+print("\nLevel 2 - Minor issues (3 gaps, 1 duplicate):")
 print(f"  Removed {status['rows_removed']} rows (NaTs: {status['rows_removed_nat']}, "
       f"duplicates: {status['rows_removed_duplicates']})")
 print(f"  Net change: {status['net_rows']:+d} rows")
 print(f"  Frequency confidence: {status['frequency_confidence']:.0%}")
 
 # %%
-# Level 3: Moderate issues (scattered NaTs, multiple duplicates, unsorted)
+# Level 3: Moderate issues (scattered gaps, multiple duplicates, unsorted)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Introduces 20 NaTs, 5 duplicates, shuffled chunks, and index name change.
+# Removes 20 records (gaps), adds 5 duplicates, shuffles chunks and renames the index.
 
 moderate_series = series.copy()
 moderate_series.index.name = 'TIMESTAMP_END'
 
-# Add 20 NaT values scattered throughout
+# Remove 20 records scattered throughout (gaps)
 np.random.seed(42)
 nat_positions = np.random.choice(len(moderate_series), 20, replace=False)
 for pos in sorted(nat_positions, reverse=True):
@@ -146,7 +146,7 @@ sanitizer = dv.times.TimestampSanitizer(
 result = sanitizer.get()
 status = sanitizer.get_status()
 
-print("\nLevel 3 - Moderate issues (20 NaTs, 5 duplicates, unsorted):")
+print("\nLevel 3 - Moderate issues (20 gaps, 5 duplicates, unsorted):")
 print(f"  Removed {status['rows_removed']} rows (NaTs: {status['rows_removed_nat']}, "
       f"duplicates: {status['rows_removed_duplicates']})")
 print(f"  Net change: {status['net_rows']:+d} rows")
@@ -156,8 +156,8 @@ print(f"  Frequency confidence: {status['frequency_confidence']:.0%}")
 # Level 4: Severe issues (string format, wrong name, many gaps)
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Introduces 50 NaTs, 10 duplicates, string format, wrong index name,
-# and completely shuffled sections.
+# Removes 50 records (gaps), adds 10 duplicates, converts the index to strings,
+# sets a wrong index name and shuffles sections.
 
 severe_series = series.copy()
 
@@ -165,7 +165,7 @@ severe_series = series.copy()
 severe_series.index = severe_series.index.astype(str)
 severe_series.index.name = 'WRONG_TIMESTAMP'
 
-# Add 50 NaT values
+# Remove 50 records (gaps)
 np.random.seed(123)
 nat_positions = np.random.choice(len(severe_series), 50, replace=False)
 for pos in sorted(nat_positions, reverse=True):
@@ -206,7 +206,7 @@ try:
     result = sanitizer.get()
     status = sanitizer.get_status()
 
-    print("\nLevel 4 - Severe issues (50 NaTs, 10 duplicates, wrong format/name, shuffled):")
+    print("\nLevel 4 - Severe issues (50 gaps, 10 duplicates, wrong format/name, shuffled):")
     print(f"  Removed {status['rows_removed']} rows")
     print(f"  Net change: {status['net_rows']:+d} rows")
     print(f"  Frequency confidence: {status['frequency_confidence']:.0%}")
@@ -274,9 +274,9 @@ print("""
 Level | Issues                              | Output
 ------|-------------------------------------|---------
   1   | None (baseline)                     | 4 lines
-  2   | 3 NaTs + 1 duplicate                | 4 lines
-  3   | 20 NaTs + 5 dups + unsorted         | 4 lines
-  4   | 50 NaTs + string format + bad name  | 4 lines
+  2   | 3 gaps + 1 duplicate                | 4 lines
+  3   | 20 gaps + 5 dups + unsorted         | 4 lines
+  4   | 50 gaps + string format + bad name  | 4 lines
   5   | Detection only (no cleaning)        | 4 lines
 
 Key capabilities:

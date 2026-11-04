@@ -5,10 +5,11 @@ Seasonal-Trend Decomposition
 
 Decompose time series into trend, seasonal, and residual components using multiple
 decomposition methods. Demonstrates five practical use cases: detrending for machine
-learning gap-filling, anomaly detection via residual analysis, method comparison,
-climate change impact analysis, and ecosystem recovery trend quantification.
+learning gap-filling, anomaly detection via residual analysis, the properties of the
+harmonic method, climate change impact analysis, and ecosystem recovery trend quantification.
 
 Supports multiple methods:
+
 - **Harmonic**: Fast FFT-based, ideal for short series
 - **Classical**: Simple moving-average approach
 - **STL**: Robust method handling gaps and outliers
@@ -175,16 +176,17 @@ for i, (timestamp, abs_val) in enumerate(top_anomalies.items(), 1):
 print(f"\n[OK] Recommendation: Review >2sigma anomalies for equipment or environmental issues")
 
 # %%
-# Example 3: Method Comparison (Harmonic vs Classical)
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# Example 3: Harmonic Method Properties
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #
-# Different decomposition methods have different properties.
-# Compare computational speed, robustness, and results.
+# Run the harmonic method on the same data and report its speed, seasonality
+# strength and trend range. Select the other methods with ``method='classical'``
+# or ``method='stl'``.
 
 print("\n" + "="*70)
-print("EXAMPLE 3: Method Comparison (Harmonic vs Classical)")
+print("EXAMPLE 3: Harmonic Method Properties")
 print("="*70)
-print("Compare decomposition methods on same data\n")
+print("Speed, seasonality strength and trend range of the harmonic method\n")
 
 nee_clean = nee_subset.copy()
 
@@ -204,7 +206,7 @@ print(f"  Computation time: {harmonic_time:.3f}s")
 print(f"  Best for: Fast analysis, short series, spectral content\n")
 
 # Comparison summary
-print("Method Comparison Summary:")
+print("Harmonic Method Summary:")
 print("-" * 50)
 print(f"{'Metric':<25} {'Harmonic':<20}")
 print("-" * 50)

@@ -32,7 +32,7 @@ series = series.loc[(series.index.year == 2019) & (series.index.month == 6)]
 #
 # Half-hourly NEE is aggregated to daily sums internally. With the NEE convention
 # (negative = uptake), uptake days are blue and release days are red. The running
-# total builds toward the net annual flux annotated at the end. With no
+# total builds toward the net flux of the period, annotated at the end. With no
 # ``format_style`` the diive house style is used (auto title from the date range).
 
 dv.plotting.WaterfallPlot(
