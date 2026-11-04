@@ -1448,7 +1448,7 @@ class FluxLevelData:
             gapfilled = data.fpc_df[cols['rf']['CUT_50']]
         """
         out: dict[str, dict[str, str]] = {}
-        # Insert in the canonical method order ('mds', 'rf', 'xgb') so the
+        # Insert in the canonical method order ('mds', 'rf', 'xgb', 'xgbwn') so the
         # iteration order is identical to LevelResults.level41_methods() and
         # the plot helpers — consumers can iterate either dict and get the
         # same sequence.

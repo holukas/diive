@@ -444,7 +444,7 @@ class GridAggregator:
                                              "+" + self._df_long[self._ybc].astype(str))
 
         # Filter out bins that don't meet the minimum value requirement
-        # Use 'original_index' for accurate counts per bin from the initial dataset
+        # Use the 'INDEX' column (the original index) for accurate counts per bin
         bin_counts = self._df_long.groupby('BIN_COMBINED_STR')['INDEX'].count()
         valid_bins = bin_counts[bin_counts >= self.min_n_vals_per_bin].index
 

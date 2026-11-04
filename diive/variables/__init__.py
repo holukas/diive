@@ -4,6 +4,7 @@ VARIABLES: DERIVED METEOROLOGICAL VARIABLES
 
 Calculate derived variables: radiation, thermodynamic properties, temporal features,
 and synthetic data for testing. Composable functions and classes for feature creation.
+Also classifies a variable into its kind and physical category from its name.
 
 Part of the diive library: https://github.com/holukas/diive
 """

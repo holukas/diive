@@ -56,9 +56,9 @@ Level                          Shape                         Why this shape
 ``run_level2``                 per-test config dicts         N independent EddyPro tests, each with its own
                                                              ``apply`` / threshold / time-period settings.
                                                              Flat kwargs would explode the namespace.
-``run_level31``                flat keyword arguments        Two binary decisions and an optional storage
-                                                             column name. A config object would be
-                                                             overkill.
+``run_level31``                flat keyword arguments        A few switches, an optional storage column
+                                                             name and optional screening settings. A
+                                                             config object would be overkill.
 ``run_level32``                pre-built detector object     Outlier detection is inherently sequential and
                                                              stateful: each ``flag_*`` + ``addflag()`` pair
                                                              filters the survivors of the previous step.

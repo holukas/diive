@@ -1370,7 +1370,7 @@ def _quality_classes(data, ustar_scenario: str | None, method: str | None = None
     ``best``: QCF 0 after Level 3.3, the highest quality. ``used``: the records the gap-filling
     started from (QCF below the accepted limit, 0 and 1 by default). ``rejected``: every record
     with a value that is not used, whatever test removed it. ``filled``: the gap-filled result of
-    *method* ('mds', 'rf', 'xgb'), or of the first L4.1 method that ran for this scenario.
+    *method* ('mds', 'rf', 'xgb', 'xgbwn'), or of the first L4.1 method that ran for this scenario.
     """
     used_all = data.levels.filteredseries_level33_qcf
     if not used_all:
@@ -1609,8 +1609,8 @@ def plot_quality_heatmaps(data, ustar_scenario: str | None = None, units: str = 
         data: Chain container after ``run_level33_*`` (the last panel needs ``run_level41_*``).
         ustar_scenario: USTAR scenario to show. Defaults to the first.
         units: Unit of the flux, for the colour bars.
-        method: Gap-filling method of the last panel ('mds', 'rf', 'xgb'). Defaults to the
-            first that ran.
+        method: Gap-filling method of the last panel ('mds', 'rf', 'xgb', 'xgbwn'). Defaults to
+            the first that ran.
         showplot: Call ``plt.show()`` after drawing.
     """
     import matplotlib.pyplot as plt
@@ -1660,8 +1660,8 @@ def plot_quality_timeseries(data, ustar_scenario: str | None = None, units: str 
         data: Chain container after ``run_level33_*`` (the last row needs ``run_level41_*``).
         ustar_scenario: USTAR scenario to show. Defaults to the first.
         units: Unit of the flux, for the y-axis label.
-        method: Gap-filling method of the last row ('mds', 'rf', 'xgb'). Defaults to the first
-            that ran.
+        method: Gap-filling method of the last row ('mds', 'rf', 'xgb', 'xgbwn'). Defaults to the
+            first that ran.
         showplot: Call ``plt.show()`` after drawing.
     """
     import matplotlib.pyplot as plt

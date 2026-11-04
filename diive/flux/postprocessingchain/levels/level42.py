@@ -285,7 +285,8 @@ def run_level42_nighttime_oneflux(
         ta_f: Gap-filled air temperature column (**deg C**) in ``data.full_df``
             (used to compute RECO at every record).
         gapfill_method: Which L4.1 gap-filled NEE to use for the GPP residual —
-            ``'mds'`` (default), ``'rf'``, or ``'xgb'``. Must have run at L4.1.
+            ``'mds'`` (default), ``'rf'``, ``'xgb'`` or ``'xgbwn'``. Must have
+            run at L4.1.
         scenarios: USTAR scenario labels to partition. None (default)
             takes all Level 3.3 scenarios except the 40 REF versions of
             ``reference=True`` (see ``select_scenarios``).
@@ -348,7 +349,7 @@ def run_level42_nighttime_reddyproc(
             ``data.full_df``.
         ta_f: Gap-filled air temperature column (**deg C**) in ``data.full_df``.
         gapfill_method: Which L4.1 gap-filled NEE to use (``'mds'`` default /
-            ``'rf'`` / ``'xgb'``). Must have run at L4.1.
+            ``'rf'`` / ``'xgb'`` / ``'xgbwn'``). Must have run at L4.1.
         scenarios: USTAR scenario labels to partition. None (default)
             takes all Level 3.3 scenarios except the 40 REF versions of
             ``reference=True`` (see ``select_scenarios``).
@@ -503,7 +504,8 @@ def run_level42_daytime_oneflux(
         vpd_f: Gap-filled VPD column in ``data.full_df`` — **kPa** by default.
         vpd_in_kpa: Whether ``vpd_f`` is in kPa (default). Set ``False`` if hPa.
         gapfill_method: Which L4.1 gap-filled NEE to pass as ``nee_f``
-            (``'mds'`` default / ``'rf'`` / ``'xgb'``), used where it has run.
+            (``'mds'`` default / ``'rf'`` / ``'xgb'`` / ``'xgbwn'``), used where
+            it has run.
             ``None`` passes none.
         scenarios: USTAR scenario labels to partition. None (default)
             takes all Level 3.3 scenarios except the 40 REF versions of
@@ -624,8 +626,8 @@ def run_level42_partitioning(
         vpd_f: Gap-filled VPD column, **kPa** by default (see ``vpd_in_kpa``).
         nee_sd: Optional NEE uncertainty column, daytime REddyProc only.
         gapfill_method: Which L4.1 gap-filled NEE the nighttime method uses
-            (``'mds'`` default / ``'rf'`` / ``'xgb'``). Daytime ONEFlux passes
-            it on as ``nee_f`` where it has run.
+            (``'mds'`` default / ``'rf'`` / ``'xgb'`` / ``'xgbwn'``). Daytime
+            ONEFlux passes it on as ``nee_f`` where it has run.
         vpd_in_kpa: Whether ``vpd_f`` is in kPa (default). Daytime method only.
         scenarios: USTAR scenario labels to partition. None (default) takes all
             Level 3.3 scenarios except the 40 REF versions of ``reference=True``.

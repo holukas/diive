@@ -6,7 +6,7 @@ A small ports-and-adapters layer for connecting diive to a database. The
 :class:`DatabaseBackend` port is the backend-agnostic contract; concrete
 adapters implement it for a specific database. :class:`InfluxDBBackend` (over
 diive's in-house InfluxDB engine in :mod:`diive.core.io.db.influx`, optional
-``db`` group) is the first adapter.
+``db`` extra) is the first adapter.
 
 Part of the diive library: https://github.com/holukas/diive
 """
