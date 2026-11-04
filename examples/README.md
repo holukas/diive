@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use diive for time series processing, gap-filling, quality control, and visualization.
 
-**113 examples across 10 organized folders by functional domain.**
+**114 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -10,7 +10,7 @@ Examples are organized by **functional domain**, not source code structure:
 
 ```
 examples/
-├── visualization/         # Plotting and visualization (24 examples)
+├── visualization/         # Plotting and visualization (25 examples)
 │   ├── plot_heatmap_datetime_basic.py
 │   ├── plot_heatmap_advanced.py
 │   ├── plot_heatmap_xyz_basic.py
@@ -34,6 +34,7 @@ examples/
 │   ├── plot_treering_line_temperature.py
 │   ├── plot_waterfall.py
 │   ├── plot_windrose_basic.py
+│   ├── plot_footprint.py
 │   └── plot_compound_extremes.py
 ├── times/                 # Timestamp handling (7 examples)
 │   ├── times_timestamp_sanitizer.py
@@ -139,7 +140,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 113 examples in parallel with up to 12 workers and reports run times and errors.
+This runs all 114 examples in parallel with up to 12 workers and reports run times and errors.
 
 ## Finding Examples
 

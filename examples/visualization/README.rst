@@ -3,7 +3,7 @@ Data Visualization Examples
 
 Examples demonstrating visualization and plotting functions for time series and flux data.
 
-24 examples across 10+ plot types.
+25 examples across 10+ plot types.
 
 Examples by Plot Type
 ---------------------
@@ -62,6 +62,9 @@ Circular / Spiral
 - **plot_windrose_basic.py** — Wind rose: a variable aggregated into wind-direction sectors
   (mean/median/min/max/sum/std/count) drawn as polar bars; baseline handles negative aggregates; the
   per-sector results table is available on ``.results`` and printed as a Rich table
+- **plot_footprint.py** — Flux footprint map (Kljun et al. 2015) of a single footprint or a footprint
+  climatology: log-scaled field, labelled source-area contours, tower, peak, range rings and north arrow.
+  A single footprint adds its crosswind-integrated and cumulative profile
 - **plot_compound_extremes.py** — ``CompoundExtremesPlot``: quadrant scatter of two standardized drivers
   (z-scores) coloured/marked by compound-extreme category with dashed threshold lines (after Wang et al.,
   Fig. 2); built from a fitted ``CompoundExtremes``, with custom styling, or from pre-classified data
@@ -114,6 +117,7 @@ See ``dv.plotting`` for the complete API:
 - ``ShiftedDistributionPlot`` — Compare a variable's distribution between two periods
 - ``TreeRingPlot`` — Circular spiral: annual rings with color-coded values
 - ``WindRosePlot`` — A variable aggregated into wind-direction sectors as polar bars
+- ``FootprintPlot`` — Map of a flux footprint or footprint climatology with source-area contours
 - ``CompoundExtremesPlot`` — Quadrant scatter of two standardized drivers by extreme category
 - ``FormatStyle`` — Chrome (title, labels, units, fonts, grid, legend) for any ``plot()``
 
@@ -129,4 +133,4 @@ Running Examples
    # All visualization examples
    uv run python examples/run_all_examples.py
 
-All 24 examples follow the two-phase design pattern.
+All 25 examples follow the two-phase design pattern.

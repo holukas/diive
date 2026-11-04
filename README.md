@@ -102,7 +102,7 @@ panels. Zooming into one of the date panels updates the statistics and panels fo
 | [diive.readthedocs.io](https://diive.readthedocs.io/)      | Online documentation: API reference and example gallery      |
 | [OVERVIEW.md](OVERVIEW.md)                                 | How library, desktop app, docs and packaging fit together    |
 | [examples/COOKBOOK.md](examples/COOKBOOK.md)               | Six short workflows, the recommended starting point         |
-| [examples/CATALOG.md](examples/CATALOG.md)                 | All 113 examples, sorted by task                             |
+| [examples/CATALOG.md](examples/CATALOG.md)                 | All 114 examples, sorted by task                             |
 | [examples/EXAMPLE_DATASET.md](examples/EXAMPLE_DATASET.md) | The bundled example dataset (37 variables)                   |
 | [diive/gui/MANUAL.md](diive/gui/MANUAL.md)                 | User manual of the desktop app                               |
 | [diive/gui/README.md](diive/gui/README.md)                 | How the desktop app is built, for developers                 |
