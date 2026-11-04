@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use diive for time series processing, gap-filling, quality control, and visualization.
 
-**114 examples across 10 organized folders by functional domain.**
+**115 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -75,7 +75,7 @@ examples/
 │   │   ├── partitioning_daytime_reddyproc.py
 │   │   ├── partitioning_daytime_oneflux.py
 │   │   └── partitioning_comparison.py
-│   ├── lowres/            # Low-resolution processing (9 examples)
+│   ├── lowres/            # Low-resolution processing (10 examples)
 │   │   ├── flux_timelag_analysis.py
 │   │   ├── flux_common.py
 │   │   ├── flux_hqflux.py
@@ -84,7 +84,8 @@ examples/
 │   │   ├── flux_uncertainty.py
 │   │   ├── flux_ustar_detection.py
 │   │   ├── flux_ustar_method_comparison.py
-│   │   └── flux_ustar_data_availability.py
+│   │   ├── flux_ustar_data_availability.py
+│   │   └── flux_footprint.py
 ├── gapfilling/            # Gap-filling methods (12 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
@@ -140,7 +141,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 114 examples in parallel with up to 12 workers and reports run times and errors.
+This runs all 115 examples in parallel with up to 12 workers and reports run times and errors.
 
 ## Finding Examples
 

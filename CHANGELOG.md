@@ -152,6 +152,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 ### Changed
 
 - **Missing values in the flux chain heatmaps** are drawn in a mid grey (`chainplots.NAN_COLOR`,
+- **Example, flux footprint:** a new example calculates a single footprint, shows how stability
+  moves it, and computes the footprint climatology of one month of measurements.
   `#9E9E9E`) instead of a pale blue-grey that was hard to tell from the pale yellow of the colormap.
 - **Heatmap labels fit the panel:** `HeatmapYearMonth`, `HeatmapXYZ` and `HeatmapDateTime` size the
   `show_values` numbers to the cells (4 to 11 pt), draw them white on dark cells and dark on light

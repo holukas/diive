@@ -156,6 +156,9 @@ def ffp_footprint(zm: float, h: float, ol: float, sigmav: float, ustar: float, *
 
     Raises:
         ValueError: If an input is missing or outside the range of the model.
+
+    Example:
+        See ``examples/flux/lowres/flux_footprint.py``.
     """
     if umean is not None and z0 is not None:
         umean = None
@@ -294,6 +297,9 @@ def ffp_climatology(zm, h, ol, sigmav, ustar, wind_dir, *, z0=None, umean=None,
     Raises:
         ValueError: If no record gives a valid footprint, or the inputs have
             different lengths.
+
+    Example:
+        See ``examples/flux/lowres/flux_footprint.py``.
     """
     zms, hs, ols, sigmavs, ustars, wind_dirs = [np.asarray(v, dtype=float).ravel()
                                                 for v in (zm, h, ol, sigmav, ustar, wind_dir)]
