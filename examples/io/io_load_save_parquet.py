@@ -14,6 +14,7 @@ Parquet file I/O with automatic timestamp sanitization.
 # and faster I/O performance.
 
 import tempfile
+import time
 
 import diive as dv
 from diive.core.io.files import save_parquet, load_parquet
@@ -34,7 +35,9 @@ print(f"Date range: {data.index[0]} to {data.index[-1]}")
 # Save DataFrame as Parquet. Default: current working directory. Pass ``outpath``
 # to specify destination.
 with tempfile.TemporaryDirectory() as tmpdir:
+    parquet_start = time.time()
     filepath = save_parquet(filename="flux_data", data=data, outpath=tmpdir)
+    parquet_save_time = time.time() - parquet_start
     print(f"File saved to: {filepath}")
 
     # %%
@@ -42,7 +45,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
     # ^^^^^^^^^^^^^^^^^
     # Load from Parquet file. Auto-detects timestamp frequency and sanitizes index.
 
+    parquet_load_start = time.time()
     data_loaded = load_parquet(filepath=filepath, output_middle_timestamp=True)
+    parquet_load_time = time.time() - parquet_load_start
     print(f"Loaded data with shape: {data_loaded.shape}")
     print(f"Detected frequency: {data_loaded.index.freq}")
 
@@ -74,7 +79,6 @@ with tempfile.TemporaryDirectory() as tmpdir:
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     # Measure file size and load times for both formats.
 
-    import time
     import os
     import pandas as pd
     from pathlib import Path
@@ -101,8 +105,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     print(f"{'Metric':<25} {'CSV':<20} {'Parquet':<20}")
     print("-" * 70)
     print(f"{'File size (MB)':<25} {csv_size / 1e6:>18.2f} {parquet_size / 1e6:>18.2f}")
-    print(f"{'Save time (s)':<25} {csv_save_time:>18.3f} {0.284:>18.3f}")
-    print(f"{'Load time (s)':<25} {csv_load_time:>18.3f} {0.034:>18.3f}")
+    print(f"{'Save time (s)':<25} {csv_save_time:>18.3f} {parquet_save_time:>18.3f}")
+    print(f"{'Load time (s)':<25} {csv_load_time:>18.3f} {parquet_load_time:>18.3f}")
     print(f"{'Size reduction':<25} {(1 - parquet_size / csv_size) * 100:>18.1f}%")
-    print(f"{'Load speed gain':<25} {csv_load_time / 0.034:>18.1f}x faster")
+    print(f"{'Load speed gain':<25} {csv_load_time / parquet_load_time:>18.1f}x faster")
     print("=" * 70)

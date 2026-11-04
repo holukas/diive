@@ -119,8 +119,9 @@ print(f"  Mean absolute difference: {mae_simple:.4f}")
 # - No reference data available
 # - Need quick correction without computation
 #
-# Example comparison:
+# Example comparison. get_offset() returns the value added to the measurement,
+# so a measurement that reads 4.2 too high gives -4.2.
 print(f"\nComparison of methods:")
-print(f"  Detected offset: {detected_offset:.2f}")
-print(f"  Known offset: {known_offset:.2f}")
-print(f"  Detection error: {abs(detected_offset - known_offset):.4f}")
+print(f"  Detected offset (added): {detected_offset:.2f}")
+print(f"  Known offset (subtracted): {known_offset:.2f}")
+print(f"  Detection error: {abs(detected_offset + known_offset):.4f}")

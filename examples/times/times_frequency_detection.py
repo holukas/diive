@@ -43,13 +43,16 @@ print("\n" + "=" * 60)
 print("TimestampSanitizer Results")
 print("=" * 60)
 print(f"Detected frequency: {status['inferred_frequency']}")
-print(f"Confidence: {status['frequency_confidence']:.1%}")
+confidence = status['frequency_confidence']
+matching = status['frequency_percent_matching']
+print(f"Confidence: {'n/a' if confidence is None else f'{confidence:.1%}'}")
 print(f"Detection method: {status['frequency_detection_method']}")
-print(f"Intervals matching: {status['frequency_percent_matching']:.1f}%")
+print(f"Intervals matching: {'n/a' if matching is None else f'{matching:.1f}%'}")
 
 # Assess result quality
-confidence = status['frequency_confidence']
-if confidence >= 0.95:
+if confidence is None:
+    print("[X] No frequency detected")
+elif confidence >= 0.95:
     print(f"[OK] All methods agree")
 elif confidence >= 0.90:
     print(f"[OK] Multiple methods agree")

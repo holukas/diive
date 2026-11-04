@@ -42,12 +42,6 @@ TARGET_COL = 'NEE_CUT_REF_orig'
 feature_cols = [TARGET_COL, 'Tair_f', 'VPD_f', 'Rg_f']
 df = df[feature_cols].copy()
 
-# Quality control: remove low-quality NEE records
-lowquality = df.index.get_level_values(0).to_frame()['QCF_NEE'] > 0 if 'QCF_NEE' in df.columns else False
-if isinstance(lowquality, bool) and not lowquality:
-    # Fallback: mark some records as missing manually if QCF not available
-    pass
-
 print(f"Data: {len(df)} records from {df.index.min().date()} to {df.index.max().date()}")
 print(f"Missing values: {df[TARGET_COL].isnull().sum()}")
 
