@@ -53,6 +53,11 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
 - **Long gaps:** `FluxMDS(fill_long_gaps=)`, `run_level41_mds(fill_long_gaps=)` and
   `FluxConfig(mds_fill_long_gaps=)` choose whether long gaps stay filled. `oneflux_long_gap_mask`
   finds them as the FLUXNET product of ONEFlux does.
+- **Wet nights of open-path analysers:** `run_level41_xgb_wetnight` and
+  `LongTermGapFillingXGBoostWetNightTS` fill all gaps with the standard long-term XGBoost and then
+  the night gaps marked as wet from a Lloyd-Taylor model fitted to the dry measured nights of each
+  year (E0 per year, reference respiration per month). Columns end in `_gfXGWN`, so the method runs
+  next to `run_level41_xgb`; flag 3 marks the Lloyd-Taylor values (#445).
 - **GUI, flux chain partitioning:** the flux chain tab has a Level 4.2 stage that partitions NEE
   into GPP and RECO, with the option to add the GPP and RECO REF.
 - **GUI, long gaps:** the MDS tab and Level 4.1 of the flux chain tab have a "Fill long gaps"

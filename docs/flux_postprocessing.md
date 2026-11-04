@@ -12,7 +12,7 @@ The chain follows the levels of the Swiss FluxNet flux processing chain:
 | L3.1 | Adds the storage term | `run_level31` |
 | L3.2 | Removes outliers | `make_level32_detector`, `run_level32` |
 | L3.3 | Removes records with weak turbulence (USTAR filter) | `run_level33_constant_ustar` |
-| L4.1 | Fills the gaps | `run_level41_xgb`, `run_level41_rf`, `run_level41_mds` |
+| L4.1 | Fills the gaps | `run_level41_xgb`, `run_level41_xgb_wetnight`, `run_level41_rf`, `run_level41_mds` |
 | L4.2 | Partitions NEE into GPP and RECO | `run_level42_partitioning` |
 | | Random, USTAR and joint uncertainty | `RandomUncertaintyPAS20`, `JointUncertaintyPAS20` |
 
@@ -263,6 +263,30 @@ It costs the run time of the cross-validation, a few minutes for a record of ten
 year still has a single model, so some model variance remains in the sums.
 `report_gapfilling_feature_importances` and `plot_feature_ranks_per_year` show which features
 carry the models.
+
+(wetnight-gapfilling)=
+### Wet nights of an open-path analyser
+
+`run_level41_xgb_wetnight`, class `LongTermGapFillingXGBoostWetNightTS`.
+
+An open-path analyser cannot measure in rain and fog. XGBoost learns these nights only from the few
+humid nights the analyser did measure, and from drivers such as a VPD near zero that they share
+with calm foggy nights of low flux. It then fills the wet night gaps too low. At night, NEE is
+respiration, which a temperature response fitted to the dry nights describes without these drivers.
+
+- **XGBoost first.** All gaps are filled as by `run_level41_xgb`, with the same features, training
+  records and yearly models.
+- **Then the wet night gaps.** The night gaps marked as wet are filled from a Lloyd-Taylor model
+  (Lloyd and Taylor 1994) fitted to the measured dry nights of the same year: E0 per year, the
+  reference respiration at 15 °C per month, or per year where a month has fewer than `min_records`
+  dry nights. A year with fewer dry nights than that keeps the XGBoost fill.
+- **Wet is the caller's choice.** `wet` (and optionally `dry`) are boolean series or columns, for
+  example rain in the previous hours, a wet-window signal of the analyser or an overcast sky. Night
+  is the night flag of the chain.
+- **Output.** The columns end in `_gfXGWN`, so the method can run next to `run_level41_xgb`
+  (`_gfXG`) and the two fills can be compared. The flag is 0 measured, 1 XGBoost, 2 fallback and 3 a
+  wet night gap filled from the Lloyd-Taylor model. `wetnight_params_` holds E0, the yearly
+  reference respiration and the number of dry nights of each year.
 
 (mds-gapfilling)=
 ## Level 4.1: gap-filling with MDS
