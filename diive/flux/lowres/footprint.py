@@ -14,6 +14,13 @@ the Python implementation of the authors (FFP version 1.42) bitwise on valid inp
 - ``ffp_climatology`` follows ``FFP_climatology``: footprints on a fixed physical grid,
   rotated per record, averaged and smoothed twice with a 3x3 kernel.
 
+The climatology is faster than the reference without changing a bit of the result. It
+computes only the cells within 90 degrees of each wind direction (the others get no
+footprint), and worker processes split the grid into blocks of cells. Each block adds
+the records in their order, so every cell gets the same sum as in the reference. The
+numerics live in ``diive.core.funcs.ffp_kernel``, which the workers import without the
+rest of ``diive.flux``.
+
 Deliberate deviations, none of them changes the result of valid input:
 
 - Invalid input raises ``ValueError`` in ``ffp_footprint`` (the reference prints a
@@ -37,24 +44,22 @@ Reference:
 """
 
 import numbers
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
 from numpy import ma
 
+from diive.core.funcs.ffp_kernel import (A as _A, AC as _AC, B as _B, BC as _BC, C as _C, CC as _CC,
+                                         D as _D, K as _K, XSTAR_END as _XSTAR_END,
+                                         climatology_block, psi_f as _psi_f,
+                                         scale_const as _scale_const)
 from diive.core.utils.console import Progress, warn
 
-# Model parameters (Kljun et al. 2015, Eqs. 14, 17, 19)
-_A = 1.4524
-_B = -1.9914
-_C = 1.4622
-_D = 0.1359
-_AC = 2.17
-_BC = 1.66
-_CC = 20.0
-_XSTAR_END = 30
-_OLN = 5000  # Limit of |L| for neutral scaling
-_K = 0.4  # von Karman constant
+# Cells per block of the climatology. Small blocks keep the temporaries in the cache.
+_CHUNK = 8192
+# Fewer records per worker do not pay for starting the worker processes
+_MIN_RECORDS_PER_WORKER = 50
 
 DEFAULT_RS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
 
@@ -241,7 +246,7 @@ def ffp_footprint(zm: float, h: float, ol: float, sigmav: float, ustar: float, *
 def ffp_climatology(zm, h, ol, sigmav, ustar, wind_dir, *, z0=None, umean=None,
                     domain=None, dx: float = None, dy: float = None, nx: int = None,
                     ny: int = None, rs=DEFAULT_RS, rslayer: bool = False,
-                    smooth_data: bool = True, crop: bool = False,
+                    smooth_data: bool = True, crop: bool = False, n_jobs: int = -1,
                     verbose: int | bool | None = None) -> FFPClimatology:
     """Footprint climatology of many records (Kljun et al. 2015).
 
@@ -275,6 +280,8 @@ def ffp_climatology(zm, h, ol, sigmav, ustar, wind_dir, *, z0=None, umean=None,
         smooth_data: Smooth the climatology twice with a 3x3 kernel.
         crop: Crop the grid to the largest contour line in ``rs`` (80 % if ``rs`` is
             None).
+        n_jobs: Number of worker processes, -1 for all cores. Runs with fewer than
+            50 records per worker use fewer workers. The result does not depend on it.
         verbose: Verbosity of progress lines and warnings.
 
     Without ``domain``, ``dx`` and ``nx`` the grid is 2 km x 2 km with 2 m cells.
@@ -312,62 +319,70 @@ def ffp_climatology(zm, h, ol, sigmav, ustar, wind_dir, *, z0=None, umean=None,
     x_2d, y_2d = np.meshgrid(x, y)
     rho = np.sqrt(x_2d ** 2 + y_2d ** 2)
     theta = np.arctan2(x_2d, y_2d)
-    fclim_2d = np.zeros(x_2d.shape)
+
+    # Cells sorted by angle: the cells within 90 degrees of a wind direction, the only
+    # ones a footprint can reach, are then one or two contiguous slices.
+    order = np.argsort(theta, axis=None, kind='stable')
+    theta_sorted = theta.ravel()[order]
+    rho_sorted = rho.ravel()[order]
 
     valid = np.zeros(ts_len, dtype=bool)
-    progress = Progress("Footprint climatology", ts_len, verbose=verbose)
+    records = []
     for i in range(ts_len):
-        progress.step()
         # Python floats, as the reference receives them from lists
-        ustar_i, sigmav_i, h_i, ol_i = float(ustars[i]), float(sigmavs[i]), float(hs[i]), float(ols[i])
-        wind_dir_i, zm_i = float(wind_dirs[i]), float(zms[i])
-        z0_i = None if z0s is None else float(z0s[i])
-        umean_i = None if umeans is None else float(umeans[i])
+        rec = dict(ustar=float(ustars[i]), sigmav=float(sigmavs[i]), h=float(hs[i]),
+                   ol=float(ols[i]), wind_dir=float(wind_dirs[i]), zm=float(zms[i]),
+                   z0=None if z0s is None else float(z0s[i]),
+                   umean=None if umeans is None else float(umeans[i]))
         try:
-            _check_inputs(ustar_i, sigmav_i, h_i, ol_i, wind_dir_i, zm_i, z0_i, umean_i,
-                          rslayer, verbose=0, wind_dir_required=True)
+            _check_inputs(**rec, rslayer=rslayer, verbose=0, wind_dir_required=True)
         except ValueError:
             continue
-
-        rotated_theta = theta - wind_dir_i * np.pi / 180.
-
-        # Real-scale crosswind-integrated footprint
-        if z0_i is not None:
-            psi_f = _psi_f(zm_i, ol_i)
-            if not (np.log(zm_i / z0_i) - psi_f) > 0:
-                continue
-            xstar = (rho * np.cos(rotated_theta) / zm_i * (1. - (zm_i / h_i))
-                     / (np.log(zm_i / z0_i) - psi_f))
-            px = xstar > _D
-            xs = xstar[px]
-            fstar = _A * (xs - _D) ** _B * np.exp(-_C / (xs - _D))
-            f_ci = fstar / zm_i * (1. - (zm_i / h_i)) / (np.log(zm_i / z0_i) - psi_f)
-        else:
-            xstar = (rho * np.cos(rotated_theta) / zm_i * (1. - (zm_i / h_i))
-                     / (umean_i / ustar_i * _K))
-            px = xstar > _D
-            xs = xstar[px]
-            fstar = _A * (xs - _D) ** _B * np.exp(-_C / (xs - _D))
-            f_ci = fstar / zm_i * (1. - (zm_i / h_i)) / (umean_i / ustar_i * _K)
-
-        # Scaled sig_y* and real-scale sig_y
-        sigystar = _AC * np.sqrt(_BC * np.abs(xs) ** 2 / (1 + _CC * np.abs(xs)))
-        sigy = sigystar / _scale_const(zm_i, ol_i) * zm_i * sigmav_i / ustar_i
-        sigy[sigy < 0] = np.nan
-
-        # Real-scale f(x, y). Cells outside px add zero, as in the reference.
-        f_2d = (f_ci / (np.sqrt(2 * np.pi) * sigy)
-                * np.exp(-(rho[px] * np.sin(rotated_theta[px])) ** 2 / (2. * sigy ** 2)))
-        fclim_2d[px] = fclim_2d[px] + f_2d
+        if rec['z0'] is not None and not (np.log(rec['zm'] / rec['z0']) - _psi_f(rec['zm'], rec['ol'])) > 0:
+            continue
         valid[i] = True
+        wind_dir_rad = rec['wind_dir'] * np.pi / 180.
+        slices = _upwind_slices(theta_sorted, wind_dir_rad)
+        records.append([wind_dir_rad, rec['ustar'], rec['sigmav'], rec['h'], rec['ol'], rec['zm'],
+                        np.nan if rec['z0'] is None else rec['z0'],
+                        np.nan if rec['umean'] is None else rec['umean'],
+                        *[v for sl in slices for v in sl], *[0] * (4 - 2 * len(slices))])
+    # One array, which joblib shares with the workers instead of copying it per task
+    records = np.array(records, dtype=float)
 
     n = int(valid.sum())
-    progress.done(f"{n} valid footprints")
     if n == 0:
         raise ValueError("No valid footprint was calculated.")
     if n < ts_len:
         warn(f"{ts_len - n} of {ts_len} records skipped (missing or invalid input).",
              verbose=verbose)
+
+    # Each task is one block of cells and adds the records in their order, so every
+    # cell sums its footprints as the reference does. Many small tasks keep fast and
+    # slow cores busy until the end.
+    if n_jobs == -1:
+        n_workers = os.cpu_count() or 1
+    else:
+        n_workers = max(1, n_jobs)
+    n_workers = max(1, min(n_workers, n // _MIN_RECORDS_PER_WORKER))
+    blocks = [(b0, theta_sorted[b0:b0 + _CHUNK], rho_sorted[b0:b0 + _CHUNK])
+              for b0 in range(0, theta_sorted.size, _CHUNK)]
+    progress = Progress(f"Footprint climatology, {n} records", len(blocks), verbose=verbose)
+    if n_workers == 1:
+        results = (climatology_block(block, records, z0s is not None) for block in blocks)
+    else:
+        from joblib import Parallel, delayed
+        results = Parallel(n_jobs=n_workers, return_as='generator_unordered')(
+            delayed(climatology_block)(block, records, z0s is not None) for block in blocks)
+    acc = np.empty(theta_sorted.size)
+    for b0, acc_block in results:
+        progress.step()
+        acc[b0:b0 + acc_block.size] = acc_block
+    progress.done()
+
+    fclim_2d = np.empty(acc.size)
+    fclim_2d[order] = acc
+    fclim_2d = fclim_2d.reshape(x_2d.shape)
 
     fclim_2d = fclim_2d / n
     if smooth_data:
@@ -395,6 +410,26 @@ def ffp_climatology(zm, h, ol, sigmav, ustar, wind_dir, *, z0=None, umean=None,
 
     return FFPClimatology(x_2d=x_2d, y_2d=y_2d, fclim_2d=fclim_2d, n=n, valid=valid,
                           rs=rs, fr=frs, xr=xrs, yr=yrs)
+
+
+def _upwind_slices(theta_sorted, wind_dir_rad):
+    """Slices of the angle-sorted cells within 90 degrees of the wind direction.
+
+    Outside them the reference gets xstar <= 0 and adds nothing. The margin covers
+    rounding at the edges.
+    """
+    halfwidth = np.pi / 2 + 1e-6
+    slices = []
+    for shift in (-2 * np.pi, 0., 2 * np.pi):
+        lo = max(wind_dir_rad - halfwidth + shift, -np.pi)
+        hi = min(wind_dir_rad + halfwidth + shift, np.pi)
+        if lo > hi:
+            continue
+        start = int(np.searchsorted(theta_sorted, lo, side='left'))
+        end = int(np.searchsorted(theta_sorted, hi, side='right'))
+        if start < end:
+            slices.append((start, end))
+    return slices
 
 
 def _check_inputs(ustar, sigmav, h, ol, wind_dir, zm, z0, umean, rslayer, verbose,
@@ -433,25 +468,6 @@ def _check_inputs(ustar, sigmav, h, ol, wind_dir, zm, z0, umean, rslayer, verbos
         raise ValueError("ustar must be larger than 0.1 m s-1.")
     if wind_dir is not None and (wind_dir > 360 or wind_dir < 0):
         raise ValueError("wind_dir must be between 0 and 360.")
-
-
-def _psi_f(zm, ol):
-    """Stability correction of the wind profile (unstable/neutral or stable)."""
-    if ol <= 0 or ol >= _OLN:
-        xx = (1 - 19.0 * zm / ol) ** 0.25
-        return np.log((1 + xx ** 2) / 2.) + 2. * np.log((1 + xx) / 2.) - 2. * np.arctan(xx) + np.pi / 2
-    return -5.3 * zm / ol
-
-
-def _scale_const(zm, ol):
-    """Scaling constant of sig_y (convective or stable)."""
-    if abs(ol) > _OLN:
-        ol = -1E6
-    if ol <= 0:
-        scale_const = 1E-5 * abs(zm / ol) ** (-1) + 0.80
-    else:
-        scale_const = 1E-5 * abs(zm / ol) ** (-1) + 0.55
-    return min(scale_const, 1.0)
 
 
 def _normalize_rs(rs, verbose):
@@ -533,39 +549,36 @@ def _contour_levels(f, dx, dy, rs):
     return [sf[np.nanargmin(np.abs(csf - r))] for r in rs]
 
 
-def _contour_vertices(x, y, f, lev):
-    """First contour line of f at lev, None if it reaches the edge of the grid."""
+def _contour_vertices(x, y, f, levels):
+    """First contour line of f at each level, (None, None) where it reaches the grid edge."""
     import contourpy
     # The settings of matplotlib.pyplot.contour (default rcParams)
     gen = contourpy.contour_generator(x, y, ma.masked_invalid(f, copy=False), name='mpl2014',
                                       corner_mask=True, line_type=contourpy.LineType.SeparateCode)
-    lines, _ = gen.lines(lev)
-    if not lines:
-        return None, None
-    segs = lines[0]
-    if x.min() >= segs[:, 0].min() or segs[:, 0].max() >= x.max() or \
-            y.min() >= segs[:, 1].min() or segs[:, 1].max() >= y.max():
-        return None, None
-    return segs[:, 0], segs[:, 1]
+    xmin, xmax, ymin, ymax = x.min(), x.max(), y.min(), y.max()
+    out = []
+    for lev in levels:
+        lines, _ = gen.lines(lev)
+        segs = lines[0] if lines else None
+        if segs is None or xmin >= segs[:, 0].min() or segs[:, 0].max() >= xmax or                 ymin >= segs[:, 1].min() or segs[:, 1].max() >= ymax:
+            out.append((None, None))
+        else:
+            out.append((segs[:, 0], segs[:, 1]))
+    return out
 
 
 def _contours(x_2d, y_2d, f_2d, dx, dy, rs):
     """Contour values and vertices of the source areas rs."""
     frs = _contour_levels(f_2d, dx, dy, rs)
-    xrs, yrs = [], []
-    for i, fr in enumerate(frs):
-        xr, yr = _contour_vertices(x_2d, y_2d, f_2d, fr)
-        if xr is None:
-            frs[i] = None
-        xrs.append(xr)
-        yrs.append(yr)
-    return frs, xrs, yrs
+    vertices = _contour_vertices(x_2d, y_2d, f_2d, frs)
+    frs = [None if xr is None else fr for fr, (xr, _) in zip(frs, vertices)]
+    return frs, [v[0] for v in vertices], [v[1] for v in vertices]
 
 
 def _crop_contour(x_2d, y_2d, f_2d, dx, dy, rs, xrs, yrs):
     """Vertices of the contour to crop to: the largest r inside the grid, else None."""
     if rs is None:
-        return _contour_vertices(x_2d, y_2d, f_2d, _contour_levels(f_2d, dx, dy, [0.8])[0])
+        return _contour_vertices(x_2d, y_2d, f_2d, _contour_levels(f_2d, dx, dy, [0.8]))[0]
     inside = [i for i, xr in enumerate(xrs) if xr is not None]
     if not inside:
         return None, None

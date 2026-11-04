@@ -147,6 +147,16 @@ class TestFootprintClimatology(unittest.TestCase):
         self.assertFalse(res.valid[2])
         np.testing.assert_array_equal(res.fclim_2d, ref.fclim_2d)
 
+    def test_worker_processes_give_same_result(self):
+        rng = np.random.default_rng(5)
+        n = 120
+        kw = dict(zm=20., h=rng.uniform(300., 2000., n), ol=rng.uniform(-500., -20., n),
+                  sigmav=rng.uniform(0.3, 1., n), ustar=rng.uniform(0.2, 0.7, n),
+                  wind_dir=rng.uniform(0., 360., n), z0=0.2, nx=150, rs=None, verbose=0)
+        one = ffp_climatology(**kw, n_jobs=1)
+        two = ffp_climatology(**kw, n_jobs=2)
+        np.testing.assert_array_equal(one.fclim_2d, two.fclim_2d)
+
     def test_domain_from_dx_and_nx(self):
         res = ffp_climatology(**SERIES, z0=0.2, dx=4., nx=100, rs=None, verbose=0)
         self.assertEqual(res.x_2d.shape, (101, 101))

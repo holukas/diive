@@ -136,7 +136,8 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   percentiles leave.
 - **Flux footprint:** `ffp_footprint` and `ffp_climatology` calculate the flux footprint
   prediction (FFP) of Kljun et al. (2015) for a single record and as a climatology of many records,
-  with the same results as the authors' Python code.
+  with the same results as the authors' Python code. The climatology runs on all cores
+  (`n_jobs`) and skips the cells a footprint cannot reach, so it is much faster than that code.
 
 ### Changed
 
