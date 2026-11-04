@@ -19,6 +19,7 @@ from diive.gapfilling.randomforest_ts import RandomForestTS, QuickFillRFTS, Opti
 from diive.gapfilling.xgboost_ts import XGBoostTS
 from diive.core.ml.scores import prediction_scores
 from diive.gapfilling.longterm import LongTermGapFillingRandomForestTS, LongTermGapFillingXGBoostTS
+from diive.gapfilling.wetnight import LongTermGapFillingXGBoostWetNightTS
 from diive.gapfilling.swin import SWINGapFillerXGBoost
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     'prediction_scores',
     'LongTermGapFillingRandomForestTS',
     'LongTermGapFillingXGBoostTS',
+    'LongTermGapFillingXGBoostWetNightTS',
     'SWINGapFillerXGBoost',
 ]
