@@ -6,6 +6,12 @@ Two-dimensional flux footprint of a single record and footprint climatology of m
 
 Part of the diive library: https://github.com/holukas/diive
 
+Please cite the paper of the model when you use it:
+
+    Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple two-dimensional
+    parameterisation for Flux Footprint Prediction (FFP). Geoscientific Model Development,
+    8(11), 3695-3713. https://doi.org/10.5194/gmd-8-3695-2015
+
 The model is the simple parameterisation of Kljun et al. (2015). Both functions reproduce
 the Python implementation of the authors (FFP version 1.42) bitwise on valid input:
 
@@ -36,11 +42,6 @@ Deliberate deviations, none of them changes the result of valid input:
   reference functions stop when the cropped range reaches the edge of the grid.
 - Contour lines come from contourpy with the settings of ``matplotlib.pyplot.contour``
   (same vertices), without creating a pyplot figure.
-
-Reference:
-    Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple two-dimensional
-    parameterisation for Flux Footprint Prediction (FFP). Geoscientific Model Development,
-    8(11), 3695-3713. https://doi.org/10.5194/gmd-8-3695-2015
 """
 
 import numbers
@@ -129,6 +130,9 @@ def ffp_footprint(zm: float, h: float, ol: float, sigmav: float, ustar: float, *
 
     Use it also to find a domain large enough for ``ffp_climatology``.
 
+    Please cite the paper of the model when you use it: Kljun et al. (2015), see
+    References.
+
     Args:
         zm: Measurement height above displacement height, z - d (m).
         h: Boundary-layer height (m), above 10 m.
@@ -159,6 +163,11 @@ def ffp_footprint(zm: float, h: float, ol: float, sigmav: float, ustar: float, *
 
     Example:
         See ``examples/flux/lowres/flux_footprint.py``.
+
+    References:
+        Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple two-dimensional
+        parameterisation for Flux Footprint Prediction (FFP). Geoscientific Model Development,
+        8(11), 3695-3713. https://doi.org/10.5194/gmd-8-3695-2015
     """
     if umean is not None and z0 is not None:
         umean = None
@@ -257,6 +266,9 @@ def ffp_climatology(zm, h, ol, sigmav, ustar, wind_dir, *, z0=None, umean=None,
     (0, 0), rotated into its wind direction, and averages all valid footprints.
     Records with a missing or invalid input are skipped.
 
+    Please cite the paper of the model when you use it: Kljun et al. (2015), see
+    References.
+
     All per-record inputs take a scalar or a sequence (list, array, Series) of one
     value per record. ``zm``, ``z0`` and ``umean`` may also be a single value for
     all records.
@@ -300,6 +312,11 @@ def ffp_climatology(zm, h, ol, sigmav, ustar, wind_dir, *, z0=None, umean=None,
 
     Example:
         See ``examples/flux/lowres/flux_footprint.py``.
+
+    References:
+        Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple two-dimensional
+        parameterisation for Flux Footprint Prediction (FFP). Geoscientific Model Development,
+        8(11), 3695-3713. https://doi.org/10.5194/gmd-8-3695-2015
     """
     zms, hs, ols, sigmavs, ustars, wind_dirs = [np.asarray(v, dtype=float).ravel()
                                                 for v in (zm, h, ol, sigmav, ustar, wind_dir)]

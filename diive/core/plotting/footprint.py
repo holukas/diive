@@ -6,6 +6,12 @@ Plot of the results of ``ffp_footprint`` and ``ffp_climatology`` (Kljun et al. 2
 
 Part of the diive library: https://github.com/holukas/diive
 
+Please cite the paper of the footprint model when you show its results:
+
+    Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple two-dimensional
+    parameterisation for Flux Footprint Prediction (FFP). Geoscientific Model Development,
+    8(11), 3695-3713. https://doi.org/10.5194/gmd-8-3695-2015
+
 The map shows the footprint field on a logarithmic colour scale, the source-area
 contour lines with their percentages, the tower, the footprint peak, range rings
 around the tower and a north arrow. The subtitle gives the peak distance, the
@@ -91,6 +97,11 @@ class FootprintPlot:
 
     See Also:
         examples/visualization/plot_footprint.py
+
+    References:
+        Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple two-dimensional
+        parameterisation for Flux Footprint Prediction (FFP). Geoscientific Model Development,
+        8(11), 3695-3713. https://doi.org/10.5194/gmd-8-3695-2015
     """
 
     def __init__(self, result, source_area: float = 0.8):

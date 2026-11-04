@@ -80,6 +80,13 @@ picks one with `method='nighttime'|'daytime'` and `mode='oneflux'|'reddyproc'`. 
 by ICOS. Each method writes columns with its own suffix, so all four can sit in one table. Examples:
 [examples/flux/partitioning/](examples/flux/partitioning/)
 
+**Flux footprint.** `ffp_footprint` and `ffp_climatology` calculate the flux footprint prediction (FFP) of Kljun et
+al. (2015), for a single record and as a climatology of many records, with the same results as the authors' Python
+code. `FootprintPlot` maps the result. Please cite the paper when you use the footprint: Kljun, N., Calanca, P.,
+Rotach, M. W., & Schmid, H. P. (2015). A simple two-dimensional parameterisation for Flux Footprint Prediction (FFP).
+Geoscientific Model Development, 8(11), 3695-3713. https://doi.org/10.5194/gmd-8-3695-2015. Example:
+[examples/flux/lowres/flux_footprint.py](examples/flux/lowres/flux_footprint.py)
+
 **Gap-filling.** Random Forest and XGBoost models that use SHAP values to drop unimportant features, and an MDS
 gap-filler that needs no training. By default, MDS follows the ONEFlux rules and adds the symmetric mean of Vekuri et
 al. (2023). Two more modes reproduce the MDS of ONEFlux and of REddyProc. A feature engineer with 8 stages builds the inputs
