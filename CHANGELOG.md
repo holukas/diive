@@ -12,6 +12,10 @@ records, MDS in ONEFlux mode that removes long gaps, and the Hampel window. Outl
 negative nighttime test, storage term screening and a time-of-day Hampel mode, the chain reports
 compare gap-filling methods, and `import diive`, many plots and the GUI are faster.
 
+![plotFootprint_diive_v0.93.0](images/plotFootprint_diive_v0.93.0.png)
+*New flux footprint after Kljun et al. (2015). This example plot shows the footprint climatology of
+one month of half-hourly measurements at a grassland site, with the source-area contour lines.*
+
 ### Added
 
 - **USTAR threshold detection:** `UstarThresholdDetection` bootstraps each year and reports VUT and
@@ -148,12 +152,12 @@ compare gap-filling methods, and `import diive`, many plots and the GUI are fast
   single footprint it adds the crosswind-integrated and cumulative profile. A new example shows a
   single footprint, a climatology from measured data, and unstable and stable footprints side by
   side.
+- **Example, flux footprint:** a new example calculates a single footprint, shows how stability
+  moves it, and computes the footprint climatology of one month of measurements.
 
 ### Changed
 
 - **Missing values in the flux chain heatmaps** are drawn in a mid grey (`chainplots.NAN_COLOR`,
-- **Example, flux footprint:** a new example calculates a single footprint, shows how stability
-  moves it, and computes the footprint climatology of one month of measurements.
   `#9E9E9E`) instead of a pale blue-grey that was hard to tell from the pale yellow of the colormap.
 - **Heatmap labels fit the panel:** `HeatmapYearMonth`, `HeatmapXYZ` and `HeatmapDateTime` size the
   `show_values` numbers to the cells (4 to 11 pt), draw them white on dark cells and dark on light
