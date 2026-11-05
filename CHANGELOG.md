@@ -345,6 +345,8 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   always 75/25 %.
 - **GUI, X/Y/Z surface tab:** after a column is removed, the role that lost it no longer takes the
   column another role already shows.
+- **Borderless heatmap export:** `export_borderless_heatmap` works again without calling `plot()`
+  first, and takes `vmin` and `vmax` for the colour scale.
 
 ## [0.92.0] - 2026-10-21
 

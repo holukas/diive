@@ -1215,6 +1215,27 @@ class TestPlotClasses(unittest.TestCase):
                                      np.asarray(ranks, dtype=float),
                                      equal_nan=True))
 
+    def test_export_borderless_heatmap_works_without_plot(self):
+        # #323: the export read self.vmin, which only plot() sets, so it raised
+        # AttributeError on a heatmap that was not plotted first.
+        import tempfile
+        from pathlib import Path
+        import numpy as np
+        from PIL import Image
+        from diive.core.plotting.heatmap_datetime import HeatmapDateTime
+        with tempfile.TemporaryDirectory() as tmpdir:
+            HeatmapDateTime(self.series).export_borderless_heatmap(outpath=tmpdir)
+            plt.close("all")
+            files = sorted(p.name for p in Path(tmpdir).glob("*.png"))
+            self.assertEqual(files, [f"heatmap_{t}_TA.png" for t in
+                                     ("heightmap_bw", "heightmap_bw_r",
+                                      "texture_color", "texture_color_r")])
+            # Borderless: the data cells reach every edge of the image (missing
+            # cells stay transparent, so test for data on each edge, not all of it).
+            alpha = np.asarray(Image.open(Path(tmpdir) / "heatmap_texture_color_TA.png"))[..., 3]
+            for edge in (alpha[0], alpha[-1], alpha[:, 0], alpha[:, -1]):
+                self.assertEqual(edge.max(), 255)
+
     # --- show_values cell-count guard ---
 
     @staticmethod

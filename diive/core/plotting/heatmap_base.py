@@ -421,7 +421,7 @@ class HeatmapBase:
         z = np.ma.masked_invalid(z)  # Mask NaN as missing
         return cmap, z
 
-    def export_borderless_heatmap(self, outpath: str):
+    def export_borderless_heatmap(self, outpath: str, vmin: float = None, vmax: float = None):
         """Exports borderless heatmap images for use as textures or heightmaps in 3-D software.
 
         Generates four 300 dpi PNG files — two greyscale heightmaps (normal and
@@ -440,11 +440,21 @@ class HeatmapBase:
         Args:
             outpath: Directory where the PNG files are saved.
                      Created automatically if it does not exist.
+            vmin: Lower bound of the colour scale. *None* uses the value given
+                  to :meth:`plot`, or the data minimum if :meth:`plot` was not called.
+            vmax: Upper bound of the colour scale. *None* uses the value given
+                  to :meth:`plot`, or the data maximum if :meth:`plot` was not called.
         """
         # https://www.youtube.com/watch?v=BXDSfrzR0zI
 
         # First, check if output directory exists
         verify_dir(path=outpath)
+
+        # vmin/vmax are plot() styling, so they exist only after plot() ran
+        vmin = getattr(self, 'vmin', None) if vmin is None else vmin
+        vmax = getattr(self, 'vmax', None) if vmax is None else vmax
+        series = getattr(self, 'series', None)
+        name = series.name if series is not None else self._z_series.name
 
         # # todo? Smooth z with rolling mean
         # # _plot_df = self.plot_df.copy()
@@ -473,7 +483,7 @@ class HeatmapBase:
 
             p = ax_render_bw.pcolormesh(self.x, self.y, self.z,
                                         linewidths=0, cmap=cmap, antialiased=False,
-                                        vmin=self.vmin, vmax=self.vmax,
+                                        vmin=vmin, vmax=vmax,
                                         shading='flat', zorder=98, edgecolor='none')
 
             # For heightmap and texture, hide all ticks, labels etc, only plot is needed
@@ -489,7 +499,7 @@ class HeatmapBase:
             #     # plt.setp(cbytick_obj, color='#999c9f', fontsize=12)
 
             # Save to file
-            filename_out = f"heatmap_{plottype}_{self.series.name}.png"
+            filename_out = f"heatmap_{plottype}_{name}.png"
             filepath_out = Path(outpath) / filename_out
             fig_render_bw.savefig(filepath_out,
                                   format='png',
