@@ -261,6 +261,12 @@ class TestPlots(unittest.TestCase):
         def thin_edges(ax, coll):
             coll.set_linewidth(0.5)
 
+        def wide_edges(ax, coll):
+            coll.set_linewidth(3)
+
+        def aliased(ax, coll):
+            coll.set_antialiased(False)
+
         # The last item: whether the edge-free polygon is drawn.
         cases = [
             ({}, {}, None, None, True),
@@ -274,6 +280,12 @@ class TestPlots(unittest.TestCase):
             ({}, {}, edges, None, False),
             ({}, {}, no_edges, None, False),
             ({}, {}, thin_edges, None, False),
+            # L428: an edge wider than the marker, or no antialiasing, keeps
+            # the stroke (the polygon was off by up to 254 levels there).
+            ({}, dict(markersize=2), wide_edges, None, False),
+            ({}, {}, aliased, None, False),
+            ({}, {}, wide_edges, 300, True),
+            ({}, {}, None, 300, True),
             ({}, {}, None, 150, True),
             ({}, {}, None, 72, False),
             (dict(figsize=(4.37, 3.13), dpi=137), {}, None, None, True),
@@ -303,7 +315,7 @@ class TestPlots(unittest.TestCase):
                 if outline:
                     diff = np.abs(fast.astype(int) - plain.astype(int))
                     self.assertGreater(diff.max(), 0)
-                    self.assertLessEqual(diff.max(), 12)
+                    self.assertLessEqual(diff.max(), 8)
                 else:
                     np.testing.assert_array_equal(fast, plain)
 

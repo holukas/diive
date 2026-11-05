@@ -209,7 +209,7 @@ one month of half-hourly measurements at a grassland site, with the source-area 
 - **Faster `import diive`:** the package imports in about 0.02 s instead of 1 s. Top-level
   functions and `scipy.stats` load on first use.
 - **Faster colour-coded scatter (changes results):** `ScatterXY` with colour-coded points draws
-  about 2.5 times faster. Marker outlines differ from plain matplotlib by at most 9 of 255
+  about 2.5 times faster. Marker outlines differ from plain matplotlib by at most 8 of 255
   colour levels.
 - **Faster driver ranking and diel cycle:** `rank_drivers` scans lags up to 3.7 times faster
   and `diel_cycle` runs about 3 times faster, with identical results.
@@ -347,6 +347,9 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   column another role already shows.
 - **Borderless heatmap export:** `export_borderless_heatmap` works again without calling `plot()`
   first, and takes `vmin` and `vmax` for the colour scale.
+- **Colour-coded scatter outlines (changes results):** small markers with wide edges, high dpi or
+  drawing without antialiasing made the marker outlines of `ScatterXY` differ from plain matplotlib
+  by up to 254 of 255 colour levels. They now differ by at most 8 levels.
 
 ## [0.92.0] - 2026-10-21
 

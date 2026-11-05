@@ -80,6 +80,46 @@ _SUBPIXEL_BINS = 3
 _OUTLINE_MIN_LINEWIDTH = 1.3
 
 
+def _round_join_outline(polygon: np.ndarray, half_width: float) -> np.ndarray:
+    """The outer edge Agg strokes around a closed polygon with round joins.
+
+    Agg offsets every side by the half line width and joins the offset sides
+    with an arc around each corner, which it flattens into points on the arc
+    (``agg::math_stroke::calc_arc``, approximation scale 1). Where the arc is
+    so flat that a miter adds no visible difference, Agg adds the miter point
+    instead (``calc_join``). This rebuilds that outline point for point.
+
+    Args:
+        polygon: Corners of the closed polygon in pixels, around the origin.
+            A last corner that repeats the first one is ignored.
+        half_width: Half the line width in pixels.
+
+    Returns:
+        The corners of the outer outline, in pixels.
+    """
+    p = polygon[:-1] if np.array_equal(polygon[0], polygon[-1]) else polygon
+    side = np.roll(p, -1, axis=0) - p
+    side /= np.hypot(side[:, 0], side[:, 1])[:, None]
+    ccw = np.sum(p[:, 0] * np.roll(p[:, 1], -1) - np.roll(p[:, 0], -1) * p[:, 1]) > 0
+    turn = 1.0 if ccw else -1.0
+    normal = turn * np.column_stack([side[:, 1], -side[:, 0]])  # pointing outwards
+    step_max = 2 * np.arccos(half_width / (half_width + 0.125))
+    out = []
+    for i in range(len(p)):
+        n1, n2 = normal[i - 1], normal[i]
+        a1 = np.arctan2(n1[1], n1[0])
+        span = (turn * (np.arctan2(n2[1], n2[0]) - a1)) % (2 * np.pi)
+        if half_width - half_width * np.cos(span / 2) < half_width / 1024:
+            out.append(p[i] + half_width * (n1 + n2) / (1 + n1 @ n2))
+            continue
+        out.append(p[i] + half_width * n1)
+        n = int(span / step_max)
+        angles = a1 + turn * span / (n + 1) * np.arange(1, n + 1)
+        out.extend(p[i] + half_width * np.column_stack([np.cos(angles), np.sin(angles)]))
+        out.append(p[i] + half_width * n2)
+    return np.vstack(out)
+
+
 def _cell_stencils(core_radius: float, reach: float, k: int, bins: int) -> dict:
     """Pixel stencils of a circle whose centre lies somewhere in a sub-pixel bin.
 
@@ -252,9 +292,10 @@ class _OccludedMarkerCollection(PathCollection):
     the polygon Agg flattens the circle into, enlarged by that half width,
     without the stroke. That costs less than half as much per marker and lets
     more markers count as covered. The image then differs from the stroked
-    one only in the antialiasing of the marker outlines, by up to about 9 of
-    255 levels at screen resolution and line width. Otherwise the image is
-    the same pixel for pixel.
+    one only in the antialiasing of the marker outlines, by at most 8 of 255
+    levels (measured from 72 to 600 dpi with 0.5 to 5 pt edges). Edges wider
+    than the marker and drawing without antialiasing keep the stroke.
+    Otherwise the image is the same pixel for pixel.
 
     Outside ``draw`` the collection is exactly what ``ax.scatter`` returned:
     the array, offsets, colours, paths, line widths, norm and colormap cover
@@ -336,17 +377,20 @@ class _OccludedMarkerCollection(PathCollection):
         # widened by half the line width (round joins, the default, keep the
         # widened outline smooth). An edge narrower than about 1.3 px leaves
         # the pixels on the circle's rim partly covered by both face and edge,
-        # which one fill does not reproduce (up to 36 of 255 levels).
+        # which one fill does not reproduce (up to 36 of 255 levels). An edge
+        # wider than the marker's diameter turns the stroke's inner side
+        # inside out, and without antialiasing a pixel the outline shifts by
+        # a fraction flips whole, so those keep the stroke.
         if not (self._edge_is_mapped and linewidth >= _OUTLINE_MIN_LINEWIDTH
+                and linewidth <= scale and self._antialiaseds[0]
                 and opaque.all() and self.get_joinstyle() in (None, 'round')):
             return _hidden_markers(xy, opaque, radius=0.5 * scale,
                                    linewidth=linewidth, clip=tuple(clip)), None
-        # The chords Agg flattens the circle into at this size, enlarged so
-        # that each corner moves out by half the line width, as the stroke's
-        # outer edge does.
+        # The chords Agg flattens the circle into at this size, with the
+        # outline its stroke adds around them.
         polygon = _CIRCLE.transformed(
             transforms.Affine2D().scale(scale)).to_polygons(closed_only=False)[0]
-        polygon *= 1 + linewidth / scale
+        polygon = _round_join_outline(polygon, linewidth / 2)
         corner = np.hypot(polygon[:, 0], polygon[:, 1]).max()
         a, b = polygon, np.roll(polygon, -1, axis=0)
         side = np.hypot(*(b - a).T)
