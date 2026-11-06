@@ -37,6 +37,36 @@ flag open. `ffp_footprint` and `ffp_climatology` (`flux/lowres/footprint.py`) re
 of Kljun et al. (2015) bitwise, harness `diive-data/references/footprint_parity/`. Still open: a
 QC flag for records with too little footprint over the target area, and a GUI tab.
 
+### Footprint in complex terrain (CH-DAV)
+
+**Status:** idea (2026-11-06). A footprint that accounts for topography and, later, individual
+trees, using swisstopo data. FFP cannot be adjusted for this: it parameterises backward
+Lagrangian simulations over flat, homogeneous terrain, and none of its inputs carries slope,
+streamline curvature or flow separation. Over a forested hill, LES-based footprints grow on the
+upwind slope and can extend downwind on the lee slope (Fu et al. 2025, JGR Atmos.,
+10.1029/2025jd043591). Three stages, each usable on its own:
+
+1. **FFP with terrain and canopy maps (weeks, in diive).** swissALTI3D (DTM 0.5 m) and
+   swissSURFACE3D (LiDAR, DSM) give canopy height, d and z0 per wind sector, the effective
+   measurement height along the upwind path and slope-corrected area weights. Compute the
+   footprint in the planar-fit frame of the fluxes. Still FFP, but with site maps instead of one
+   site value: for representativeness, sector filtering and remote-sensing comparison.
+2. **3D footprint from a flow model (months, separate repository).** LES or RANS over the
+   swisstopo terrain with a canopy layer, plus backward Lagrangian particles from the sonic
+   (PALM has topography, LiDAR canopy and a particle model). A case matrix, e.g. 12 wind
+   sectors x 3-4 stability classes plus drainage flow, gives a look-up table for the
+   climatology. Needs HPC (CSCS). diive would only read the resulting footprint tables.
+3. **Single trees and an "FFP for slopes" (research).** Plant area density per voxel from the
+   point cloud (Beer-Lambert, Boudreault et al. 2015) in the LES. Tree-scale structure acts up
+   to 2-5 canopy heights, so it matters for a tower over a 25-30 m canopy. An LES/LS database
+   over idealised slopes could give correction functions for FFP's scaled footprint.
+
+**Validation needed:** a tracer release upwind (Arriga et al. 2017); above- and below-canopy
+fluxes at CH-DAV (Krebs et al. 2026); LES flow statistics (u*, sigma_w, wind direction) against
+the tower. **Limit:** at night, drainage flow and advection make the tower flux non-local; no
+footprint model fixes that (Etzold et al. 2010 for CH-LAE). Best done with a boundary-layer
+or LES group.
+
 ## Wind-direction sector flags
 
 **Status:** idea (2026-10-30). Flag records from excluded wind sectors, e.g. tower shading or
