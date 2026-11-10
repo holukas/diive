@@ -287,6 +287,12 @@ respiration, which a temperature response fitted to the dry nights describes wit
   (`_gfXG`) and the two fills can be compared. The flag is 0 measured, 1 XGBoost, 2 fallback and 3 a
   wet night gap filled from the Lloyd-Taylor model. `wetnight_params_` holds E0, the yearly
   reference respiration and the number of dry nights of each year.
+- **In `run_chain`.** Set `FluxConfig(gapfill_xgb_wetnight=True, wetnight_wet='WET')`, with
+  `wetnight_ta` (default `mds_ta`) and optionally `wetnight_dry` and `wetnight_min_records`. It uses
+  the same features and settings as `gapfill_xgb`. `partition_gapfill_method='xgbwn'` partitions
+  this fill.
+- **Example.** `examples/gapfilling/gapfill_xgboost_wetnight.py` compares the fill with plain
+  long-term XGBoost.
 
 (mds-gapfilling)=
 ## Level 4.1: gap-filling with MDS

@@ -331,15 +331,26 @@ def _level33_block(level33_kwargs: dict) -> list[str]:
             *_kwargs_lines(level33_kwargs, _level33_defaults()), ")"]
 
 
+#: L4.1 method token -> its run_level41_* function, in the canonical import order.
+_LEVEL41_FNS = {"mds": "run_level41_mds", "rf": "run_level41_rf",
+                "xgb": "run_level41_xgb", "xgbwn": "run_level41_xgb_wetnight"}
+
+#: L4.1 methods that need the shared FeatureEngineer.
+_ML_METHODS = ("rf", "xgb", "xgbwn")
+
+
 def _level41_block(level41_cfg: dict) -> list[str]:
     """The L4.1 gap-filling block: one ``run_level41_*`` per selected method.
 
     ``level41_cfg`` shape (the GUI flux-chain tab's ``_level41_cfg``)::
 
-        {"methods": ["rf", "xgb", "mds"],   # subset, in this canonical order
-         "features": ["TA_...", "SW_IN_...", "VPD_..."],   # rf / xgb predictors
-         "reduce_features": True,           # optional, rf / xgb
-         "rf_kwargs": {...}, "xgb_kwargs": {...},   # optional model kwargs
+        {"methods": ["rf", "xgb", "xgbwn", "mds"],   # subset, in this canonical order
+         "features": ["TA_...", "SW_IN_...", "VPD_..."],   # rf / xgb / xgbwn predictors
+         "reduce_features": True,           # optional, rf / xgb / xgbwn
+         "rf_kwargs": {...}, "xgb_kwargs": {...},   # optional model kwargs (xgbwn: xgb_kwargs)
+         "wetnight": {"wet": "WET", "ta": "TA_...",
+                      # optional: "dry", "min_records"
+                      },                    # xgbwn only
          "mds": {"swin": "SW_IN_...", "ta": "TA_...", "vpd": "VPD_...",
                  # optional: "ta_tol", "vpd_tol", "mode", "fill_long_gaps"
                  # and the driver QC flag columns "swin_qc", "ta_qc",
@@ -347,21 +358,24 @@ def _level41_block(level41_cfg: dict) -> list[str]:
                  },
          "ustar_reference": True}           # optional: REF after MDS, then rf / xgb
 
-    RF and XGBoost share one ``make_level41_engineer`` instance (feature
-    engineering runs once and is reused across methods and USTAR scenarios).
+    RF, XGBoost and the wet night XGBoost share one ``make_level41_engineer``
+    instance (feature engineering runs once and is reused across methods and
+    USTAR scenarios).
     """
     methods = level41_cfg.get("methods", [])
     features = level41_cfg.get("features") or []
     reduce = level41_cfg.get("reduce_features")
     lines: list[str] = []
     ml: list[str] = []
-    if any(m in methods for m in ("rf", "xgb")):
+    if any(m in methods for m in _ML_METHODS):
         ml += ["", "engineer = make_level41_engineer(", "    data,",
                f"    features={features!r},", ")"]
 
-    def _ml_call(fn: str, model_kwargs: dict) -> list[str]:
+    def _ml_call(fn: str, model_kwargs: dict, extra: dict | None = None) -> list[str]:
         body = ["", f"data = {fn}(", "    data,",
                 f"    features={features!r},", "    engineer=engineer,"]
+        for k, val in (extra or {}).items():
+            body.append(f"    {k}={val!r},")
         if reduce:
             body.append("    reduce_features=True,")
         for k, val in (model_kwargs or {}).items():
@@ -373,6 +387,11 @@ def _level41_block(level41_cfg: dict) -> list[str]:
         ml += _ml_call("run_level41_rf", level41_cfg.get("rf_kwargs", {}))
     if "xgb" in methods:
         ml += _ml_call("run_level41_xgb", level41_cfg.get("xgb_kwargs", {}))
+    if "xgbwn" in methods:
+        wn = level41_cfg.get("wetnight") or {}
+        extra = {"wet": wn.get("wet"), "ta": wn.get("ta")}
+        extra.update({k: wn[k] for k in ("dry", "min_records") if wn.get(k) is not None})
+        ml += _ml_call("run_level41_xgb_wetnight", level41_cfg.get("xgb_kwargs", {}), extra)
     with_ref = "mds" in methods and level41_cfg.get("ustar_reference")
     if not with_ref:
         lines += ml
@@ -558,11 +577,9 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     names = ["init_flux_data", "run_level2", "run_level31",
              "make_level32_detector", "run_level32",
              _level33_import_name(level33_kwargs)]
-    if any(m in methods for m in ("rf", "xgb")):
+    if any(m in methods for m in _ML_METHODS):
         names.append("make_level41_engineer")
-    for method in ("mds", "rf", "xgb"):
-        if method in methods:
-            names.append(f"run_level41_{method}")
+    names += [fn for method, fn in _LEVEL41_FNS.items() if method in methods]
     if "mds" in methods and level41_cfg.get("ustar_reference"):
         names.append("run_level41_ustar_reference")
     names += _level42_fn_names(level42_cfg)
@@ -601,11 +618,9 @@ def level41_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
     names = ["init_flux_data", "run_level2", "run_level31",
              "make_level32_detector", "run_level32",
              _level33_import_name(level33_kwargs)]
-    if any(m in methods for m in ("rf", "xgb")):
+    if any(m in methods for m in _ML_METHODS):
         names.append("make_level41_engineer")
-    for method in ("mds", "rf", "xgb"):
-        if method in methods:
-            names.append(f"run_level41_{method}")
+    names += [fn for method, fn in _LEVEL41_FNS.items() if method in methods]
     if "mds" in methods and level41_cfg.get("ustar_reference"):
         names.append("run_level41_ustar_reference")
     imports = ("from diive.flux.postprocessingchain import (\n    "

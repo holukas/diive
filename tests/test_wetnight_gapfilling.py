@@ -126,5 +126,60 @@ class TestRunLevel41XgbWetNight(unittest.TestCase):
         self.assertIn('xgbwn', data.levels.level41_methods())
 
 
+class TestRunChainWetNight(unittest.TestCase):
+    """FluxConfig.gapfill_xgb_wetnight in run_chain."""
+
+    @classmethod
+    def setUpClass(cls):
+        from diive.configs.exampledata import load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN
+        from diive.flux.postprocessingchain import init_flux_data
+        df, _ = load_exampledata_EDDYPRO_FLUXNET_CSV_30MIN()
+        df = df.drop(columns=[c for c in ('SW_IN_POT', 'DAYTIME', 'NIGHTTIME') if c in df.columns])
+        df['TA_1_1_1'] = df['TA_1_1_1'].bfill()
+        df['SW_IN_1_1_1'] = df['SW_IN_1_1_1'].bfill()
+        df['VPD_kPa'] = df['VPD_EP'].bfill().multiply(0.1)
+        df['WET'] = (df.index.dayofyear % 7) == 0  # one wet day per week
+        cls.df = df
+        cls.data = init_flux_data(df=df, fluxcol='FC', site_lat=46.583056, site_lon=9.790639, utc_offset=1)
+
+    def _config(self, **kw):
+        from diive.flux.postprocessingchain import FluxConfig
+        base = dict(fluxcol='FC', ustar_thresholds=[0.1], ustar_labels=['CUT_50'],
+                    level2_test_settings={'ssitc': {'apply': True, 'setflag_timeperiod': None}},
+                    gapfill_rf=False, gapfill_xgb=False, gapfill_mds=False,
+                    gapfilling_features=['TA_1_1_1', 'SW_IN_1_1_1', 'VPD_kPa'],
+                    gapfill_reduce_features=False)
+        base.update(kw)
+        return FluxConfig(**base)
+
+    def test_validation(self):
+        from diive.flux.postprocessingchain import run_chain
+        with self.assertRaisesRegex(ValueError, 'wetnight_wet'):
+            run_chain(self.data, self._config(gapfill_xgb_wetnight=True, wetnight_ta='TA_1_1_1'))
+        with self.assertRaisesRegex(ValueError, 'wetnight_ta or mds_ta'):
+            run_chain(self.data, self._config(gapfill_xgb_wetnight=True, wetnight_wet='WET'))
+        with self.assertRaisesRegex(KeyError, "wetnight_wet='NOT_THERE'"):
+            run_chain(self.data, self._config(gapfill_xgb_wetnight=True, wetnight_wet='NOT_THERE',
+                                              wetnight_ta='TA_1_1_1'))
+        with self.assertRaisesRegex(ValueError, 'gapfill_xgb_wetnight=True'):
+            run_chain(self.data, self._config(partition_nighttime_oneflux=True, partition_gapfill_method='xgbwn',
+                                              partition_ta='TA_1_1_1', partition_sw_in='SW_IN_1_1_1',
+                                              partition_ta_f='TA_1_1_1'))
+
+    def test_run_chain_fills_the_wet_nights(self):
+        from diive.flux.postprocessingchain import run_chain
+        # TA falls back to mds_ta, which is set although MDS is off.
+        out = run_chain(self.data, self._config(gapfill_xgb_wetnight=True, wetnight_wet='WET',
+                                                mds_ta='TA_1_1_1', wetnight_min_records=10))
+        self.assertEqual(set(out.levels.level41_methods()), {'xgbwn'})
+        col = out.gapfilled_cols()['xgbwn']['CUT_50']
+        self.assertTrue(col.endswith('_gfXGWN'))
+        inst = out.levels.level41_xgbwn['CUT_50']
+        self.assertEqual(inst.min_records, 10)
+        lt = out.fpc_df[f'FLAG_{col}_ISFILLED'] == FLAG_WETNIGHT
+        self.assertGreater(int(lt.sum()), 0)
+        self.assertTrue(self.df.loc[lt[lt].index, 'WET'].all())
+
+
 if __name__ == '__main__':
     unittest.main()

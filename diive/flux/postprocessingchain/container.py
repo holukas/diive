@@ -82,7 +82,8 @@ class FluxConfig:
     Only ``fluxcol`` is always required. ``run_chain`` checks the other
     fields only for the features they serve: ``ustar_thresholds`` in the
     default ``ustar_detection_mode='constant'``, ``gapfilling_features`` when
-    ``gapfill_rf`` or ``gapfill_xgb`` is ``True``, ``mds_swin`` / ``mds_ta``
+    ``gapfill_rf``, ``gapfill_xgb`` or ``gapfill_xgb_wetnight`` is ``True``,
+    ``wetnight_wet`` when ``gapfill_xgb_wetnight=True``, ``mds_swin`` / ``mds_ta``
     / ``mds_vpd`` when ``gapfill_mds=True``, and the ``partition_*`` driver
     columns for each enabled partitioning variant. The ``outlier_*`` fields
     are optional overrides of the Hampel defaults (L3.2 always runs). So each
@@ -340,8 +341,8 @@ class FluxConfig:
 
     gapfilling_features: list | None = None
     """Predictor column names for ML gap-filling (RF, XGBoost). Must exist in
-    ``data.full_df``. Required when ``gapfill_rf=True`` or ``gapfill_xgb=True``;
-    ignored otherwise."""
+    ``data.full_df``. Required when ``gapfill_rf``, ``gapfill_xgb`` or
+    ``gapfill_xgb_wetnight`` is ``True``; ignored otherwise."""
 
     set_storage_to_zero: bool = False
     """Set to ``True`` when no storage measurement is available for this flux.
@@ -376,6 +377,31 @@ class FluxConfig:
     gapfill_xgb: bool = False
     """Run XGBoost gap-filling (L4.1).  Off by default — slower than RF."""
 
+    gapfill_xgb_wetnight: bool = False
+    """Run XGBoost gap-filling with the wet night gaps filled from a Lloyd-Taylor
+    model (L4.1, ``run_level41_xgb_wetnight``, columns ending in ``_gfXGWN``).
+    For an open-path analyser, which cannot measure in rain and fog. Uses the
+    same features and settings as ``gapfill_xgb`` and runs with or without it.
+    Needs ``wetnight_wet``. Off by default."""
+
+    wetnight_wet: str | None = None
+    """Boolean column in ``data.full_df``, True where a record counts as wet (for
+    example rain in the previous hours or a wet-window signal). Required when
+    ``gapfill_xgb_wetnight=True``."""
+
+    wetnight_ta: str | None = None
+    """Air temperature column (deg C) in ``data.full_df`` for the Lloyd-Taylor
+    model. Default ``None``: ``mds_ta``."""
+
+    wetnight_dry: str | None = None
+    """Optional boolean column in ``data.full_df`` of the measured nights the
+    Lloyd-Taylor model is fitted to. Default ``None``: the records that are not
+    wet."""
+
+    wetnight_min_records: int = 30
+    """Fewest dry measured nights for a monthly reference respiration and for a
+    yearly fit (see ``run_level41_xgb_wetnight``)."""
+
     gapfill_mds: bool = True
     """Run MDS gap-filling (L4.1)."""
 
@@ -385,8 +411,8 @@ class FluxConfig:
     importance ranking; with reduction disabled the model trains on every
     engineered feature regardless of contribution and is typically weaker.
     Set to ``False`` only when you want the raw (unreduced) feature set,
-    e.g. for diagnostic comparison. Ignored when both ``gapfill_rf`` and
-    ``gapfill_xgb`` are ``False``."""
+    e.g. for diagnostic comparison. Ignored when ``gapfill_rf``, ``gapfill_xgb``
+    and ``gapfill_xgb_wetnight`` are all ``False``."""
 
     mds_swin: str | None = None
     """Shortwave incoming radiation column for MDS (W m-2; must be in ``data.full_df``)."""
@@ -479,7 +505,8 @@ class FluxConfig:
     partition_gapfill_method: str = 'mds'
     """Which L4.1 gap-filled NEE feeds the *nighttime* partitioning variants
     (they need a gap-filled NEE for the GPP residual): ``'mds'`` (default,
-    FLUXNET standard), ``'rf'``, or ``'xgb'``. The chosen method must have run
+    FLUXNET standard), ``'rf'``, ``'xgb'`` or ``'xgbwn'`` (XGBoost with the wet
+    nights from Lloyd-Taylor, ``gapfill_xgb_wetnight``). The chosen method must have run
     at L4.1. Daytime ONEFlux uses it too where that method ran (for windows
     without measured nighttime NEE), daytime REddyProc ignores it."""
 

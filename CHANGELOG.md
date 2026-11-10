@@ -61,7 +61,9 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   `LongTermGapFillingXGBoostWetNightTS` fill all gaps with the standard long-term XGBoost and then
   the night gaps marked as wet from a Lloyd-Taylor model fitted to the dry measured nights of each
   year (E0 per year, reference respiration per month). Columns end in `_gfXGWN`, so the method runs
-  next to `run_level41_xgb`; flag 3 marks the Lloyd-Taylor values (#445).
+  next to `run_level41_xgb`; flag 3 marks the Lloyd-Taylor values (#445). In `run_chain` it runs
+  with `FluxConfig(gapfill_xgb_wetnight=True, wetnight_wet=...)`, and
+  `partition_gapfill_method='xgbwn'` partitions its fill.
 - **GUI, flux chain partitioning:** the flux chain tab has a Level 4.2 stage that partitions NEE
   into GPP and RECO, with the option to add the GPP and RECO REF.
 - **GUI, long gaps:** the MDS tab and Level 4.1 of the flux chain tab have a "Fill long gaps"

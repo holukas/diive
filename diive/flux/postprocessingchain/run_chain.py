@@ -30,6 +30,7 @@ from diive.flux.postprocessingchain.levels import (
     run_level41_rf,
     run_level41_ustar_reference,
     run_level41_xgb,
+    run_level41_xgb_wetnight,
     run_level42_daytime_diive,
     run_level42_daytime_oneflux,
     run_level42_daytime_reddyproc,
@@ -155,7 +156,9 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     timestamps (see ``_default_engineer`` for the full rationale). SHAP-based
     feature reduction is **on by default** (controlled by
     ``config.gapfill_reduce_features``) — set to ``False`` for a diagnostic
-    run with the raw engineered feature set. Model hyperparameters
+    run with the raw engineered feature set. ``config.gapfill_xgb_wetnight``
+    adds the XGBoost fill whose wet night gaps (``config.wetnight_wet``) come
+    from a Lloyd-Taylor model, with the same engineer. Model hyperparameters
     (``n_estimators``, ``max_depth``, ...) and custom ``FeatureEngineer``
     configurations remain reachable only via the composable API.
 
@@ -200,8 +203,10 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     that each enabled feature has the fields it needs:
     ``mds_swin`` / ``mds_ta`` /
     ``mds_vpd`` are required when ``gapfill_mds=True``;
-    ``gapfilling_features`` is required when ``gapfill_rf`` or
-    ``gapfill_xgb`` is ``True``; ``ustar_thresholds`` is required in
+    ``gapfilling_features`` is required when ``gapfill_rf``, ``gapfill_xgb``
+    or ``gapfill_xgb_wetnight`` is ``True``; ``wetnight_wet`` and
+    ``wetnight_ta`` (or ``mds_ta``) are required when
+    ``gapfill_xgb_wetnight=True``; ``ustar_thresholds`` is required in
     ``'constant'`` mode; ``ustar_bootstrap_ta_col`` / ``..._swin_col`` are
     required in ``'bootstrap'`` mode. Each enabled partitioning variant
     needs its ``partition_*`` driver columns, and the nighttime variants need
@@ -310,11 +315,18 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
     if config.gapfill_mds:
         if not (config.mds_swin and config.mds_ta and config.mds_vpd):
             _missing.append("mds_swin / mds_ta / mds_vpd (gapfill_mds=True)")
-    if config.gapfill_rf or config.gapfill_xgb:
+    _gapfill_ml = config.gapfill_rf or config.gapfill_xgb or config.gapfill_xgb_wetnight
+    if _gapfill_ml:
         if not config.gapfilling_features:
             _missing.append(
-                "gapfilling_features (gapfill_rf=True or gapfill_xgb=True)"
+                "gapfilling_features (gapfill_rf, gapfill_xgb or gapfill_xgb_wetnight=True)"
             )
+    _wetnight_ta = config.wetnight_ta or config.mds_ta
+    if config.gapfill_xgb_wetnight:
+        if not config.wetnight_wet:
+            _missing.append("wetnight_wet (gapfill_xgb_wetnight=True)")
+        if not _wetnight_ta:
+            _missing.append("wetnight_ta or mds_ta (gapfill_xgb_wetnight=True)")
     # ----- NEE partitioning (L4.2) -----
     # Each enabled variant requires its driver-column fields. The nighttime
     # variants additionally need the chosen L4.1 gap-filling method to be on
@@ -331,15 +343,18 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             or 'partition_nighttime_reddyproc' in partition_enabled
             or 'partition_nighttime_diive' in partition_enabled):
         _gf_on = {'mds': config.gapfill_mds, 'rf': config.gapfill_rf,
-                  'xgb': config.gapfill_xgb}
+                  'xgb': config.gapfill_xgb, 'xgbwn': config.gapfill_xgb_wetnight}
+        _gf_flag = {'xgbwn': 'gapfill_xgb_wetnight'}
         if config.partition_gapfill_method not in _gf_on:
             _missing.append(
-                f"partition_gapfill_method must be one of 'mds'/'rf'/'xgb' "
+                f"partition_gapfill_method must be one of 'mds'/'rf'/'xgb'/'xgbwn' "
                 f"(got {config.partition_gapfill_method!r})"
             )
         elif not _gf_on[config.partition_gapfill_method]:
+            _flag = _gf_flag.get(config.partition_gapfill_method,
+                                 f"gapfill_{config.partition_gapfill_method}")
             _missing.append(
-                f"gapfill_{config.partition_gapfill_method}=True (required: a "
+                f"{_flag}=True (required: a "
                 f"nighttime partitioning variant reads its gap-filled NEE from "
                 f"partition_gapfill_method={config.partition_gapfill_method!r})"
             )
@@ -385,10 +400,16 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
                            ('ustar_bootstrap_swin_col', config.ustar_bootstrap_swin_col)):
             if _val not in data.full_df.columns:
                 _column_misses.append(f"{_fld}={_val!r}")
-    if config.gapfill_rf or config.gapfill_xgb:
+    if _gapfill_ml:
         for _val in (config.gapfilling_features or ()):
             if _val not in data.full_df.columns:
                 _column_misses.append(f"gapfilling_features entry {_val!r}")
+    if config.gapfill_xgb_wetnight:
+        for _fld, _val in (('wetnight_wet', config.wetnight_wet),
+                           ('wetnight_ta' if config.wetnight_ta else 'mds_ta', _wetnight_ta),
+                           ('wetnight_dry', config.wetnight_dry)):
+            if _val and _val not in data.full_df.columns:
+                _column_misses.append(f"{_fld}={_val!r}")
     # Partitioning driver columns must exist in data.full_df. Dedupe across
     # variants (they share TA / SW_IN columns) so the error lists each once.
     _part_misses: dict[str, None] = {}
@@ -582,7 +603,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
         if config.ustar_reference:
             data = run_level41_ustar_reference(data, verbose=False)
 
-    if config.gapfill_rf or config.gapfill_xgb:
+    if _gapfill_ml:
         engineer = _default_engineer(config.gapfilling_features)
         if config.gapfill_rf:
             data = run_level41_rf(
@@ -596,6 +617,17 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
                 data,
                 features=list(config.gapfilling_features),
                 engineer=engineer,
+                reduce_features=config.gapfill_reduce_features,
+            )
+        if config.gapfill_xgb_wetnight:
+            data = run_level41_xgb_wetnight(
+                data,
+                features=list(config.gapfilling_features),
+                engineer=engineer,
+                wet=config.wetnight_wet,
+                ta=_wetnight_ta,
+                dry=config.wetnight_dry,
+                min_records=config.wetnight_min_records,
                 reduce_features=config.gapfill_reduce_features,
             )
 

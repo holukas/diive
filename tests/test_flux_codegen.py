@@ -166,6 +166,30 @@ class TestFluxCodegen(unittest.TestCase):
         # Only the requested method's functions are imported.
         self.assertIn("make_level41_engineer", code)
 
+    def test_level41_to_code_wetnight(self):
+        from diive.flux.postprocessingchain import level41_to_code
+        code = level41_to_code(
+            init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),
+            level2_settings={"ssitc": {"apply": True, "setflag_timeperiod": None}},
+            level31_kwargs={},
+            level32_steps=[{"method": "flag_outliers_hampel_test", "kwargs": {}}],
+            level33_kwargs={"thresholds": [0.18], "threshold_labels": ["CUT_50"]},
+            level41_cfg={
+                "methods": ["xgb", "xgbwn"],
+                "features": ["TA_1_1_1", "SW_IN_1_1_1"],
+                "xgb_kwargs": {"n_estimators": 50},
+                "wetnight": {"wet": "WET", "ta": "TA_1_1_1", "min_records": 20},
+            })
+        compile(code, "<gen>", "exec")
+        imports = code.split("init_flux_data(")[0]
+        self.assertIn("run_level41_xgb_wetnight", imports)
+        self.assertEqual(code.count("make_level41_engineer("), 1)
+        call = code[code.index("data = run_level41_xgb_wetnight("):]
+        call = call[:call.index("\n)")]
+        for part in ("wet='WET'", "ta='TA_1_1_1'", "min_records=20", "n_estimators=50"):
+            self.assertIn(part, call)
+        self.assertNotIn("dry=", call)
+
     def test_level41_to_code_mds_driver_qc(self):
         from diive.flux.postprocessingchain import level41_to_code
         kw = dict(init_kwargs=dict(fluxcol="FC", site_lat=46.6, site_lon=9.8, utc_offset=1),

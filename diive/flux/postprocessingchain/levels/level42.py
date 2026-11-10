@@ -129,10 +129,11 @@ def _resolve_nee_f(data: FluxLevelData, gapfill_method: str,
         )
     gf = data.gapfilled_cols()
     if gapfill_method not in gf:
+        fn = 'run_level41_xgb_wetnight' if gapfill_method == 'xgbwn' else f'run_level41_{gapfill_method}'
         raise RuntimeError(
             f"Nighttime partitioning needs a gap-filled NEE, but L4.1 method "
             f"{gapfill_method!r} has not been run. Call "
-            f"run_level41_{gapfill_method}() first, or pass a "
+            f"{fn}() first, or pass a "
             f"gapfill_method= that has run (available: {sorted(gf)})."
         )
     out: dict[str, pd.Series] = {}
