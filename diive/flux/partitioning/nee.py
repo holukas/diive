@@ -1,11 +1,11 @@
 """
-PARTITIONING.NEE: ONE ENTRY POINT FOR THE FOUR NEE PARTITIONING PORTS
-=====================================================================
+PARTITIONING.NEE: ONE ENTRY POINT FOR THE NEE PARTITIONING PORTS
+================================================================
 
 Select the NEE partitioning with two switches, ``method`` (nighttime or
-daytime) and ``mode`` (ONEFlux or REddyProc), the way ``FluxMDS(mode=...)``
-selects the MDS gap-filling rules. ONEFlux, the approach used by ICOS and
-FLUXNET2015, is the default.
+daytime) and ``mode`` (diive, ONEFlux or REddyProc), the way
+``FluxMDS(mode=...)`` selects the MDS gap-filling rules. ``'diive'``, ONEFlux
+with diive's fixes, is the default, as for MDS.
 
 Part of the diive library: https://github.com/holukas/diive
 """
@@ -13,20 +13,27 @@ from __future__ import annotations
 
 from pandas import DataFrame, Series
 
-from diive.flux.partitioning.daytime_oneflux import DaytimePartitioningOneFlux
+from diive.flux.partitioning.daytime_oneflux import (
+    DaytimePartitioningDiive,
+    DaytimePartitioningOneFlux,
+)
 from diive.flux.partitioning.daytime_reddyproc import DaytimePartitioningReddyProc
-from diive.flux.partitioning.nighttime_oneflux import NighttimePartitioningOneFlux
+from diive.flux.partitioning.nighttime_oneflux import (
+    NighttimePartitioningDiive,
+    NighttimePartitioningOneFlux,
+)
 from diive.flux.partitioning.nighttime_reddyproc import NighttimePartitioningReddyProc
 
 PARTITION_METHODS = ('nighttime', 'daytime')
-PARTITION_MODES = ('oneflux', 'reddyproc')
+PARTITION_MODES = ('oneflux', 'reddyproc', 'diive')
 
 # Per (method, mode): the backend class, which PartitioningNEE input feeds each
 # backend argument ({backend_arg: input_name}), the inputs it takes only when
 # given (``optional``, same shape), whether the backend takes vpd_in_kpa, and
 # the backend-specific options accepted via **backend_kwargs. Daytime
 # REddyProc uses the gap-filled drivers throughout, so its ``ta`` and
-# ``sw_in`` arguments get ta_f and sw_in_f.
+# ``sw_in`` arguments get ta_f and sw_in_f. The 'diive' backends are
+# subclasses of the ONEFlux ones and take the same inputs.
 _BACKENDS = {
     ('nighttime', 'oneflux'): dict(
         cls=NighttimePartitioningOneFlux,
@@ -50,9 +57,13 @@ _BACKENDS = {
                 'lon': 'lon', 'utc_offset': 'utc_offset'},
         vpd_unit=True, options=('nee_sd',)),
 }
+_BACKENDS[('nighttime', 'diive')] = dict(_BACKENDS[('nighttime', 'oneflux')],
+                                         cls=NighttimePartitioningDiive)
+_BACKENDS[('daytime', 'diive')] = dict(_BACKENDS[('daytime', 'oneflux')],
+                                       cls=DaytimePartitioningDiive)
 
 
-def partitioning_inputs(method: str, mode: str = 'oneflux') -> tuple[str, ...]:
+def partitioning_inputs(method: str, mode: str = 'diive') -> tuple[str, ...]:
     """Names of the :class:`PartitioningNEE` inputs (besides ``nee``) a method/mode needs.
 
     Example: ``partitioning_inputs('daytime', 'reddyproc')`` returns
@@ -62,10 +73,11 @@ def partitioning_inputs(method: str, mode: str = 'oneflux') -> tuple[str, ...]:
     return tuple(_BACKENDS[(method, mode)]['inputs'].values())
 
 
-def partitioning_optional_inputs(method: str, mode: str = 'oneflux') -> tuple[str, ...]:
+def partitioning_optional_inputs(method: str, mode: str = 'diive') -> tuple[str, ...]:
     """Names of the inputs a method/mode takes when given, but does not need.
 
-    ``('nee_f',)`` for daytime / oneflux (see :class:`PartitioningNEE`),
+    ``('nee_f',)`` for daytime / oneflux and daytime / diive (see
+    :class:`PartitioningNEE`),
     ``('nee_sd',)`` for daytime / reddyproc (a backend option, passed as a
     keyword), ``()`` for the nighttime method.
     """
@@ -86,18 +98,29 @@ def _check_method_mode(method: str, mode: str) -> None:
 class PartitioningNEE:
     """Partition NEE into GPP and RECO, with the method and mode as switches.
 
-    One entry point for the four partitioning ports. ``method`` picks the
+    One entry point for the partitioning ports. ``method`` picks the
     algorithm: ``'nighttime'`` (Reichstein et al. 2005, temperature response of
     nighttime NEE) or ``'daytime'`` (Lasslop et al. 2010, light-response curve
-    of daytime NEE). ``mode`` picks the reference implementation:
-    ``'oneflux'`` (default, the ICOS and FLUXNET2015 approach) or
-    ``'reddyproc'``. The work is done by the matching class, which is
-    available as :attr:`backend`. Its columns carry its suffix:
+    of daytime NEE). ``mode`` picks the implementation: ``'diive'``
+    (default, ONEFlux with diive's fixes, see below), ``'oneflux'`` (the
+    ICOS and FLUXNET2015 approach, bit for bit) or ``'reddyproc'``. The work is done by
+    the matching class, which is available as :attr:`backend`. Its columns
+    carry its suffix:
 
     - nighttime / oneflux: :class:`NighttimePartitioningOneFlux`, ``*_NT_OF``
     - nighttime / reddyproc: :class:`NighttimePartitioningReddyProc`, ``*_NT_RP``
+    - nighttime / diive: :class:`NighttimePartitioningDiive`, ``*_NT_DV``
     - daytime / oneflux: :class:`DaytimePartitioningOneFlux`, ``*_DT_OF``
     - daytime / reddyproc: :class:`DaytimePartitioningReddyProc`, ``*_DT_RP``
+    - daytime / diive: :class:`DaytimePartitioningDiive`, ``*_DT_DV``
+
+    ``mode='diive'`` is ONEFlux plus fixes of ONEFlux behaviour, as
+    ``FluxMDS(mode='diive')`` is for gap-filling, while ``mode='oneflux'``
+    stays a faithful port. Pass ``mode='oneflux'`` to reproduce ONEFlux,
+    NaN included. The daytime method sets GPP to 0 where ONEFlux
+    divides 0 by 0 in the dark and gives NaN (issue #446); every value that
+    ONEFlux gives as a number stays the same. The nighttime method has no
+    such fix yet and gives the ONEFlux numbers under ``*_NT_DV`` names.
 
     The results are those of the backend, unchanged. Their column names keep
     the backend suffix, so results of different modes can sit side by side in
@@ -112,8 +135,10 @@ class PartitioningNEE:
     - daytime / oneflux: ``ta``, ``sw_in``, ``ta_f``, ``sw_in_f``, ``vpd``
     - daytime / reddyproc: ``ta_f``, ``sw_in_f``, ``vpd``, ``lat``, ``lon``,
       ``utc_offset``
+    - diive: the inputs of the same method in ``'oneflux'`` mode
 
-    Daytime / oneflux also takes ``nee_f`` when given: ONEFlux reads the
+    Daytime / oneflux and daytime / diive also take ``nee_f`` when given:
+    ONEFlux reads the
     gap-filled NEE for windows without measured nighttime NEE (see
     :class:`DaytimePartitioningOneFlux`). Without it those windows are not
     fitted and a warning lists them. :func:`partitioning_optional_inputs`
@@ -137,7 +162,7 @@ class PartitioningNEE:
                  nee: Series,
                  *,
                  method: str,
-                 mode: str = 'oneflux',
+                 mode: str = 'diive',
                  ta: Series | None = None,
                  sw_in: Series | None = None,
                  ta_f: Series | None = None,
@@ -155,7 +180,7 @@ class PartitioningNEE:
             nee: Measured NEE (umol m-2 s-1), gaps as NaN.
             method: ``'nighttime'`` (Reichstein et al. 2005) or ``'daytime'``
                 (Lasslop et al. 2010).
-            mode: ``'oneflux'`` (default) or ``'reddyproc'``.
+            mode: ``'diive'`` (default), ``'oneflux'`` or ``'reddyproc'``.
             ta: Measured air temperature (degC), gaps as NaN.
             sw_in: Measured incoming shortwave radiation (W m-2), gaps as NaN.
             ta_f: Gap-filled air temperature (degC).
@@ -174,8 +199,8 @@ class PartitioningNEE:
             verbose: Console verbosity level (0 silent, 1 warnings, 2 progress
                 + report, 3 debug). Default 2.
             **backend_kwargs: Options only one backend has, passed on to it:
-                ``reject_alpha_at_start`` (daytime / oneflux, see
-                :class:`DaytimePartitioningOneFlux`) and ``nee_sd`` (daytime /
+                ``reject_alpha_at_start`` (daytime / oneflux and daytime /
+                diive, see :class:`DaytimePartitioningOneFlux`) and ``nee_sd`` (daytime /
                 reddyproc, see :class:`DaytimePartitioningReddyProc`). Any
                 other keyword raises a ``TypeError``.
         """
@@ -242,7 +267,7 @@ class PartitioningNEE:
 def partition_nee(nee: Series,
                   *,
                   method: str,
-                  mode: str = 'oneflux',
+                  mode: str = 'diive',
                   ta: Series | None = None,
                   sw_in: Series | None = None,
                   ta_f: Series | None = None,

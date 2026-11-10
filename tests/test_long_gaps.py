@@ -357,7 +357,7 @@ def _chain_with_long_gap():
 
 
 _MDS = dict(swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa', mode='oneflux')
-_PART = dict(method='nighttime', ta='TA_PART', sw_in='SW_PART', ta_f='TA_PART', verbose=0)
+_PART = dict(method='nighttime', mode='oneflux', ta='TA_PART', sw_in='SW_PART', ta_f='TA_PART', verbose=0)
 
 
 class TestChainLongGaps(unittest.TestCase):

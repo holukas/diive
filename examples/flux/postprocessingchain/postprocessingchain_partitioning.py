@@ -24,8 +24,9 @@ reads the gap-filled NEE, where L4.1 ran, for windows without measured
 nighttime NEE.
 
 To run one variant only, set ``partition_method='nighttime'`` or
-``'daytime'`` with ``partition_mode='oneflux'`` (default, the ICOS and
-FLUXNET2015 approach) or ``'reddyproc'``. On the composable path the same
+``'daytime'`` with ``partition_mode='diive'`` (default, ONEFlux with
+diive's fixes), ``'oneflux'`` (the ICOS and FLUXNET2015 approach) or
+``'reddyproc'``. On the composable path the same
 switches are ``run_level42_partitioning(data, method=..., mode=...)``.
 
 This example uses the single-call ``run_chain`` path; the same four callables

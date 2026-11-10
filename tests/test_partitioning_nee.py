@@ -4,7 +4,7 @@ import pandas as pd
 
 
 class TestPartitioningNEE(unittest.TestCase):
-    """PartitioningNEE routes to the four backends and returns their results unchanged."""
+    """PartitioningNEE routes to the backends and returns their results unchanged."""
 
     @classmethod
     def setUpClass(cls):
@@ -27,12 +27,14 @@ class TestPartitioningNEE(unittest.TestCase):
 
     def _direct(self, method, mode):
         from diive.flux.partitioning import (
-            DaytimePartitioningOneFlux, DaytimePartitioningReddyProc,
+            DaytimePartitioningDiive, DaytimePartitioningOneFlux,
+            DaytimePartitioningReddyProc, NighttimePartitioningDiive,
             NighttimePartitioningOneFlux, NighttimePartitioningReddyProc)
         df, s = self._frame(method), self.site
         nee = df['NEE_CUT_REF_orig']
-        if (method, mode) == ('nighttime', 'oneflux'):
-            return NighttimePartitioningOneFlux(
+        if method == 'nighttime' and mode in ('oneflux', 'diive'):
+            cls = NighttimePartitioningOneFlux if mode == 'oneflux' else NighttimePartitioningDiive
+            return cls(
                 nee=nee, ta=df['Tair_orig'], sw_in=df['Rg_orig'],
                 nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=s['lat'],
                 verbose=0).run()
@@ -40,8 +42,9 @@ class TestPartitioningNEE(unittest.TestCase):
             return NighttimePartitioningReddyProc(
                 nee=nee, ta=df['Tair_orig'], sw_in=df['Rg_orig'],
                 nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], verbose=0, **s).run()
-        if (method, mode) == ('daytime', 'oneflux'):
-            return DaytimePartitioningOneFlux(
+        if method == 'daytime' and mode in ('oneflux', 'diive'):
+            cls = DaytimePartitioningOneFlux if mode == 'oneflux' else DaytimePartitioningDiive
+            return cls(
                 nee=nee, ta=df['Tair_orig'], sw_in=df['Rg_orig'], ta_f=df['Tair_f'],
                 sw_in_f=df['Rg_f'], vpd=df['VPD_f'], nee_f=df['NEE_CUT_REF_f'],
                 verbose=0).run()
@@ -56,6 +59,8 @@ class TestPartitioningNEE(unittest.TestCase):
             ('nighttime', 'reddyproc'): ('NighttimePartitioningReddyProc', '_NT_RP'),
             ('daytime', 'oneflux'): ('DaytimePartitioningOneFlux', '_DT_OF'),
             ('daytime', 'reddyproc'): ('DaytimePartitioningReddyProc', '_DT_RP'),
+            ('nighttime', 'diive'): ('NighttimePartitioningDiive', '_NT_DV'),
+            ('daytime', 'diive'): ('DaytimePartitioningDiive', '_DT_DV'),
         }
         for (method, mode), (cls_name, suffix) in expected_cls.items():
             with self.subTest(method=method, mode=mode):
@@ -75,12 +80,20 @@ class TestPartitioningNEE(unittest.TestCase):
                 self.assertGreater(part.reco.notna().sum(), 0)
                 self.assertGreater(part.gpp.notna().sum(), 0)
 
-    def test_default_mode_is_oneflux(self):
+    def test_nighttime_diive_is_nighttime_oneflux_renamed(self):
+        of = self._direct('nighttime', 'oneflux').results
+        dvr = self._direct('nighttime', 'diive').results
+        self.assertIn('NEE_NIGHT_DV', dvr.columns)
+        self.assertIn('GPP_NT_DV_ROB', dvr.columns)
+        pd.testing.assert_frame_equal(
+            of.rename(columns=lambda c: c.replace('_OF', '_DV')), dvr, check_exact=True)
+
+    def test_default_mode_is_diive(self):
         from diive.flux.partitioning import PartitioningNEE
         part = PartitioningNEE(self.year['NEE_CUT_REF_orig'], method='nighttime',
                                verbose=0, **self._all_inputs('nighttime'))
-        self.assertEqual(part.mode, 'oneflux')
-        self.assertEqual(type(part.backend).__name__, 'NighttimePartitioningOneFlux')
+        self.assertEqual(part.mode, 'diive')
+        self.assertEqual(type(part.backend).__name__, 'NighttimePartitioningDiive')
 
     def test_functional_wrapper(self):
         from diive.flux.partitioning import partition_nee
@@ -138,7 +151,7 @@ class TestPartitioningNEE(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'method'):
             PartitioningNEE(nee, method='both', **self._all_inputs())
         with self.assertRaisesRegex(ValueError, 'mode'):
-            PartitioningNEE(nee, method='daytime', mode='diive', **self._all_inputs())
+            PartitioningNEE(nee, method='daytime', mode='fluxnet', **self._all_inputs())
 
     def test_results_before_run_raises(self):
         from diive.flux.partitioning import PartitioningNEE
@@ -160,6 +173,12 @@ class TestPartitioningNEE(unittest.TestCase):
         self.assertEqual(partitioning_optional_inputs('daytime', 'reddyproc'), ('nee_sd',))
         self.assertEqual(partitioning_optional_inputs('nighttime', 'oneflux'), ())
         self.assertEqual(partitioning_optional_inputs('nighttime', 'reddyproc'), ())
+        self.assertEqual(partitioning_optional_inputs('daytime', 'diive'), ('nee_f',))
+        self.assertEqual(partitioning_optional_inputs('nighttime', 'diive'), ())
+        from diive.flux.partitioning import partitioning_inputs
+        for method in ('nighttime', 'daytime'):
+            self.assertEqual(partitioning_inputs(method, 'diive'),
+                             partitioning_inputs(method, 'oneflux'))
 
     def test_daytime_oneflux_takes_nee_f_only_when_given(self):
         # Daytime ONEFlux reads the gap-filled NEE for windows without measured

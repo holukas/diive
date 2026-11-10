@@ -693,6 +693,88 @@ class TestDaytimePartitioningOneFlux(unittest.TestCase):
             _ = part.results
 
 
+class TestDaytimeDiiveDarkGpp(unittest.TestCase):
+    """mode='diive' sets GPP to 0 where ONEFlux divides 0 by 0 in the dark
+    (issue #446); mode='oneflux' keeps ONEFlux's NaN."""
+
+    # Window centred on 17 May 2007, CH-LAE, LI-7500, CUT_84 (issue #446).
+    PAR = np.array([0.113464, 45.080406, 28.28612], dtype=np.float32)
+    VPD = np.array([17.0, 13.7, 11.5], dtype=np.float32)  # hPa
+
+    def test_issue_numbers(self):
+        from diive.flux.partitioning.daytime_oneflux import _gpp_vpd
+        rg = np.zeros(3, dtype=np.float32)
+        oneflux = _gpp_vpd(rg, self.VPD, self.PAR)
+        diive = _gpp_vpd(rg, self.VPD, self.PAR, zero_dark_gpp=True)
+        np.testing.assert_array_equal(np.isnan(oneflux), [True, True, False])
+        np.testing.assert_array_equal(diive, [0.0, 0.0, 0.0])
+        self.assertEqual(diive.dtype, np.float32)
+
+    def test_values_that_are_not_zero_by_zero_are_unchanged(self):
+        from diive.flux.partitioning.daytime_oneflux import _gpp_vpd
+        rng = np.random.default_rng(0)
+        rg = np.concatenate([np.zeros(50), rng.uniform(-5, 1200, 500)]).astype(np.float32)
+        vpd = rng.uniform(0, 40, rg.size).astype(np.float32)
+        oneflux = _gpp_vpd(rg, vpd, self.PAR)
+        diive = _gpp_vpd(rg, vpd, self.PAR, zero_dark_gpp=True)
+        finite = np.isfinite(oneflux)
+        self.assertGreater((~finite).sum(), 0)  # the case is in the sample
+        np.testing.assert_array_equal(diive[finite], oneflux[finite])
+        self.assertTrue(((rg[~finite] == 0) & (diive[~finite] == 0)).all())
+
+    def test_stage_c_interpolation(self):
+        # The NaN of one window spreads into the interpolated GPP of ONEFlux;
+        # with the fix the night records get 0 and daytime ones stay the same.
+        from diive.flux.partitioning.daytime_oneflux import _compute_flux
+        n = 96
+        rg = np.zeros(n, dtype=np.float32)
+        rg[20:40] = 300.0
+        vpd = np.full(n, 15.0, dtype=np.float32)
+        ta = np.full(n, 15.0, dtype=np.float32)
+        p = np.array([0.113464, 45.080406, 28.28612, 3.0, 150.0], dtype=np.float32)
+        params, central = [p, p], np.array([24, 72])
+        _, gpp_of, _, _ = _compute_flux(n, ta, rg, vpd, params, central)
+        _, gpp_dv, _, _ = _compute_flux(n, ta, rg, vpd, params, central,
+                                        zero_dark_gpp=True)
+        night = rg == 0
+        self.assertTrue(np.isnan(gpp_of[night]).all())
+        np.testing.assert_array_equal(gpp_dv[night], 0.0)
+        np.testing.assert_array_equal(gpp_dv[~night], gpp_of[~night])
+
+    def test_diive_class_equals_oneflux_where_oneflux_gives_a_number(self):
+        import diive as dv
+        from diive.flux.partitioning import (
+            DaytimePartitioningDiive, DaytimePartitioningOneFlux,
+            partition_nee_daytime_oneflux_scenarios)
+        df = dv.load_exampledata_parquet()
+        df = df.loc['2017-06-01':'2017-06-30']
+        kw = dict(nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+                  ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'],
+                  vpd_in_kpa=False, verbose=0)
+        of = DaytimePartitioningOneFlux(**kw).run()
+        dvp = DaytimePartitioningDiive(**kw).run()
+        self.assertEqual(list(dvp.results.columns),
+                         [c.replace('_DT_OF', '_DT_DV') for c in of.results.columns])
+        renamed = of.results.rename(columns=lambda c: c.replace('_DT_OF', '_DT_DV'))
+        for col in renamed.columns:
+            a, b = renamed[col], dvp.results[col]
+            ok = a.notna()
+            pd.testing.assert_series_equal(a[ok], b[ok], check_exact=True)
+            if col != 'GPP_DT_DV':
+                self.assertTrue(b[~ok].isna().all(), col)
+        # Records ONEFlux leaves NaN and diive fills are 0, in the dark.
+        filled = of.gpp.isna() & dvp.gpp.notna()
+        self.assertTrue((dvp.gpp[filled] == 0).all())
+        self.assertTrue((df['Rg_f'][filled] == 0).all())
+        pd.testing.assert_series_equal(dvp.gpp, dvp.results['GPP_DT_DV'])
+        self.assertEqual(dvp.removed_days, of.removed_days)
+        # The scenario run of L4.2 still builds ONEFlux instances.
+        parts = partition_nee_daytime_oneflux_scenarios(
+            nee={'CUT_50': kw['nee']}, **{k: v for k, v in kw.items() if k != 'nee'})
+        self.assertIs(type(parts['CUT_50']), DaytimePartitioningOneFlux)
+        pd.testing.assert_frame_equal(parts['CUT_50'].results, of.results, check_exact=True)
+
+
 def _synthetic_window_year(n_days=40, night_days=10):
     """Arrays for _estimate_parasets: 24 night and 24 day records per day,
     daytime NEE measured every day, nighttime NEE only on days 1..night_days.

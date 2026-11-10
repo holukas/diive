@@ -70,17 +70,20 @@ _LEVEL_FIELDS: dict[str, tuple[str, ...]] = {
 _ADDITIVE_FIELDS: tuple[str, ...] = (
     'level41_mds', 'level41_rf', 'level41_xgb', 'level41_xgbwn', 'ustar_reference',
     'level42_nt_of', 'level42_nt_rp', 'level42_dt_rp', 'level42_dt_of',
+    'level42_nt_dv', 'level42_dt_dv',
     'partitioning_reference',
 )
 
 # Additive-level tracking sub-keys in added_columns.
 _PARTITIONING_REF_KEYS: tuple[str, ...] = (
     'L4.2_ref_nt_of', 'L4.2_ref_nt_rp', 'L4.2_ref_dt_rp', 'L4.2_ref_dt_of',
+    'L4.2_ref_nt_dv', 'L4.2_ref_dt_dv',
 )
 
 _ADDITIVE_TRACKED_KEYS: tuple[str, ...] = (
     'L4.1_mds', 'L4.1_rf', 'L4.1_xgb', 'L4.1_ref',
     'L4.2_nt_of', 'L4.2_nt_rp', 'L4.2_dt_rp', 'L4.2_dt_of',
+    'L4.2_nt_dv', 'L4.2_dt_dv',
 ) + _PARTITIONING_REF_KEYS
 
 

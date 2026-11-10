@@ -505,7 +505,7 @@ data.plot_cumulative_comparison(
 #
 # To run one variant only, ``run_level42_partitioning(data, method=...,
 # mode=...)`` selects it with two switches: ``method='nighttime'`` or
-# ``'daytime'``, and ``mode='oneflux'`` (default) or ``'reddyproc'``.
+# ``'daytime'``, and ``mode='diive'`` (default), ``'oneflux'`` or ``'reddyproc'``.
 #
 # This LAE subset ships only gap-filled (``_gfXG``) meteo, so we reuse those
 # columns for the "measured" TA / SW_IN inputs too; a real workflow points

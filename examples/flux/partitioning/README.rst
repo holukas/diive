@@ -26,8 +26,9 @@ One entry point
 ---------------
 
 ``dv.flux.PartitioningNEE`` (or the function ``dv.flux.partition_nee``) runs any of the four ports.
-``method`` picks ``'nighttime'`` or ``'daytime'``, ``mode`` picks ``'oneflux'`` (default, the ICOS
-and FLUXNET2015 approach) or ``'reddyproc'``. The results are those of the matching class:
+``method`` picks ``'nighttime'`` or ``'daytime'``, ``mode`` picks ``'diive'`` (default, ONEFlux with
+diive's fixes), ``'oneflux'`` (the ICOS and FLUXNET2015 approach) or ``'reddyproc'``. The results
+are those of the matching class:
 
 .. code-block:: python
 

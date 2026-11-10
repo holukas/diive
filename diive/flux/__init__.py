@@ -13,12 +13,14 @@ from diive.flux import lowres
 from diive.flux import postprocessingchain
 from diive.flux import partitioning
 from diive.flux.partitioning import NighttimePartitioningOneFlux
+from diive.flux.partitioning import NighttimePartitioningDiive
 from diive.flux.partitioning import partition_nee_nighttime_oneflux
 from diive.flux.partitioning import NighttimePartitioningReddyProc
 from diive.flux.partitioning import partition_nee_nighttime_reddyproc
 from diive.flux.partitioning import DaytimePartitioningReddyProc
 from diive.flux.partitioning import partition_nee_daytime_reddyproc
 from diive.flux.partitioning import DaytimePartitioningOneFlux
+from diive.flux.partitioning import DaytimePartitioningDiive
 from diive.flux.partitioning import partition_nee_daytime_oneflux
 from diive.flux.partitioning import partition_nee_daytime_oneflux_scenarios
 from diive.flux.partitioning import PartitioningNEE
@@ -61,12 +63,14 @@ __all__ = [
     'postprocessingchain',
     'partitioning',
     'NighttimePartitioningOneFlux',
+    'NighttimePartitioningDiive',
     'partition_nee_nighttime_oneflux',
     'NighttimePartitioningReddyProc',
     'partition_nee_nighttime_reddyproc',
     'DaytimePartitioningReddyProc',
     'partition_nee_daytime_reddyproc',
     'DaytimePartitioningOneFlux',
+    'DaytimePartitioningDiive',
     'partition_nee_daytime_oneflux',
     'partition_nee_daytime_oneflux_scenarios',
     'PartitioningNEE',

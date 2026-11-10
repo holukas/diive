@@ -27,8 +27,8 @@ Best for: choosing a partitioning method, or seeing how much the choice matters.
 
 The four classes can also be reached through one entry point,
 :class:`~diive.flux.PartitioningNEE`, with ``method='nighttime'`` or
-``'daytime'`` and ``mode='oneflux'`` (default, the ICOS and FLUXNET2015
-approach) or ``'reddyproc'``.
+``'daytime'`` and ``mode='diive'`` (default, ONEFlux with diive's fixes),
+``'oneflux'`` (the ICOS and FLUXNET2015 approach) or ``'reddyproc'``.
 """
 
 # %%

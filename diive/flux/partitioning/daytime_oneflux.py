@@ -131,13 +131,24 @@ def _lloyd_taylor_dt(ta, rref, e0):
     return rref * np.exp(e0 * ((1.0 / (TREF - T0)) - (1.0 / (ta - T0))))
 
 
-def _gpp_vpd(rg, vpd, par):
+def _gpp_vpd(rg, vpd, par, zero_dark_gpp=False):
+    """GPP of the light-response curve, ONEFlux ``gpp_vpd``.
+
+    With ``zero_dark_gpp`` (``mode='diive'``), GPP is 0 where ``rg`` is 0 and
+    the denominator is 0. On float32 drivers a large ``k`` makes the VPD term
+    underflow to 0, so ONEFlux divides 0 by 0 there and gives NaN at night
+    (issue #446). Every value that is not 0/0 stays as in ONEFlux.
+    """
     alpha, beta, k = par[0], par[1], par[2]
     if beta == 0:
         return np.zeros(len(rg))
     with np.errstate(over='ignore', invalid='ignore'):
         min_arr = np.minimum(np.exp(-1.0 * k * (vpd - VPD0)), 1.0)
-        return alpha * beta * min_arr * rg / (alpha * rg + beta * min_arr)
+        denom = alpha * rg + beta * min_arr
+        gpp = alpha * beta * min_arr * rg / denom
+    if zero_dark_gpp:
+        gpp = np.where((rg == 0) & (denom == 0), 0.0, gpp)
+    return gpp
 
 
 def _hlrc_lloyd(rg, ta, e0, par):
@@ -721,7 +732,7 @@ def _estimate_parasets(D, nperday, verbose=1, reject_alpha_at_start=False):
 # --------------------------------------------------------------------------- #
 # Stage C: interpolate Reco/GPP to every record (port of daytime.compute_flux)
 # --------------------------------------------------------------------------- #
-def _compute_flux(n, tair_f, rg_f, vpd_f, params_ok, central):
+def _compute_flux(n, tair_f, rg_f, vpd_f, params_ok, central, zero_dark_gpp=False):
     nwin = len(params_ok)
     reco_mat = np.full((nwin, n), NAN)
     gpp_mat = np.full((nwin, n), NAN)
@@ -738,7 +749,7 @@ def _compute_flux(n, tair_f, rg_f, vpd_f, params_ok, central):
             sub = (ind >= lo) & (ind < hi)
         p = params_ok[i]
         reco_mat[i, sub] = _lloyd_taylor_dt(tair_f[sub], p[3], p[4])
-        gpp_mat[i, sub] = _gpp_vpd(rg_f[sub], vpd_f[sub], p[0:3])
+        gpp_mat[i, sub] = _gpp_vpd(rg_f[sub], vpd_f[sub], p[0:3], zero_dark_gpp)
 
     reco = np.zeros(n)
     gpp = np.zeros(n)
@@ -907,7 +918,7 @@ def _partition_year_shared(nees, julday, verbose=1, nee_f_first=None, **kwargs):
             first record of the year (float32, -9999 sentinel), or None when
             no gap-filled NEE was given. See ``_estimate_parasets``.
         **kwargs: The other arguments of ``_partition_one_year`` (drivers,
-            ``hr``, ``nperday``, ``reject_alpha_at_start``).
+            ``hr``, ``nperday``, ``reject_alpha_at_start``, ``zero_dark_gpp``).
 
     Returns:
         ``(outs, ranges)``: ``{label: out}`` from ``_partition_one_year`` with
@@ -948,11 +959,13 @@ def _partition_year_shared(nees, julday, verbose=1, nee_f_first=None, **kwargs):
 
 def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
                         verbose=1, reject_alpha_at_start=False, nee_f_first=None,
-                        year=None):
+                        year=None, zero_dark_gpp=False):
     """Run the ONEFlux daytime partitioning for one year of -9999-sentinel arrays.
 
     ``nee_f_first`` is the gap-filled NEE of the year's first record (or None),
-    ``year`` only names the year in warnings.
+    ``year`` only names the year in warnings. ``zero_dark_gpp`` sets GPP to 0
+    where ONEFlux divides 0 by 0 in the dark (``mode='diive'``, see
+    ``_gpp_vpd``).
 
     Raises ``_BrokenWindow`` at the first fit without covariance, with
     ``day_range`` as whole days; ``_partition_year_shared`` handles the rerun.
@@ -998,7 +1011,8 @@ def _partition_one_year(nee, ta, sw_in, ta_f, sw_in_f, vpd, julday, hr, nperday,
     central = np.array([int(r[2]) for r in ind_ok], dtype=int)
 
     # Stage C: interpolate Reco/GPP
-    reco, gpp, _pf1, _pf2 = _compute_flux(n, ta_f, sw_in_f, vpd, params_ok, central)
+    reco, gpp, _pf1, _pf2 = _compute_flux(n, ta_f, sw_in_f, vpd, params_ok, central,
+                                          zero_dark_gpp)
     # Stage D: GPP standard error
     var_gpp = _compute_var(n, ta_f, sw_in_f, vpd, params_ok, central, whichmodel,
                            jtj_ok, rescor)
@@ -1116,6 +1130,12 @@ class DaytimePartitioningOneFlux:
         >>> part.run()  # then part.results -> DataFrame with RECO_DT_OF, GPP_DT_OF, ...
     """
 
+    # Column tag (``*_DT_<tag>``), name in the console output, and whether
+    # GPP is set to 0 where ONEFlux divides 0 by 0 in the dark (issue #446).
+    _TAG = 'OF'
+    _NAME = 'ONEFlux'
+    _ZERO_DARK_GPP = False
+
     def __init__(self,
                  nee: Series,
                  ta: Series,
@@ -1228,21 +1248,55 @@ class DaytimePartitioningOneFlux:
     @property
     def reco(self) -> Series:
         """Ecosystem respiration, umol m-2 s-1."""
-        return self.results['RECO_DT_OF']
+        return self.results[f'RECO_DT_{self._TAG}']
 
     @property
     def gpp(self) -> Series:
         """Gross primary production, umol m-2 s-1."""
-        return self.results['GPP_DT_OF']
+        return self.results[f'GPP_DT_{self._TAG}']
 
     def report(self) -> None:
         """Print a Rich per-year summary of the partitioning result."""
+        t = self._TAG
         partitioning_report(
-            title="Daytime NEE Partitioning ONEFlux (Lasslop et al. 2010)",
+            title=f"Daytime NEE Partitioning {self._NAME} (Lasslop et al. 2010)",
             reference="Pastorello et al. (2020), https://doi.org/10.1038/s41597-020-0534-3",
-            results=self.results, reco_col='RECO_DT_OF', gpp_col='GPP_DT_OF',
-            e0_col='E0_DT_OF', e0_unit='degC', se_col='SE_GPP_DT_OF',
+            results=self.results, reco_col=f'RECO_DT_{t}', gpp_col=f'GPP_DT_{t}',
+            e0_col=f'E0_DT_{t}', e0_unit='degC', se_col=f'SE_GPP_DT_{t}',
             verbose=self.verbose)
+
+
+class DaytimePartitioningDiive(DaytimePartitioningOneFlux):
+    """Partition NEE into GPP and RECO with the daytime method (diive).
+
+    The ONEFlux daytime port (:class:`DaytimePartitioningOneFlux`) with one
+    fix, and the backend of ``PartitioningNEE(method='daytime', mode='diive')``.
+    It emits ``*_DT_DV`` columns, so its results can sit next to the
+    ``*_DT_OF`` ones. Arguments, results and :attr:`removed_days` are those of
+    :class:`DaytimePartitioningOneFlux`.
+
+    The fix (issue #446): ONEFlux evaluates the light-response curve of each
+    window on float32 drivers. With a large VPD parameter ``k``, the VPD term
+    ``exp(-k * (VPD - VPD0))`` underflows to 0, and where ``SW_IN`` is 0 the
+    curve becomes 0/0, so ONEFlux gives a NaN GPP on such night records. Here
+    GPP is 0 on records where ``SW_IN`` is 0 and that denominator is 0.
+    Wherever ONEFlux gives a number, the result is identical to
+    :class:`DaytimePartitioningOneFlux`, bit for bit. Fits, window
+    parameters, RECO and the GPP standard error do not change.
+
+    Example:
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.DaytimePartitioningDiive(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+        ...     ta_f=df['Tair_f'], sw_in_f=df['Rg_f'], vpd=df['VPD_f'],
+        ...     vpd_in_kpa=False)  # VPD_f is in hPa in the example data
+        >>> part.run()  # then part.results -> DataFrame with RECO_DT_DV, GPP_DT_DV, ...
+    """
+
+    _TAG = 'DV'
+    _NAME = 'diive'
+    _ZERO_DARK_GPP = True
 
 
 def _run_shared(parts: dict) -> None:
@@ -1302,7 +1356,7 @@ def _run_shared(parts: dict) -> None:
 
     if verbose:
         series = f" and {len(parts)} NEE series" if len(parts) > 1 else ""
-        info("Daytime partitioning ONEFlux (Lasslop et al. 2010) starting "
+        info(f"Daytime partitioning {first._NAME} (Lasslop et al. 2010) starting "
              f"for {len(np.unique(years))} year(s){series}.", verbose=verbose)
 
     for year in np.unique(years):
@@ -1331,7 +1385,8 @@ def _run_shared(parts: dict) -> None:
             sw_in_f=_to_sentinel(on_grid(df['sw_in_f'].to_numpy()[ym])),
             vpd=_to_sentinel(on_grid(df['vpd'].to_numpy()[ym] * vpd_factor)),
             julday=julday, hr=hr_all[yg], nperday=nperday,
-            verbose=verbose, reject_alpha_at_start=first.reject_alpha_at_start)
+            verbose=verbose, reject_alpha_at_start=first.reject_alpha_at_start,
+            zero_dark_gpp=first._ZERO_DARK_GPP)
         removed[int(year)] = ranges
         for label, out in outs.items():
             for col in cols:
@@ -1342,11 +1397,12 @@ def _run_shared(parts: dict) -> None:
                 results[label].loc[ym, col] = out[col][::2] if duplicate else out[col]
 
     for label, p in parts.items():
-        p._results = results[label]
+        tag = f'_DT_{p._TAG}'
+        p._results = results[label].rename(columns=lambda c: c.replace('_DT_OF', tag))
         p._removed_days = {year: list(r) for year, r in removed.items()}
         p.report()
     if verbose:
-        success("Daytime partitioning (ONEFlux) finished.", verbose=verbose)
+        success(f"Daytime partitioning ({first._NAME}) finished.", verbose=verbose)
 
 
 def partition_nee_daytime_oneflux(nee: Series, ta: Series, sw_in: Series,
@@ -1405,13 +1461,24 @@ def partition_nee_daytime_oneflux_scenarios(
         ``removed_days`` are populated, and ``removed_days`` is the same for
         every series.
     """
+    return _partition_scenarios(
+        DaytimePartitioningOneFlux, nee=nee, ta=ta, sw_in=sw_in, ta_f=ta_f,
+        sw_in_f=sw_in_f, vpd=vpd, vpd_in_kpa=vpd_in_kpa,
+        reject_alpha_at_start=reject_alpha_at_start, nee_f=nee_f, verbose=verbose)
+
+
+def _partition_scenarios(cls, nee, ta, sw_in, ta_f, sw_in_f, vpd, vpd_in_kpa,
+                         reject_alpha_at_start, nee_f, verbose):
+    """:func:`partition_nee_daytime_oneflux_scenarios` with instances of
+    ``cls`` (:class:`DaytimePartitioningOneFlux` or
+    :class:`DaytimePartitioningDiive`)."""
     if not nee:
         raise ValueError("nee is empty; pass at least one NEE series.")
     nee_f = nee_f or {}
     unknown = [label for label in nee_f if label not in nee]
     if unknown:
         raise ValueError(f"nee_f has label(s) {unknown} that are not in nee.")
-    parts = {label: DaytimePartitioningOneFlux(
+    parts = {label: cls(
         nee=s, ta=ta, sw_in=sw_in, ta_f=ta_f, sw_in_f=sw_in_f, vpd=vpd,
         vpd_in_kpa=vpd_in_kpa, reject_alpha_at_start=reject_alpha_at_start,
         nee_f=nee_f.get(label), verbose=verbose) for label, s in nee.items()}

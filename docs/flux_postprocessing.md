@@ -321,7 +321,9 @@ scores describe short gaps, while the sums depend more on the long ones.
 method (Reichstein et al. 2005), which fits the temperature response of the nighttime flux, and
 the daytime method (Lasslop et al. 2010), which fits a light response curve to the daytime flux.
 Both fit the measured flux and use the gap-filled flux to compute GPP. `mode='oneflux'` follows
-the ONEFlux code (output columns `_NT_OF`, `_DT_OF`), `mode='reddyproc'` REddyProc. ONEFlux itself
+the ONEFlux code (output columns `_NT_OF`, `_DT_OF`), `mode='reddyproc'` REddyProc, and
+`mode='diive'` ONEFlux with diive's fixes (`_NT_DV`, `_DT_DV`): the daytime GPP is 0 instead of
+missing on night records where ONEFlux divides 0 by 0, all other values equal ONEFlux. ONEFlux itself
 partitions a flux filled with MDS, so a partitioning of an ML-filled flux is not identical to
 ONEFlux output.
 

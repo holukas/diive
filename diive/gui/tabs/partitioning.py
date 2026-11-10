@@ -5,9 +5,10 @@ GUI.TABS.PARTITIONING: NEE PARTITIONING (METHOD + MODE)
 One tab for the NEE -> GPP + RECO partitioning with two switches, the way the
 library's :class:`diive.flux.PartitioningNEE` works: **Method** picks the
 algorithm (nighttime, Reichstein et al. 2005, or daytime, Lasslop et al. 2010)
-and **Mode** the reference implementation (ONEFlux, the ICOS and FLUXNET2015
-processing and the default, or REddyProc). The four combinations write
-``*_NT_OF``, ``*_NT_RP``, ``*_DT_OF`` and ``*_DT_RP`` columns.
+and **Mode** the implementation (ONEFlux, the ICOS and FLUXNET2015 processing
+and the default, REddyProc, or diive, ONEFlux with diive's fixes). The
+combinations write ``*_NT_OF``, ``*_NT_RP``, ``*_NT_DV``, ``*_DT_OF``,
+``*_DT_RP`` and ``*_DT_DV`` columns.
 
 The tab shows only the input pickers and site coordinates the chosen variant
 needs (``partitioning_inputs``). It replaces the four per-variant tabs.
@@ -36,7 +37,8 @@ from diive.gui.widgets.partitioning_mode import (
 
 #: Column suffix per (method, mode), as the library writes it.
 _SUFFIX = {("nighttime", "oneflux"): "NT_OF", ("nighttime", "reddyproc"): "NT_RP",
-           ("daytime", "oneflux"): "DT_OF", ("daytime", "reddyproc"): "DT_RP"}
+           ("daytime", "oneflux"): "DT_OF", ("daytime", "reddyproc"): "DT_RP",
+           ("nighttime", "diive"): "NT_DV", ("daytime", "diive"): "DT_DV"}
 
 _COORDS = ("lat", "lon", "utc_offset")
 
@@ -55,12 +57,19 @@ _INTRO = {
         "Daytime light-response method (Lasslop et al. 2010), REddyProc "
         "partitionNEEGL. Fits on measured NEE with gap-filled drivers. Emits "
         "*_DT_RP columns."),
+    ("nighttime", "diive"): (
+        "Nighttime method (Reichstein et al. 2005), diive mode: the ONEFlux "
+        "method unchanged, with the same numbers. Emits *_NT_DV columns."),
+    ("daytime", "diive"): (
+        "Daytime light-response method (Lasslop et al. 2010), diive mode: ONEFlux "
+        "with one fix. GPP is 0 instead of missing at night where ONEFlux divides "
+        "0 by 0; all other values equal ONEFlux. Emits *_DT_DV columns."),
 }
 
 
 class PartitioningNEETab(BasePartitioningTab):
     """NEE partitioning with Method (nighttime / daytime) and Mode (ONEFlux /
-    REddyProc) switches, via :class:`diive.flux.PartitioningNEE`."""
+    REddyProc / diive) switches, via :class:`diive.flux.PartitioningNEE`."""
 
     title = "NEE partitioning"
     # Keys are the PartitioningNEE input names, so picks map 1:1 to kwargs.
@@ -71,7 +80,7 @@ class PartitioningNEETab(BasePartitioningTab):
         {"key": "nee_f", "label": "NEE (gap-filled)", "needle": "NEE",
          "prefer": "_F", "optional_label": "NEE (gap-filled, optional)",
          "tip": "Gap-filled NEE (µmol m⁻² s⁻¹). Nighttime: GPP is RECO minus this NEE. "
-                "Daytime ONEFlux (optional): ONEFlux reads it for windows without "
+                "Daytime ONEFlux and diive (optional): ONEFlux reads it for windows without "
                 "measured nighttime NEE, so pick it to reproduce ONEFlux there."},
         {"key": "ta", "label": "TA (measured)", "needle": "TA",
          "prefer": "ORIG", "avoid": "_F", "tip": "Measured air temperature (°C)."},
@@ -188,7 +197,8 @@ class PartitioningNEETab(BasePartitioningTab):
     def restore_state(self, state: dict) -> None:
         # Variant first, so the right rows show when the picks come back.
         set_combo_value(self.method_combo, state.get("method"))
-        set_combo_value(self.mode_combo, state.get("mode"))
+        # Projects saved before the diive mode had ONEFlux as the default.
+        set_combo_value(self.mode_combo, state.get("mode", "oneflux" if state else None))
         super().restore_state(state)
 
     # --- library calls -------------------------------------------------

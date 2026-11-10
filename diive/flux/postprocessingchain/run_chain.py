@@ -30,8 +30,10 @@ from diive.flux.postprocessingchain.levels import (
     run_level41_rf,
     run_level41_ustar_reference,
     run_level41_xgb,
+    run_level42_daytime_diive,
     run_level42_daytime_oneflux,
     run_level42_daytime_reddyproc,
+    run_level42_nighttime_diive,
     run_level42_nighttime_oneflux,
     run_level42_nighttime_reddyproc,
     run_level42_ustar_reference,
@@ -47,6 +49,9 @@ _PARTITION_REQUIRED: dict[str, tuple[str, ...]] = {
     'partition_daytime_reddyproc': ('partition_ta_f', 'partition_vpd_f', 'partition_sw_in_f'),
     'partition_daytime_oneflux': ('partition_ta', 'partition_sw_in', 'partition_ta_f',
                                   'partition_sw_in_f', 'partition_vpd_f'),
+    'partition_nighttime_diive': ('partition_ta', 'partition_sw_in', 'partition_ta_f'),
+    'partition_daytime_diive': ('partition_ta', 'partition_sw_in', 'partition_ta_f',
+                                'partition_sw_in_f', 'partition_vpd_f'),
 }
 
 def _partition_flags(config: FluxConfig) -> list[str]:
@@ -156,7 +161,7 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
 
     *Level-4.2 (NEE partitioning)* — off by default. Runs each variant with
     its ``config.partition_*`` flag set to ``True``, plus the one selected by
-    ``config.partition_method`` / ``config.partition_mode`` (ONEFlux by
+    ``config.partition_method`` / ``config.partition_mode`` (``'diive'`` by
     default). A variant selected both ways runs once.
     ``config.partition_reference=True`` (with ``ustar_reference=True``) then
     selects the REF of GPP and RECO for each variant with
@@ -323,7 +328,8 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
             if not getattr(config, fld):
                 _missing.append(f"{fld} ({reason})")
     if ('partition_nighttime_oneflux' in partition_enabled
-            or 'partition_nighttime_reddyproc' in partition_enabled):
+            or 'partition_nighttime_reddyproc' in partition_enabled
+            or 'partition_nighttime_diive' in partition_enabled):
         _gf_on = {'mds': config.gapfill_mds, 'rf': config.gapfill_rf,
                   'xgb': config.gapfill_xgb}
         if config.partition_gapfill_method not in _gf_on:
@@ -625,6 +631,25 @@ def run_chain(data: FluxLevelData, config: FluxConfig) -> FluxLevelData:
         )
     if 'partition_daytime_oneflux' in partition_enabled:
         data = run_level42_daytime_oneflux(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            sw_in_f=config.partition_sw_in_f,
+            vpd_f=config.partition_vpd_f,
+            vpd_in_kpa=config.partition_vpd_in_kpa,
+            gapfill_method=config.partition_gapfill_method,
+        )
+    if 'partition_nighttime_diive' in partition_enabled:
+        data = run_level42_nighttime_diive(
+            data,
+            ta=config.partition_ta,
+            sw_in=config.partition_sw_in,
+            ta_f=config.partition_ta_f,
+            gapfill_method=config.partition_gapfill_method,
+        )
+    if 'partition_daytime_diive' in partition_enabled:
+        data = run_level42_daytime_diive(
             data,
             ta=config.partition_ta,
             sw_in=config.partition_sw_in,

@@ -63,6 +63,10 @@ SKIP = {
         "seasonal threshold detection over the full record",
     'diive.flux.partitioning.daytime_oneflux.DaytimePartitioningOneFlux':
         "partitioning port, ~20 s per year, plus a parquet load",
+    'diive.flux.partitioning.daytime_oneflux.DaytimePartitioningDiive':
+        "partitioning port, ~20 s per year, plus a parquet load",
+    'diive.flux.partitioning.nighttime_oneflux.NighttimePartitioningDiive':
+        "partitioning port, ~20 s per year, plus a parquet load",
     'diive.flux.partitioning.daytime_reddyproc.DaytimePartitioningReddyProc':
         "partitioning port, ~20 s per year, plus a parquet load",
     'diive.flux.partitioning.nighttime_oneflux.NighttimePartitioningOneFlux':

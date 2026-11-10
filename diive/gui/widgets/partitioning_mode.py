@@ -3,8 +3,8 @@ GUI.WIDGETS.PARTITIONING_MODE: NEE PARTITIONING METHOD AND MODE CHOICE
 ======================================================================
 
 The two combos of the NEE partitioning tab. Method picks the algorithm
-(nighttime or daytime), mode picks the reference implementation (ONEFlux or
-REddyProc). Each item shows a label and carries the library value as item data
+(nighttime or daytime), mode picks the implementation (ONEFlux, REddyProc or
+diive). Each item shows a label and carries the library value as item data
 (``PartitioningNEE(method=, mode=)``), so projects store the value, not the
 label.
 
@@ -21,7 +21,8 @@ METHOD_ITEMS = (("Nighttime", "nighttime"),
                 ("Daytime", "daytime"))
 
 #: (label, PartitioningNEE mode), default first.
-MODE_ITEMS = (("ONEFlux (ICOS, default)", "oneflux"),
+MODE_ITEMS = (("diive (ONEFlux + fixes, default)", "diive"),
+              ("ONEFlux (ICOS)", "oneflux"),
               ("REddyProc", "reddyproc"))
 
 METHOD_TIP = (
@@ -33,11 +34,14 @@ METHOD_TIP = (
     "and gets GPP and RECO from the same fit. Also uses VPD.")
 
 MODE_TIP = (
-    "Which reference implementation the result reproduces.\n\n"
-    "ONEFlux (ICOS, default): the processing used by ICOS and FLUXNET2015. "
+    "Which implementation the result reproduces.\n\n"
+    "diive (default): ONEFlux with diive's fixes. Daytime sets GPP to 0 where "
+    "ONEFlux gives NaN at night (0/0 in the light response); all other values "
+    "equal ONEFlux. Nighttime equals ONEFlux. Columns end in _NT_DV or _DT_DV.\n\n"
+    "ONEFlux (ICOS): the processing used by ICOS and FLUXNET2015, bit for bit. "
     "Columns end in _NT_OF or _DT_OF.\n\n"
     "REddyProc: the R package REddyProc. Columns end in _NT_RP or _DT_RP.\n\n"
-    "Each mode writes its own columns, so results of both modes can sit side "
+    "Each mode writes its own columns, so results of all modes can sit side "
     "by side in the dataset.")
 
 
@@ -55,7 +59,7 @@ def make_method_combo() -> QComboBox:
 
 
 def make_mode_combo() -> QComboBox:
-    """A combo with the partitioning modes, 'oneflux' selected."""
+    """A combo with the partitioning modes, 'diive' selected."""
     return _make_combo(MODE_ITEMS, MODE_TIP)
 
 

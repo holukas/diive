@@ -656,8 +656,8 @@ def _chain_to_ref():
                                     reference=True, showplot=False, verbose=False)
     d = run_level41_mds(d, swin='SW_IN_1_1_1', ta='TA_1_1_1', vpd='VPD_kPa', mode='oneflux')
     d = run_level41_ustar_reference(d, verbose=False)
-    return run_level42_partitioning(d, method='nighttime', ta='TA_1_1_1', sw_in='SW_IN_1_1_1',
-                                    ta_f='TA_1_1_1', verbose=0)
+    return run_level42_partitioning(d, method='nighttime', mode='oneflux', ta='TA_1_1_1',
+                                    sw_in='SW_IN_1_1_1', ta_f='TA_1_1_1', verbose=0)
 
 
 _NT = dict(ta='TA_1_1_1', sw_in='SW_IN_1_1_1', ta_f='TA_1_1_1', verbose=0)
@@ -669,7 +669,7 @@ class TestLevel42UstarReference(unittest.TestCase):
     def setUpClass(cls):
         from diive.flux.postprocessingchain import run_level42_ustar_reference
         cls.before = _chain_to_ref()
-        cls.data = run_level42_ustar_reference(cls.before, method='nighttime', **_NT)
+        cls.data = run_level42_ustar_reference(cls.before, method='nighttime', mode='oneflux', **_NT)
 
     def test_needs_mds_filled_versions(self):
         """L417: a gap-filling method that did not fill the 40 versions is refused up front."""
@@ -687,7 +687,7 @@ class TestLevel42UstarReference(unittest.TestCase):
         d = run_level33_ustar_detection(_chain_to_l32(), thresholds={50: 0.15},
                                         showplot=False, verbose=False)
         with self.assertRaisesRegex(RuntimeError, 'run_level41_ustar_reference'):
-            run_level42_ustar_reference(d, method='nighttime', **_NT)
+            run_level42_ustar_reference(d, method='nighttime', mode='oneflux', **_NT)
 
     def test_ref_columns_and_record(self):
         from diive.flux.lowres.ustar_reference import oneflux_ure_cleanup
@@ -713,7 +713,7 @@ class TestLevel42UstarReference(unittest.TestCase):
 
     def test_rerun_replaces_and_variants_add_up(self):
         from diive.flux.postprocessingchain import run_level42_ustar_reference
-        d = run_level42_ustar_reference(self.data, method='nighttime', **_NT)
+        d = run_level42_ustar_reference(self.data, method='nighttime', mode='oneflux', **_NT)
         self.assertEqual(list(d.fpc_df.columns), list(self.data.fpc_df.columns))
         d = run_level42_ustar_reference(d, method='nighttime', mode='reddyproc', **_NT)
         self.assertEqual(set(d.levels.partitioning_reference), {'nt_of', 'nt_rp'})
@@ -737,7 +737,8 @@ class TestLevel42UstarReference(unittest.TestCase):
         cfg = TestRunChainUstarOptions._cfg
         data = TestRunChainUstarOptions._data()
         kw = dict(ustar_thresholds=_ref_thresholds(), mds_mode='oneflux',
-                  partition_method='nighttime', partition_ta='TA_1_1_1',
+                  partition_method='nighttime', partition_mode='oneflux',
+                  partition_ta='TA_1_1_1',
                   partition_sw_in='SW_IN_1_1_1', partition_ta_f='TA_1_1_1')
         with self.assertRaisesRegex(ValueError, 'ustar_reference=True'):
             run_chain(data, cfg(**kw, partition_reference=True))

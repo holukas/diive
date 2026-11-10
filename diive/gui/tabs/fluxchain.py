@@ -441,7 +441,8 @@ class FluxChainTab(DiiveTab):
         l42cfg = self._level42_cfg()
         if l42cfg:
             l42 = ("NT" if l42cfg["method"] == "nighttime" else "DT") + " · " \
-                + ("ONEFlux" if l42cfg["mode"] == "oneflux" else "REddyProc") \
+                + {"oneflux": "ONEFlux", "reddyproc": "REddyProc",
+                   "diive": "diive"}[l42cfg["mode"]] \
                 + (" + REF" if l42cfg.get("ustar_reference") else "")
             l42 = (l42, "set")
         else:
@@ -1742,7 +1743,9 @@ class FluxChainTab(DiiveTab):
         set_ustar_method(self.l33_method,
                          saved.get("l33_method", "oneflux_mp" if saved else None))
         set_combo_value(self.l42_method, saved.get("l42_method"))
-        set_combo_value(self.l42_mode, saved.get("l42_mode"))
+        # Projects saved before the diive mode had ONEFlux as the default.
+        set_combo_value(self.l42_mode,
+                        saved.get("l42_mode", "oneflux" if saved else None))
         if str(saved.get("l33_mode", "")).startswith("Detect"):
             self.l33_mode.setCurrentIndex(1)  # older label "Detect (moving point, ...)"
         elif str(saved.get("l33_mode", "")).startswith("Constant"):
@@ -2630,8 +2633,9 @@ class FluxChainTab(DiiveTab):
     _LEVEL_IDSTRS = {1: ("L2",), 2: ("L3.1",), 3: ("L3.2",), 4: ("L3.3",),
                      5: ("L4.1_mds", "L4.1_rf", "L4.1_xgb", "L4.1_ref"),
                      6: ("L4.2_nt_of", "L4.2_nt_rp", "L4.2_dt_rp", "L4.2_dt_of",
+                         "L4.2_nt_dv", "L4.2_dt_dv",
                          "L4.2_ref_nt_of", "L4.2_ref_nt_rp", "L4.2_ref_dt_rp",
-                         "L4.2_ref_dt_of")}
+                         "L4.2_ref_dt_of", "L4.2_ref_nt_dv", "L4.2_ref_dt_dv")}
 
     def _level_output_columns(self, idx: int, data) -> list[str]:
         """The fpc_df columns a level appended (flags / QCF / gap-filled)."""

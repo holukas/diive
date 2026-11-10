@@ -407,7 +407,13 @@ _LEVEL42_VARIANTS: dict[str, tuple[str, tuple[str, ...]]] = {
     "dt_rp": ("daytime_reddyproc", ("ta_f", "vpd_f", "sw_in_f", "nee_sd", "vpd_in_kpa")),
     "dt_of": ("daytime_oneflux", ("ta", "sw_in", "ta_f", "sw_in_f", "vpd_f", "vpd_in_kpa",
                                   "gapfill_method")),
+    "nt_dv": ("nighttime_diive", ("ta", "sw_in", "ta_f", "gapfill_method")),
+    "dt_dv": ("daytime_diive", ("ta", "sw_in", "ta_f", "sw_in_f", "vpd_f", "vpd_in_kpa",
+                                "gapfill_method")),
 }
+
+#: Canonical order of the L4.2 variants in rendered code.
+_LEVEL42_ORDER = ("nt_of", "nt_rp", "dt_rp", "dt_of", "nt_dv", "dt_dv")
 
 
 def _level42_selected(level42_cfg: dict) -> str | None:
@@ -416,7 +422,7 @@ def _level42_selected(level42_cfg: dict) -> str | None:
     if method is None:
         return None
     from diive.flux.postprocessingchain.levels.level42 import PARTITION_VARIANTS
-    mode = level42_cfg.get("mode", "oneflux")
+    mode = level42_cfg.get("mode", "diive")
     if (method, mode) not in PARTITION_VARIANTS:
         raise ValueError(f"level42_cfg: unknown method/mode {method!r}/{mode!r}.")
     return PARTITION_VARIANTS[(method, mode)]
@@ -428,7 +434,7 @@ def _level42_fn_names(level42_cfg: dict) -> list[str]:
     variants = level42_cfg.get("variants", [])
     names = ["run_level42_partitioning"] if selected else []
     names += [f"run_level42_{_LEVEL42_VARIANTS[v][0]}"
-              for v in ("nt_of", "nt_rp", "dt_rp", "dt_of")
+              for v in _LEVEL42_ORDER
               if v in variants and v != selected]
     if level42_cfg.get("ustar_reference") and names:
         names.append("run_level42_ustar_reference")
@@ -471,8 +477,8 @@ def _level42_block(level42_cfg: dict) -> list[str]:
     ``level42_cfg`` shape::
 
         {"method": "nighttime",            # or "daytime", renders run_level42_partitioning
-         "mode": "oneflux",                # or "reddyproc" (default 'oneflux')
-         "variants": ["nt_of", "nt_rp", "dt_rp", "dt_of"],  # subset, canonical order
+         "mode": "diive",                  # or "oneflux", "reddyproc" (default 'diive')
+         "variants": ["nt_of", "nt_rp", "dt_rp", "dt_of", "nt_dv", "dt_dv"],  # subset
          "gapfill_method": "mds",          # nighttime variants and daytime ONEFlux (default 'mds')
          "ta": "...", "sw_in": "...",      # measured meteo
          "ta_f": "...", "sw_in_f": "...", "vpd_f": "...",   # gap-filled meteo
@@ -495,12 +501,12 @@ def _level42_block(level42_cfg: dict) -> list[str]:
     if selected:
         body = ["", "data = run_level42_partitioning(", "    data,",
                 f"    method={level42_cfg['method']!r},",
-                f"    mode={level42_cfg.get('mode', 'oneflux')!r},"]
+                f"    mode={level42_cfg.get('mode', 'diive')!r},"]
         body += _level42_kwarg_lines(level42_cfg, _LEVEL42_VARIANTS[selected][1],
                                      "run_level42_partitioning")
         body.append(")")
         lines += body
-    for variant in ("nt_of", "nt_rp", "dt_rp", "dt_of"):
+    for variant in _LEVEL42_ORDER:
         if variant not in variants or variant == selected:
             continue
         suffix, keys = _LEVEL42_VARIANTS[variant]
@@ -512,7 +518,7 @@ def _level42_block(level42_cfg: dict) -> list[str]:
         from diive.flux.postprocessingchain.levels.level42 import PARTITION_VARIANTS
         method_mode = {v: mm for mm, v in PARTITION_VARIANTS.items()}
         rendered = ([selected] if selected else []) + [
-            v for v in ("nt_of", "nt_rp", "dt_rp", "dt_of") if v in variants and v != selected]
+            v for v in _LEVEL42_ORDER if v in variants and v != selected]
         for variant in rendered:
             method, mode = method_mode[variant]
             body = ["", "data = run_level42_ustar_reference(", "    data,",
@@ -532,7 +538,7 @@ def level42_to_code(init_kwargs: dict, level2_settings: dict, level31_kwargs: di
 
     L4.2 sits after L4.1, so the full L2 -> L4.1 chain is rendered first.
     Partitioning is additive across variants: each selected variant
-    (``nt_of`` / ``nt_rp`` / ``dt_rp`` / ``dt_of``) emits its own
+    (``nt_of`` / ``nt_rp`` / ``dt_rp`` / ``dt_of`` / ``nt_dv`` / ``dt_dv``) emits its own
     ``run_level42_*`` call. With ``level42_cfg['method']`` (and ``'mode'``)
     set, that variant is rendered as one ``run_level42_partitioning`` call.
     The nighttime variants additionally consume an L4.1 gap-filled NEE

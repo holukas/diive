@@ -107,7 +107,8 @@ def partitioning_to_code(method_suffix: str, picks: dict[str, str], *,
 
 #: Column suffix each (method, mode) of ``partition_nee`` writes.
 _NEE_SUFFIX = {("nighttime", "oneflux"): "NT_OF", ("nighttime", "reddyproc"): "NT_RP",
-               ("daytime", "oneflux"): "DT_OF", ("daytime", "reddyproc"): "DT_RP"}
+               ("daytime", "oneflux"): "DT_OF", ("daytime", "reddyproc"): "DT_RP",
+               ("nighttime", "diive"): "NT_DV", ("daytime", "diive"): "DT_DV"}
 
 _COORDS = ("lat", "lon", "utc_offset")
 
@@ -125,11 +126,11 @@ def partition_nee_to_code(method: str, mode: str, picks: dict[str, str], *,
 
     Args:
         method: ``'nighttime'`` or ``'daytime'``.
-        mode: ``'oneflux'`` or ``'reddyproc'``.
+        mode: ``'oneflux'``, ``'reddyproc'`` or ``'diive'``.
         picks: maps each input name (``nee`` / ``ta`` / ``sw_in`` / ``ta_f`` /
             ``sw_in_f`` / ``nee_f`` / ``vpd``, plus the optional inputs of
             :func:`diive.flux.partitioning.partitioning_optional_inputs`:
-            ``nee_f`` for daytime / oneflux, ``nee_sd`` for daytime /
+            ``nee_f`` for daytime / oneflux and diive, ``nee_sd`` for daytime /
             reddyproc) to the chosen column name. Inputs the variant does not
             use are ignored. An optional input may be missing or empty.
         lat: site latitude (decimal degrees), written where the variant needs it.

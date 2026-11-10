@@ -765,7 +765,8 @@ class TestLevel42Partitioning(unittest.TestCase):
         from diive.flux.postprocessingchain import (
             run_level42_partitioning, run_level42_nighttime_oneflux,
             run_level42_nighttime_reddyproc, run_level42_daytime_oneflux,
-            run_level42_daytime_reddyproc)
+            run_level42_daytime_reddyproc, run_level42_nighttime_diive,
+            run_level42_daytime_diive)
         d = self.drivers
         cases = {
             ('nighttime', 'oneflux'): ('nt_of', lambda data: run_level42_nighttime_oneflux(
@@ -777,6 +778,11 @@ class TestLevel42Partitioning(unittest.TestCase):
                 sw_in_f=d['sw_in_f'], vpd_f=d['vpd_f'], verbose=0)),
             ('daytime', 'reddyproc'): ('dt_rp', lambda data: run_level42_daytime_reddyproc(
                 data, ta_f=d['ta_f'], vpd_f=d['vpd_f'], sw_in_f=d['sw_in_f'], verbose=0)),
+            ('nighttime', 'diive'): ('nt_dv', lambda data: run_level42_nighttime_diive(
+                data, ta=d['ta'], sw_in=d['sw_in'], ta_f=d['ta_f'], verbose=0)),
+            ('daytime', 'diive'): ('dt_dv', lambda data: run_level42_daytime_diive(
+                data, ta=d['ta'], sw_in=d['sw_in'], ta_f=d['ta_f'],
+                sw_in_f=d['sw_in_f'], vpd_f=d['vpd_f'], verbose=0)),
         }
         for (method, mode), (variant, direct_fn) in cases.items():
             with self.subTest(method=method, mode=mode), warnings.catch_warnings():
@@ -788,6 +794,40 @@ class TestLevel42Partitioning(unittest.TestCase):
                 self.assertEqual(set(out.levels.level42_variants()), {variant})
                 pd.testing.assert_frame_equal(out.fpc_df, ref.fpc_df, check_exact=True)
                 self.assertEqual(out.partitioned_cols(), ref.partitioned_cols())
+
+    def test_diive_variants_add_up_with_oneflux(self):
+        # mode='diive' writes its own columns next to the ONEFlux ones: the
+        # nighttime numbers are ONEFlux's, the daytime ones too wherever
+        # ONEFlux gives a number (the fix only fills 0/0 in the dark).
+        import warnings
+        import numpy as np
+        from diive.flux.postprocessingchain import run_level42_partitioning
+        out = self.d41
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            for method in ('nighttime', 'daytime'):
+                for mode in ('oneflux', 'diive'):
+                    out = run_level42_partitioning(out, method=method, mode=mode,
+                                                   verbose=0, **self.drivers)
+        self.assertEqual(set(out.levels.level42_variants()),
+                         {'nt_of', 'dt_of', 'nt_dv', 'dt_dv'})
+        df = out.fpc_df
+        for tag in ('NT', 'DT'):
+            for prod in ('RECO', 'GPP'):
+                of, dvc = df[f'{prod}_{tag}_OF_CUT_50'], df[f'{prod}_{tag}_DV_CUT_50']
+                ok = of.notna()
+                self.assertGreater(ok.sum(), 0)
+                np.testing.assert_array_equal(of[ok].to_numpy(), dvc[ok].to_numpy())
+                if (tag, prod) != ('DT', 'GPP'):
+                    self.assertTrue(dvc[~ok].isna().all())
+        self.assertEqual(out._column_level('GPP_DT_DV_CUT_50'), 'L4.2')
+        self.assertIn('dt_dv', out.partitioned_cols())
+        # A re-run of the diive variant leaves the ONEFlux columns alone.
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            again = run_level42_partitioning(out, method='daytime', mode='diive',
+                                             verbose=0, **self.drivers)
+        self.assertEqual(list(again.fpc_df.columns), list(out.fpc_df.columns))
 
     def _daytime_oneflux_nee_f_first(self, data, **kw):
         """Run L4.2 daytime ONEFlux with the year's partitioning stubbed out and
@@ -823,14 +863,15 @@ class TestLevel42Partitioning(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'gapfill_method'):
             self._daytime_oneflux_nee_f_first(self.d41, gapfill_method='rfx')
 
-    def test_default_mode_is_oneflux(self):
+    def test_default_mode_is_diive(self):
         import warnings
-        from diive.flux.postprocessingchain import run_level42_partitioning
+        from diive.flux.postprocessingchain import FluxConfig, run_level42_partitioning
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             out = run_level42_partitioning(self.d41, method='daytime', verbose=0,
                                            **self.drivers)
-        self.assertEqual(set(out.levels.level42_variants()), {'dt_of'})
+        self.assertEqual(set(out.levels.level42_variants()), {'dt_dv'})
+        self.assertEqual(FluxConfig(fluxcol='FC').partition_mode, 'diive')
 
     def test_missing_driver_and_invalid_values(self):
         from diive.flux.postprocessingchain import run_level42_partitioning
@@ -838,7 +879,7 @@ class TestLevel42Partitioning(unittest.TestCase):
             run_level42_partitioning(self.d41, method='daytime', mode='reddyproc',
                                      ta_f='TA_F')
         with self.assertRaisesRegex(ValueError, 'mode'):
-            run_level42_partitioning(self.d41, method='daytime', mode='diive',
+            run_level42_partitioning(self.d41, method='daytime', mode='fluxnet',
                                      **self.drivers)
         with self.assertRaisesRegex(ValueError, 'method'):
             run_level42_partitioning(self.d41, method='night', **self.drivers)
@@ -867,7 +908,8 @@ class TestLevel42Partitioning(unittest.TestCase):
             seen.append(k['nee_f_first'])
             return {c: np.full(k['nee'].size, np.nan) for c in cols}
 
-        cfg = self._config(partition_method='daytime', partition_ta='TA_1_1_1',
+        cfg = self._config(partition_method='daytime', partition_mode='oneflux',
+                           partition_ta='TA_1_1_1',
                            partition_sw_in='SW_IN_1_1_1', partition_ta_f='TA_F',
                            partition_sw_in_f='SW_IN_F', partition_vpd_f='VPD_F')
         with warnings.catch_warnings(), \
@@ -893,11 +935,29 @@ class TestLevel42Partitioning(unittest.TestCase):
         self.assertIn('GPP_DT_RP_CUT_50', out.fpc_df.columns)
         self.assertEqual(out.level_ids.count('L4.2'), 1)
 
+    def test_run_chain_partition_mode_diive(self):
+        import warnings
+        from diive.flux.postprocessingchain import run_chain
+        cfg = self._config(partition_method='nighttime', partition_mode='diive',
+                           partition_ta='TA_1_1_1', partition_sw_in='SW_IN_1_1_1',
+                           partition_ta_f='TA_F')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            out = run_chain(self.data0, cfg)
+        self.assertEqual(set(out.levels.level42_variants()), {'nt_dv'})
+        self.assertIn('GPP_NT_DV_CUT_50', out.fpc_df.columns)
+        # The nighttime diive variant needs the L4.1 gap-filled NEE too.
+        with self.assertRaisesRegex(ValueError, 'gapfill_rf=True'):
+            run_chain(self.data0, self._config(
+                partition_nighttime_diive=True, partition_gapfill_method='rf',
+                partition_ta='TA_1_1_1', partition_sw_in='SW_IN_1_1_1',
+                partition_ta_f='TA_F'))
+
     def test_run_chain_partition_validation(self):
         from diive.flux.postprocessingchain import run_chain
         with self.assertRaisesRegex(ValueError, 'partition_mode'):
             run_chain(self.data0, self._config(partition_method='daytime',
-                                               partition_mode='diive'))
+                                               partition_mode='fluxnet'))
         with self.assertRaisesRegex(ValueError, 'partition_method'):
             run_chain(self.data0, self._config(partition_method='night'))
         # A missing driver is reported with the method/mode that needs it.

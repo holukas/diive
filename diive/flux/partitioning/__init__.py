@@ -11,10 +11,10 @@ methods (Lasslop et al. 2010, fitting a light-response curve to daytime NEE).
 Each method is a port of a different reference implementation, so they do not
 produce identical numbers. ``PartitioningNEE`` / ``partition_nee`` select one
 of them with two switches, ``method`` (``'nighttime'`` / ``'daytime'``) and
-``mode`` (``'oneflux'``, the default, or ``'reddyproc'``). Output columns
-carry a token after the ``_NT`` (nighttime) / ``_DT`` (daytime) suffix -
-``_OF`` (ONEFlux) and ``_RP`` (REddyProc) - so all four can coexist in one
-dataframe:
+``mode`` (``'diive'``, the default, ``'oneflux'`` or ``'reddyproc'``). Output
+columns carry a token after the ``_NT`` (nighttime) / ``_DT`` (daytime) suffix -
+``_OF`` (ONEFlux), ``_RP`` (REddyProc) and ``_DV`` (diive) - so all of them
+can coexist in one dataframe:
 
 - Nighttime method ONEFlux (Reichstein et al. 2005),
   ``NighttimePartitioningOneFlux`` / ``partition_nee_nighttime_oneflux`` - a
@@ -43,10 +43,16 @@ dataframe:
   several u* scenarios that share the days removed after failed fits, as
   ONEFlux does.
 
+- ``mode='diive'``: ``NighttimePartitioningDiive`` (``*_NT_DV``) is the
+  nighttime ONEFlux port unchanged. ``DaytimePartitioningDiive``
+  (``*_DT_DV``) is the daytime ONEFlux port with one fix: GPP is 0 instead of
+  NaN where ONEFlux divides 0 by 0 in the dark (issue #446).
+
 Part of the diive library: https://github.com/holukas/diive
 """
 
 from diive.flux.partitioning.nighttime_oneflux import NighttimePartitioningOneFlux
+from diive.flux.partitioning.nighttime_oneflux import NighttimePartitioningDiive
 from diive.flux.partitioning.nighttime_oneflux import partition_nee_nighttime_oneflux
 from diive.flux.partitioning.nighttime_oneflux import lloyd_taylor
 from diive.flux.partitioning.nighttime_oneflux import sunrise_sunset
@@ -57,6 +63,7 @@ from diive.flux.partitioning.nighttime_reddyproc import potential_radiation
 from diive.flux.partitioning.daytime_reddyproc import DaytimePartitioningReddyProc
 from diive.flux.partitioning.daytime_reddyproc import partition_nee_daytime_reddyproc
 from diive.flux.partitioning.daytime_oneflux import DaytimePartitioningOneFlux
+from diive.flux.partitioning.daytime_oneflux import DaytimePartitioningDiive
 from diive.flux.partitioning.daytime_oneflux import partition_nee_daytime_oneflux
 from diive.flux.partitioning.daytime_oneflux import partition_nee_daytime_oneflux_scenarios
 from diive.flux.partitioning.nee import PartitioningNEE
@@ -65,6 +72,7 @@ from diive.flux.partitioning.nee import partitioning_inputs, partitioning_option
 
 __all__ = [
     "NighttimePartitioningOneFlux",
+    "NighttimePartitioningDiive",
     "partition_nee_nighttime_oneflux",
     "lloyd_taylor",
     "sunrise_sunset",
@@ -75,6 +83,7 @@ __all__ = [
     "DaytimePartitioningReddyProc",
     "partition_nee_daytime_reddyproc",
     "DaytimePartitioningOneFlux",
+    "DaytimePartitioningDiive",
     "partition_nee_daytime_oneflux",
     "partition_nee_daytime_oneflux_scenarios",
     "PartitioningNEE",

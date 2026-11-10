@@ -423,8 +423,8 @@ class FluxConfig:
     """Optional QC flag column of ``mds_vpd``; see ``mds_swin_qc``."""
 
     # ----- NEE partitioning (Level-4.2) -----
-    # Each ``partition_*`` flag enables one of the four faithful partitioning
-    # ports. They are off by default — partitioning needs gap-filled meteo
+    # Each ``partition_*`` flag enables one partitioning variant: the four
+    # faithful ports and the two ``mode='diive'`` variants. They are off by default — partitioning needs gap-filled meteo
     # driver columns the chain does not itself produce, so it is opt-in.
     partition_nighttime_oneflux: bool = False
     """Run nighttime partitioning, ONEFlux port (Reichstein 2005) — emits
@@ -452,6 +452,16 @@ class FluxConfig:
     ``partition_gapfill_method``, its gap-filled NEE is passed on: ONEFlux reads
     it for windows without measured nighttime NEE."""
 
+    partition_nighttime_diive: bool = False
+    """Run nighttime partitioning, ``mode='diive'`` — emits ``*_NT_DV``
+    columns. The ONEFlux nighttime port unchanged (same inputs, same
+    numbers), under its own column names."""
+
+    partition_daytime_diive: bool = False
+    """Run daytime partitioning, ``mode='diive'`` — emits ``*_DT_DV``
+    columns. The ONEFlux daytime port (same inputs), with GPP 0 instead of
+    NaN where ONEFlux divides 0 by 0 in the dark (issue #446)."""
+
     partition_method: str | None = None
     """Select one partitioning variant with two switches instead of a flag:
     ``'nighttime'`` or ``'daytime'``, combined with ``partition_mode``. It
@@ -460,10 +470,11 @@ class FluxConfig:
     set still run, so the variants add up, and a variant selected both ways
     runs once."""
 
-    partition_mode: str = 'oneflux'
-    """Reference implementation for ``partition_method``: ``'oneflux'``
-    (default, the ICOS and FLUXNET2015 approach) or ``'reddyproc'``. Ignored
-    while ``partition_method`` is ``None``."""
+    partition_mode: str = 'diive'
+    """Implementation for ``partition_method``: ``'diive'`` (default, ONEFlux
+    with diive's fixes), ``'oneflux'`` (the ICOS and FLUXNET2015 approach,
+    bit for bit) or ``'reddyproc'``. Ignored while ``partition_method`` is
+    ``None``."""
 
     partition_gapfill_method: str = 'mds'
     """Which L4.1 gap-filled NEE feeds the *nighttime* partitioning variants
@@ -678,11 +689,14 @@ class LevelResults:
     # variant, keyed by USTAR scenario (additive across variants, exactly like
     # the L4.1 gap-filling methods). The short variant key matches the column
     # token: 'nt_of' (nighttime ONEFlux), 'nt_rp' (nighttime REddyProc),
-    # 'dt_rp' (daytime REddyProc), 'dt_of' (daytime ONEFlux).
+    # 'dt_rp' (daytime REddyProc), 'dt_of' (daytime ONEFlux), 'nt_dv' and
+    # 'dt_dv' (nighttime and daytime, mode='diive').
     level42_nt_of: dict[str, Any] = field(default_factory=dict)
     level42_nt_rp: dict[str, Any] = field(default_factory=dict)
     level42_dt_rp: dict[str, Any] = field(default_factory=dict)
     level42_dt_of: dict[str, Any] = field(default_factory=dict)
+    level42_nt_dv: dict[str, Any] = field(default_factory=dict)
+    level42_dt_dv: dict[str, Any] = field(default_factory=dict)
     partitioning_reference: dict[str, 'PartitioningReference'] = field(default_factory=dict)
     """REF of GPP and RECO per partitioning variant (``'nt_of'``, ...),
     selected by ``run_level42_ustar_reference`` (ONEFlux ``ure``)."""
@@ -690,12 +704,14 @@ class LevelResults:
     def has_level42(self) -> bool:
         """True if any L4.2 partitioning variant has produced results."""
         return bool(self.level42_nt_of or self.level42_nt_rp
-                    or self.level42_dt_rp or self.level42_dt_of)
+                    or self.level42_dt_rp or self.level42_dt_of
+                    or self.level42_nt_dv or self.level42_dt_dv)
 
     def level42_variants(self) -> dict[str, dict[str, Any]]:
         """Return all L4.2 variant dicts that have results, keyed by variant token.
 
-        Keys are ``'nt_of'``, ``'nt_rp'``, ``'dt_rp'``, ``'dt_of'`` — matching
+        Keys are ``'nt_of'``, ``'nt_rp'``, ``'dt_rp'``, ``'dt_of'``,
+        ``'nt_dv'``, ``'dt_dv'`` — matching
         the suffixes of the underlying ``level42_*`` attributes and the keys
         used by ``partitioned_cols()``.
         """
@@ -708,6 +724,10 @@ class LevelResults:
             out['dt_rp'] = self.level42_dt_rp
         if self.level42_dt_of:
             out['dt_of'] = self.level42_dt_of
+        if self.level42_nt_dv:
+            out['nt_dv'] = self.level42_nt_dv
+        if self.level42_dt_dv:
+            out['dt_dv'] = self.level42_dt_dv
         return out
 
 
@@ -771,7 +791,7 @@ class PartitioningReference:
 
     Attributes:
         variant: Partitioning variant (``'nt_of'``, ``'nt_rp'``, ``'dt_of'``,
-            ``'dt_rp'``).
+            ``'dt_rp'``, ``'nt_dv'``, ``'dt_dv'``).
         label: REF label, ``'CUT_REF'`` or ``'VUT_REF'``.
         columns: ``fpc_df`` column of the half-hourly REF per product, e.g.
             ``{'GPP': 'GPP_NT_OF_CUT_REF', 'RECO': 'RECO_NT_OF_CUT_REF'}``.
@@ -845,7 +865,8 @@ class FluxLevelData:
     """Columns each level added to ``fpc_df``, keyed by level idstr (``'L2'``,
     ``'L3.1'``, ``'L3.2'``, ``'L3.3'``), per-method L4.1 key
     (``'L4.1_mds'``, ``'L4.1_rf'``, ``'L4.1_xgb'``) or per-variant L4.2 key
-    (``'L4.2_nt_of'``, ``'L4.2_nt_rp'``, ``'L4.2_dt_rp'``, ``'L4.2_dt_of'``).
+    (``'L4.2_nt_of'``, ``'L4.2_nt_rp'``, ``'L4.2_dt_rp'``, ``'L4.2_dt_of'``,
+    ``'L4.2_nt_dv'``, ``'L4.2_dt_dv'``).
     Used to clean up stale columns when a level is re-run."""
 
     def __repr__(self) -> str:
@@ -956,14 +977,11 @@ class FluxLevelData:
         if self.levels.has_level42():
             lines.append("")
             lines.append("Partitioning (L4.2)  [RECO / GPP valid records]:")
-            _reco_token = {'nt_of': 'RECO_NT_OF', 'nt_rp': 'RECO_NT_RP',
-                           'dt_rp': 'RECO_DT_RP', 'dt_of': 'RECO_DT_OF'}
-            _gpp_token = {'nt_of': 'GPP_NT_OF', 'nt_rp': 'GPP_NT_RP',
-                          'dt_rp': 'GPP_DT_RP', 'dt_of': 'GPP_DT_OF'}
             for variant, scen_dict in self.levels.level42_variants().items():
+                tag = variant.upper()  # 'nt_of' -> 'NT_OF'
                 for scen in scen_dict:
-                    reco_col = f"{_reco_token[variant]}_{scen}"
-                    gpp_col = f"{_gpp_token[variant]}_{scen}"
+                    reco_col = f"RECO_{tag}_{scen}"
+                    gpp_col = f"GPP_{tag}_{scen}"
                     n_reco = (int(self.fpc_df[reco_col].dropna().count())
                               if reco_col in self.fpc_df.columns else 0)
                     n_gpp = (int(self.fpc_df[gpp_col].dropna().count())
@@ -1565,7 +1583,8 @@ class FluxLevelData:
     def _column_level(col: str) -> str:
         """The chain level a produced column belongs to, for the merged_df() summary."""
         name = str(col)
-        if any(tag in name for tag in ('_NT_OF', '_NT_RP', '_DT_OF', '_DT_RP')):
+        if any(tag in name for tag in ('_NT_OF', '_NT_RP', '_DT_OF', '_DT_RP',
+                                       '_NT_DV', '_DT_DV')):
             return 'L4.2'
         if re.search(r'_gf(XG|RF|MDS)', name):
             return 'L4.1'
@@ -1587,7 +1606,8 @@ class FluxLevelData:
         Returns:
             Nested dict ``{variant: {ustar_scenario: [column_name, ...]}}``.
             Variant keys are ``'nt_of'`` / ``'nt_rp'`` / ``'dt_rp'`` /
-            ``'dt_of'`` and present only when that variant has been run.
+            ``'dt_of'`` / ``'nt_dv'`` / ``'dt_dv'`` and present only when that
+            variant has been run.
 
         Example::
 

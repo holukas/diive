@@ -3865,12 +3865,12 @@ def test_flux_chain_tab_level42_controls(app, configured_site):
     tab.l42_enable.setChecked(True)
     assert tab._l42_box.isVisibleTo(tab._pages.widget(6))
     assert "4.2" in tab.run_btn.text()
-    # Nighttime ONEFlux (default): measured TA / SW_IN, gap-filled TA, L4.1 NEE.
+    # Nighttime diive (default): measured TA / SW_IN, gap-filled TA, L4.1 NEE.
     cfg = tab._level42_cfg()
-    assert cfg == {"method": "nighttime", "mode": "oneflux", "ta": "TA_T1_47_1_gfXG",
+    assert cfg == {"method": "nighttime", "mode": "diive", "ta": "TA_T1_47_1_gfXG",
                    "sw_in": "SW_IN_T1_47_1_gfXG", "ta_f": "TA_T1_47_1_gfXG",
                    "gapfill_method": "mds"}
-    assert tab._stage_statuses()[6] == ("NT · ONEFlux", "set")
+    assert tab._stage_statuses()[6] == ("NT · diive", "set")
     assert tab._l42_form.isRowVisible(tab.l42_gapfill)
     assert not tab._l42_form.isRowVisible(tab._l42_cols["vpd_f"])
     # Daytime REddyProc: gap-filled drivers only, no L4.1 NEE.
@@ -3912,6 +3912,32 @@ def test_flux_chain_tab_level42_controls(app, configured_site):
     assert tab2._level42_cfg() == tab._level42_cfg()
 
 
+def test_flux_chain_tab_level42_diive_mode(app, configured_site):
+    # Mode diive: the inputs of the same method in ONEFlux mode, its own
+    # variant (dt_dv) and stage label, and Copy Python with mode='diive'.
+    from diive.gui.tabs.fluxchain import FluxChainTab
+    from diive.gui.widgets.partitioning_mode import set_combo_value
+    from diive.gui.widgets.stepwise_method_params import HampelParams
+    from diive.configs.exampledata import load_exampledata_parquet_lae_level1_30MIN
+    df = load_exampledata_parquet_lae_level1_30MIN().loc["2024-07":"2024-07"]
+
+    tab = FluxChainTab(); tab.widget(); tab.on_data_loaded(df)
+    tab._steps = [HampelParams().step()]
+    tab.l33_enable.setChecked(True)
+    tab._ustar = [(0.1, "CUT_50")]
+    tab.l41_mds.setChecked(True)
+    tab.l42_enable.setChecked(True)
+    set_combo_value(tab.l42_method, "daytime")
+    set_combo_value(tab.l42_mode, "diive")
+    assert set(tab._level42_cfg()) == {"method", "mode", "ta", "sw_in", "ta_f",
+                                       "sw_in_f", "vpd_f", "gapfill_method"}
+    assert tab._l42_variant() == "dt_dv"
+    assert tab._stage_statuses()[6] == ("DT · diive", "set")
+    code = tab._code()
+    compile(code, "<gen>", "exec")
+    assert "method='daytime'" in code and "mode='diive'" in code
+
+
 def test_flux_chain_tab_level42_reference(app, configured_site):
     # L4.2 with the GPP / RECO REF: the option enables with the NEE REF, the
     # run adds GPP_DT_OF_CUT_REF / RECO_DT_OF_CUT_REF next to the partitioning
@@ -3936,6 +3962,7 @@ def test_flux_chain_tab_level42_reference(app, configured_site):
                           ustar_scenario_labels("CUT", pcts), strict=True))
     tab.l42_enable.setChecked(True)
     set_combo_value(tab.l42_method, "daytime")
+    set_combo_value(tab.l42_mode, "oneflux")
     tab.l42_ref.setChecked(True)
     assert not tab.l42_ref.isEnabled()
     tab.l33_ref.setChecked(True)
@@ -7834,7 +7861,8 @@ def test_gapfilling_mds_tab_fill_long_gaps(app, example_year):
 
 
 _PART_VARIANTS =(("nighttime", "oneflux", "NT_OF"), ("nighttime", "reddyproc", "NT_RP"),
-                  ("daytime", "oneflux", "DT_OF"), ("daytime", "reddyproc", "DT_RP"))
+                  ("daytime", "oneflux", "DT_OF"), ("daytime", "reddyproc", "DT_RP"),
+                  ("nighttime", "diive", "NT_DV"), ("daytime", "diive", "DT_DV"))
 
 #: The example columns each partitioning input maps to.
 _PART_COLS = {"nee": "NEE_CUT_REF_orig", "nee_f": "NEE_CUT_REF_f", "ta": "Tair_orig",
@@ -7907,7 +7935,7 @@ def test_partitioning_tab_matches_library_for_all_variants(app, partitioning_fra
             assert tab._site_form.isRowVisible(tab.lat) == ("lat" in needed)
             assert tab._site_form.isRowVisible(tab.lon) == ("lon" in needed)
             assert tab._site_form.isRowVisible(tab.utc) == ("utc_offset" in needed)
-            assert tab._site_box.isHidden() == (suffix == "DT_OF")
+            assert tab._site_box.isHidden() == (suffix in ("DT_OF", "DT_DV"))
             assert tab._opt_box.isHidden() == (method == "nighttime")
 
             args = _captured_run(tab)
@@ -7948,6 +7976,8 @@ def test_partitioning_tab_matches_library_for_all_variants(app, partitioning_fra
         # Switching the mode switches the result columns.
         assert "GPP_NT_RP" not in columns["NT_OF"] and "GPP_NT_OF" not in columns["NT_RP"]
         assert "GPP_DT_RP" not in columns["DT_OF"] and "GPP_DT_OF" not in columns["DT_RP"]
+        assert "GPP_DT_DV" in columns["DT_DV"] and "GPP_DT_OF" not in columns["DT_DV"]
+        assert "GPP_NT_DV" in columns["NT_DV"] and "GPP_NT_OF" not in columns["NT_DV"]
     finally:
         site.manager.load_dict(snap)
 
@@ -7991,8 +8021,8 @@ def test_partitioning_tab_gapfilled_nee_is_optional_for_daytime_oneflux(app, par
     assert "optional" not in label.text()
 
 
-def test_partitioning_tab_switch_keeps_picks_and_defaults_to_oneflux(app, partitioning_frames):
-    # ONEFlux (the ICOS processing) is the default mode, nighttime the default
+def test_partitioning_tab_switch_keeps_picks_and_defaults_to_diive(app, partitioning_frames):
+    # diive (ONEFlux with fixes) is the default mode, nighttime the default
     # method. A pick made for one variant survives a switch away and back, and
     # a result on screen keeps its own columns when the variant changes.
     from diive.gui.tabs.partitioning import PartitioningNEETab
@@ -8002,8 +8032,8 @@ def test_partitioning_tab_switch_keeps_picks_and_defaults_to_oneflux(app, partit
     tab = PartitioningNEETab()
     tab.widget()
     tab.on_data_loaded(df)
-    assert (tab.method, tab.mode) == ("nighttime", "oneflux")
-    assert tab.mode_combo.currentText() == "ONEFlux (ICOS, default)"
+    assert (tab.method, tab.mode) == ("nighttime", "diive")
+    assert tab.mode_combo.currentText() == "diive (ONEFlux + fixes, default)"
 
     set_combo_value(tab.method_combo, "daytime")
     tab.picker.combos()["vpd"].setCurrentText("VPD_f")
@@ -8022,6 +8052,12 @@ def test_partitioning_tab_switch_keeps_picks_and_defaults_to_oneflux(app, partit
     tab2.restore_state(state)
     assert (tab2.method, tab2.mode) == ("daytime", "reddyproc")
     assert tab2.picker.picks()["vpd"] == "VPD_f"
+    # A state saved before the diive mode existed has no mode: it keeps ONEFlux.
+    tab3 = PartitioningNEETab()
+    tab3.widget()
+    tab3.on_data_loaded(df)
+    tab3.restore_state({k: v for k, v in state.items() if k != "mode"})
+    assert tab3.mode == "oneflux"
 
 
 @pytest.mark.parametrize("old_label, method, mode, controls, expected_picks", [
@@ -8141,8 +8177,8 @@ def test_partitioning_tabs_refuse_to_run_without_site_coords(app, example_year):
             set_combo_value(tab.method_combo, method)
             set_combo_value(tab.mode_combo, mode)
             tab.status.setText("")
-            if suffix == "DT_OF":
-                # Daytime ONEFlux splits on measured Rg, not solar geometry: no
+            if suffix in ("DT_OF", "DT_DV"):
+                # Daytime ONEFlux (and diive) splits on measured Rg, not solar geometry: no
                 # coords, no guard.
                 assert not tab.needs_coords
                 assert not tab._coords_missing()

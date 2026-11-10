@@ -154,9 +154,19 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   side.
 - **Example, flux footprint:** a new example calculates a single footprint, shows how stability
   moves it, and computes the footprint climatology of one month of measurements.
+- **NEE partitioning in diive mode:** `PartitioningNEE(mode='diive')` is ONEFlux with diive's fixes,
+  as `FluxMDS(mode='diive')` is for gap-filling, and writes its own `*_NT_DV` and `*_DT_DV` columns.
+  The chain (`run_level42_partitioning(mode='diive')`, `FluxConfig(partition_mode='diive')`, also
+  with the GPP and RECO REF) and the GUI partitioning tab offer it too. The nighttime method gives
+  the ONEFlux numbers.
 
 ### Changed
 
+- **NEE partitioning default mode (changes results):** `PartitioningNEE`, `partition_nee`,
+  `run_level42_partitioning`, `run_level42_ustar_reference`, `FluxConfig(partition_mode=)` and the
+  GUI now default to `mode='diive'`, as MDS does. Results get `*_NT_DV` / `*_DT_DV` columns instead
+  of `*_NT_OF` / `*_DT_OF`. Pass `mode='oneflux'` for the ONEFlux output. GUI projects saved before
+  keep ONEFlux.
 - **Missing values in the flux chain heatmaps** are drawn in a mid grey (`chainplots.NAN_COLOR`,
   `#9E9E9E`) instead of a pale blue-grey that was hard to tell from the pale yellow of the colormap.
 - **Heatmap labels fit the panel:** `HeatmapYearMonth`, `HeatmapXYZ` and `HeatmapDateTime` size the
@@ -350,6 +360,10 @@ one month of half-hourly measurements at a grassland site, with the source-area 
 - **Colour-coded scatter outlines (changes results):** small markers with wide edges, high dpi or
   drawing without antialiasing made the marker outlines of `ScatterXY` differ from plain matplotlib
   by up to 254 of 255 colour levels. They now differ by at most 8 levels.
+- **Daytime partitioning, GPP at night (changes results):** with `mode='diive'`, GPP is 0 instead of
+  missing on night records where a window's large VPD parameter `k` made ONEFlux's light response 0
+  divided by 0 ([#446](https://github.com/holukas/diive/issues/446)). ONEFlux itself gives NaN there,
+  so `mode='oneflux'` keeps it. All other values are the same in both modes.
 
 ## [0.92.0] - 2026-10-21
 

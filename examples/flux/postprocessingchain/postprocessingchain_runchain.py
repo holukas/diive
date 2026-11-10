@@ -154,7 +154,7 @@ cfg = FluxConfig(
     # / partition_sw_in reuse the gap-filled columns (a real workflow points them
     # at the raw measured series).
     # To run one variant only, set partition_method='nighttime' or 'daytime'
-    # with partition_mode='oneflux' (default) or 'reddyproc' instead of the flags.
+    # with partition_mode='diive' (default), 'oneflux' or 'reddyproc' instead of the flags.
     partition_nighttime_oneflux=True,
     partition_nighttime_reddyproc=True,
     partition_daytime_reddyproc=True,

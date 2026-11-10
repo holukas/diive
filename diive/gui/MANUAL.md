@@ -1212,10 +1212,10 @@ Level 4.2 still work on the filled gaps, as in ONEFlux.
 
 **Level 4.2: NEE partitioning** (optional) splits the NEE of each USTAR scenario
 into GPP and RECO. Tick **Partition NEE into GPP and RECO**, then pick the
-**Method** (nighttime or daytime) and the **Mode** (ONEFlux or REddyProc), as in the
+**Method** (nighttime or daytime) and the **Mode** (ONEFlux, REddyProc or diive), as in the
 **NEE partitioning** tab. The page shows only the driver columns the chosen variant
 needs (measured and gap-filled TA, SW_IN and VPD, VPD in kPa). The nighttime method
-and daytime ONEFlux also read the gap-filled NEE of a Level 4.1 method (**Gap-filled
+and daytime ONEFlux and diive also read the gap-filled NEE of a Level 4.1 method (**Gap-filled
 NEE from**, default MDS), which must have run. Level 4.2 needs Level 4.1. With REF
 on, it partitions the main scenarios and the REF scenario. A second run with another
 method or mode adds its columns (`GPP_NT_OF_CUT_50`, `RECO_DT_RP_CUT_50`, ...) to the
@@ -1314,9 +1314,13 @@ two switches at the top of the settings column:
   as the rest. **Daytime** (Lasslop et al. 2010) fits a light-response curve to
   daytime NEE and gets GPP and RECO from the same fit, so it also uses VPD and
   radiation.
-- **Mode** picks the reference implementation. **ONEFlux (ICOS, default)** is the
-  processing used by ICOS and FLUXNET2015. **REddyProc** is the R package of the same
-  name.
+- **Mode** picks the implementation. **diive (ONEFlux + fixes, default)** is ONEFlux
+  with diive's fixes of ONEFlux behaviour. **ONEFlux (ICOS)** is the processing used by
+  ICOS and FLUXNET2015, bit for bit. **REddyProc** is the R package of the same name.
+  Projects saved before the diive mode reopen with ONEFlux.
+  So far there is one: the daytime method gives a GPP of 0 instead of a missing value
+  on night records where ONEFlux divides 0 by 0. All other values equal ONEFlux, and
+  the nighttime method gives the ONEFlux numbers.
 
 Each combination writes its own column suffix:
 
@@ -1326,9 +1330,11 @@ Each combination writes its own column suffix:
 | Nighttime | REddyProc | `_NT_RP` (`sMRFluxPartition`, one temperature sensitivity for the whole record) |
 | Daytime | ONEFlux | `_DT_OF` (`flux_part_gl2010`) |
 | Daytime | REddyProc | `_DT_RP` (`partitionNEEGL`) |
+| Nighttime | diive | `_NT_DV` (the ONEFlux numbers) |
+| Daytime | diive | `_DT_DV` (ONEFlux, GPP 0 instead of missing where ONEFlux divides 0 by 0) |
 
 Running more than one and comparing is a common sanity check. Because each writes
-its own columns, all four can sit in the dataset side by side.
+its own columns, all of them can sit in the dataset side by side.
 
 A note on signs: NEE is negative when the ecosystem takes up carbon. GPP and RECO come
 back as positive fluxes, related by NEE = RECO - GPP.

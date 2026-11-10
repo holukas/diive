@@ -514,6 +514,10 @@ class NighttimePartitioningOneFlux:
         >>> part.run()  # then part.results -> DataFrame with RECO_NT_OF, GPP_NT_OF, ...
     """
 
+    # Column tag (``*_NT_<tag>``, ``NEE_NIGHT_<tag>``) and name in the report.
+    _TAG = 'OF'
+    _NAME = 'ONEFlux'
+
     def __init__(self,
                  nee: Series,
                  ta: Series,
@@ -600,7 +604,7 @@ class NighttimePartitioningOneFlux:
             for col in cols:
                 result.loc[ymask, col] = year_out[col]
 
-        self._results = result
+        self._results = result.rename(columns=lambda c: c.replace('_OF', f'_{self._TAG}'))
         self.report()
         if self.verbose:
             success("Nighttime partitioning finished.", verbose=self.verbose)
@@ -623,21 +627,47 @@ class NighttimePartitioningOneFlux:
     @property
     def reco(self) -> Series:
         """Ecosystem respiration (ordinary), umol m-2 s-1."""
-        return self.results['RECO_NT_OF']
+        return self.results[f'RECO_NT_{self._TAG}']
 
     @property
     def gpp(self) -> Series:
         """Gross primary production, umol m-2 s-1."""
-        return self.results['GPP_NT_OF']
+        return self.results[f'GPP_NT_{self._TAG}']
 
     def report(self) -> None:
         """Print a Rich per-year summary of the partitioning result."""
+        t = self._TAG
         partitioning_report(
-            title="Nighttime NEE Partitioning ONEFlux (Reichstein et al. 2005)",
+            title=f"Nighttime NEE Partitioning {self._NAME} (Reichstein et al. 2005)",
             reference="Reichstein et al. (2005), https://doi.org/10.1111/j.1365-2486.2005.001002.x",
-            results=self.results, reco_col='RECO_NT_OF', gpp_col='GPP_NT_OF',
-            e0_col='E0_NT_OF', e0_unit='degC', reco_rob_col='RECO_NT_OF_ROB',
-            gpp_rob_col='GPP_NT_OF_ROB', verbose=self.verbose)
+            results=self.results, reco_col=f'RECO_NT_{t}', gpp_col=f'GPP_NT_{t}',
+            e0_col=f'E0_NT_{t}', e0_unit='degC', reco_rob_col=f'RECO_NT_{t}_ROB',
+            gpp_rob_col=f'GPP_NT_{t}_ROB', verbose=self.verbose)
+
+
+class NighttimePartitioningDiive(NighttimePartitioningOneFlux):
+    """Partition NEE into GPP and RECO with the nighttime method (diive).
+
+    The backend of ``PartitioningNEE(method='nighttime', mode='diive')``. The
+    nighttime method has no known ONEFlux problem to fix, so this is the
+    ONEFlux nighttime port (:class:`NighttimePartitioningOneFlux`) unchanged:
+    same arguments, same numbers bit for bit. Only the columns are named
+    ``*_NT_DV`` (``NEE_NIGHT_DV``, ``RECO_NT_DV``, ``GPP_NT_DV``, ...), so
+    that ``mode='diive'`` gives one suffix for both methods, as the daytime
+    :class:`~diive.flux.partitioning.daytime_oneflux.DaytimePartitioningDiive`
+    does.
+
+    Example:
+        >>> import diive as dv
+        >>> df = dv.load_exampledata_parquet()
+        >>> part = dv.flux.NighttimePartitioningDiive(
+        ...     nee=df['NEE_CUT_REF_orig'], ta=df['Tair_orig'], sw_in=df['Rg_orig'],
+        ...     nee_f=df['NEE_CUT_REF_f'], ta_f=df['Tair_f'], lat=46.815)
+        >>> part.run()  # then part.results -> DataFrame with RECO_NT_DV, GPP_NT_DV, ...
+    """
+
+    _TAG = 'DV'
+    _NAME = 'diive'
 
 
 def partition_nee_nighttime_oneflux(nee: Series, ta: Series, sw_in: Series,
