@@ -40,7 +40,11 @@ def _as_bool(values, index: pd.Index, name: str) -> Series:
 class LongTermGapFillingXGBoostWetNightTS(LongTermGapFillingXGBoostTS):
     """Long-term XGBoost gap-filling with a Lloyd-Taylor fill of the wet night gaps.
 
-    See :meth:`__init__`."""
+    See :meth:`__init__`.
+
+    Example:
+        See examples/gapfilling/gapfill_xgboost_wetnight.py for a complete worked example.
+    """
 
     def __init__(self,
                  input_df: DataFrame,

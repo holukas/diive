@@ -154,6 +154,8 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   side.
 - **Example, flux footprint:** a new example calculates a single footprint, shows how stability
   moves it, and computes the footprint climatology of one month of measurements.
+- **Example, wet nights:** a new example fills the wet night gaps of NEE from the Lloyd-Taylor
+  model and compares this fill with the plain long-term XGBoost fill.
 - **NEE partitioning in diive mode:** `PartitioningNEE(mode='diive')` is ONEFlux with diive's fixes,
   as `FluxMDS(mode='diive')` is for gap-filling, and writes its own `*_NT_DV` and `*_DT_DV` columns.
   The chain (`run_level42_partitioning(mode='diive')`, `FluxConfig(partition_mode='diive')`, also

@@ -178,7 +178,7 @@ Exceptions: `TrimLow`'s `trim_daytime`/`trim_nighttime` choose which period to t
 
 **[CRITICAL] NEVER COMMIT CHANGES.** The user stages and commits exclusively.
 
-**[CRITICAL] NEVER RUN THE EXAMPLE SUITE** (115 examples, several minutes each). Run single examples with `MPLBACKEND=Agg` — 33 call a bare `plt.show()` that blocks without it:
+**[CRITICAL] NEVER RUN THE EXAMPLE SUITE** (116 examples, several minutes each). Run single examples with `MPLBACKEND=Agg` — 33 call a bare `plt.show()` that blocks without it:
 
 ```bash
 MPLBACKEND=Agg uv run python examples/gapfilling/gapfill_randomforest.py

@@ -152,6 +152,7 @@ EXAMPLE_FILES = [
     'gapfilling/gapfill_quickfill.py',
     'gapfilling/gapfill_optimize_randomforest.py',
     'gapfilling/gapfill_xgboost.py',
+    'gapfilling/gapfill_xgboost_wetnight.py',
     'gapfilling/gapfill_optimize_xgboost.py',
     'gapfilling/gapfill_comparison.py',
     'gapfilling/gapfill_swin.py',

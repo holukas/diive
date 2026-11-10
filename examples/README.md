@@ -2,7 +2,7 @@
 
 Executable examples demonstrating how to use diive for time series processing, gap-filling, quality control, and visualization.
 
-**115 examples across 10 organized folders by functional domain.**
+**116 examples across 10 organized folders by functional domain.**
 
 ## Structure
 
@@ -86,7 +86,7 @@ examples/
 │       ├── flux_ustar_method_comparison.py
 │       ├── flux_ustar_data_availability.py
 │       └── flux_footprint.py
-├── gapfilling/            # Gap-filling methods (12 examples)
+├── gapfilling/            # Gap-filling methods (13 examples)
 │   ├── gapfill_interpolate_generous.py
 │   ├── gapfill_interpolate_conservative.py
 │   ├── gapfill_randomforest.py
@@ -94,6 +94,7 @@ examples/
 │   ├── gapfill_quickfill.py
 │   ├── gapfill_optimize_randomforest.py
 │   ├── gapfill_xgboost.py
+│   ├── gapfill_xgboost_wetnight.py
 │   ├── gapfill_optimize_xgboost.py
 │   ├── gapfill_mds.py
 │   ├── gapfill_mds_comparison.py
@@ -141,7 +142,7 @@ uv run python examples/gapfilling/gapfill_randomforest.py
 uv run python examples/run_all_examples.py
 ```
 
-This runs all 115 examples in parallel with up to 12 workers and reports run times and errors.
+This runs all 116 examples in parallel with up to 12 workers and reports run times and errors.
 
 ## Finding Examples
 
@@ -177,10 +178,10 @@ Browse by topic:
 | **Features** | 11 | Feature engineering pipeline, air properties, unit conversions, day/night flags, VPD, lagged variants |
 | **Fits** | 2 | Binned fitting, ecosystem response fitting |
 | **Flux** | 19 | Time lag analysis, flux variable naming, post-processing chain (4), NEE partitioning into GPP/RECO (5), HQ filtering, USTAR detection (3), self-heating (2), uncertainty, flux footprint |
-| **Gapfilling** | 12 | Linear interpolation (2), Random Forest (4 variants), XGBoost (2 variants), MDS (2), SW_IN physics+XGBoost, comparison |
+| **Gapfilling** | 13 | Linear interpolation (2), Random Forest (4 variants), XGBoost (3 variants), MDS (2), SW_IN physics+XGBoost, comparison |
 | **IO** | 5 | Parquet file I/O, EddyPro CSV reading, binary value extraction |
 | **Preprocessing** | 19 | Corrections (7), outlier detection (9), QA/QC (3) |
-| **TOTAL** | **115** | |
+| **TOTAL** | **116** | |
 
 ## Running Options
 

@@ -226,6 +226,7 @@ See: [flux/README.rst](flux/README.rst)
 | [**gapfill_quickfill.py**](gapfilling/gapfill_quickfill.py) | Quick Random Forest | Yes |
 | [**gapfill_optimize_randomforest.py**](gapfilling/gapfill_optimize_randomforest.py) | Random Forest with hyperparameter tuning | Yes |
 | [**gapfill_xgboost.py**](gapfilling/gapfill_xgboost.py) | XGBoost | Yes |
+| [**gapfill_xgboost_wetnight.py**](gapfilling/gapfill_xgboost_wetnight.py) | Long-term XGBoost with the wet night gaps filled from a Lloyd-Taylor model, compared with plain XGBoost | Yes |
 | [**gapfill_optimize_xgboost.py**](gapfilling/gapfill_optimize_xgboost.py) | XGBoost with hyperparameter tuning | Yes |
 | [**gapfill_mds.py**](gapfilling/gapfill_mds.py) | Marginal Distribution Sampling; compares the default `mode='diive'` (Vekuri et al. 2023 symmetric mean) with `mode='oneflux'` (bit for bit as ONEFlux `gf_mds`) | No |
 | [**gapfill_mds_comparison.py**](gapfilling/gapfill_mds_comparison.py) | MDS reproducibility / determinism check | No |

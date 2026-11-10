@@ -3,7 +3,7 @@ Gap-Filling Methods Examples
 
 Examples demonstrating various gap-filling approaches for time series data, from simple to advanced machine learning.
 
-12 examples across 5 gap-filling methods with optimization and comparison workflows.
+13 examples across 5 gap-filling methods with optimization and comparison workflows.
 
 Method Overview
 ---------------
@@ -59,6 +59,7 @@ XGBoost
 Gradient boosting. Has more hyperparameters to tune than Random Forest.
 
 - **gapfill_xgboost.py** — Basic XGBoost with default hyperparameters
+- **gapfill_xgboost_wetnight.py** — Long-term XGBoost, then the wet night gaps (rain in the previous 6 hours) filled from a Lloyd-Taylor model fitted to the dry nights, compared with the plain XGBoost fill
 - **gapfill_optimize_xgboost.py** — Hyperparameter tuning via grid search
 
 MDS (Marginal Distribution Sampling)
@@ -169,6 +170,7 @@ For individual methods:
 
    # XGBoost
    uv run python examples/gapfilling/gapfill_xgboost.py
+   uv run python examples/gapfilling/gapfill_xgboost_wetnight.py
    uv run python examples/gapfilling/gapfill_optimize_xgboost.py
 
    # MDS
