@@ -67,6 +67,13 @@ the tower. **Limit:** at night, drainage flow and advection make the tower flux 
 footprint model fixes that (Etzold et al. 2010 for CH-LAE). Best done with a boundary-layer
 or LES group.
 
+## Wet-night XGBoost in the GUI
+
+**Status:** open (2026-11-10). `run_level41_xgb_wetnight` and `run_chain` (`FluxConfig.gapfill_xgb_wetnight`, `wetnight_wet`, ...) fill the wet night gaps of open-path
+analysers (#445), and the code generator renders it, but the GUI flux chain tab does not offer
+it. Needs a checkbox at Level 4.1, a picker for the wet column (and the optional dry column and
+temperature), and `xgbwn` as a choice for the gap-filled NEE of Level 4.2.
+
 ## Wind-direction sector flags
 
 **Status:** idea (2026-10-30). Flag records from excluded wind sectors, e.g. tower shading or
