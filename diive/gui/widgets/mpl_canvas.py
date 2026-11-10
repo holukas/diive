@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+import shiboken6
 
 
 #: Quiet time after the last resize event before the layout is re-solved and
@@ -302,6 +303,11 @@ class MplCanvas(QWidget):
         self._canvas.installEventFilter(self)
 
     def eventFilter(self, obj, event):
+        # While this widget is destroyed, Qt still passes the child canvas's
+        # last events through the filter, but the wrapper is already invalid
+        # and super().eventFilter would raise (seen in gc.collect() in tests).
+        if not shiboken6.isValid(self):
+            return False
         if obj is self._canvas and event.type() == QEvent.Type.Wheel:
             area = self._enclosing_scroll_area()
             if area is not None:
