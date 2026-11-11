@@ -35,7 +35,26 @@ daily or finer.
 **Status:** model done (2026-11-04, [#444](https://github.com/holukas/diive/issues/444)),
 flag open. `ffp_footprint` and `ffp_climatology` (`flux/lowres/footprint.py`) reproduce the FFP
 of Kljun et al. (2015) bitwise, harness `diive-data/references/footprint_parity/`. Still open: a
-QC flag for records with too little footprint over the target area, and a GUI tab.
+QC flag for records with too little footprint over the target area, and a GUI tab
+([#447](https://github.com/holukas/diive/issues/447)).
+
+### Target-area flag
+
+**Status:** planned (2026-11-11, [#448](https://github.com/holukas/diive/issues/448)). Only the site team knows the target area, so diive never
+defines or guesses it. The input is optional: without it the footprint runs as now and no flag
+is made; with it, each record gets the share of its footprint inside the target area and a flag.
+
+- **Input**, one of, from simple to detailed:
+  1. Fetch per wind sector: distance to the edge of the target area per direction, e.g.
+     `{0: 300, 30: 250, ...}` in m. Needs no maps; every site team can give it.
+  2. A polygon around the target area, in m relative to the tower or in coordinates with the
+     tower position (e.g. read from a GeoJSON the researchers draw).
+  3. A raster mask (target or not) on the footprint grid, e.g. from a land-cover map.
+- **Output:** the footprint share inside the target area per record, and a QC flag where the
+  share is below a threshold (configurable, e.g. 80 %), usable in the QCF like the other tests.
+- **No input given:** no flag and no warning beyond saying that no target area is defined.
+- **GUI** (#447): optional fields for the fetch per sector or a GeoJSON file, with the footprint
+  climatology drawn over the target area so researchers can check their definition.
 
 ### Footprint in complex terrain (CH-DAV)
 
