@@ -260,10 +260,10 @@ class Progress:
     is working and where; ``VERBOSE_SILENT`` (0) switches them off.
 
     Example:
-        >>> p = Progress("Feature reduction", total=len(years), verbose=1)
+        >>> years = [2021, 2022, 2023]
+        >>> p = Progress("Feature reduction", total=len(years))
         >>> for year in years:
-        ...     p.step(str(year))
-        ...     reduce(year)
+        ...     p.step(str(year))  # then the work of this year
         >>> p.done()
     """
 
