@@ -178,5 +178,41 @@ class TestFootprintClimatology(unittest.TestCase):
             ffp_climatology(**SERIES, nx=200, verbose=0)
 
 
+class TestFootprintCodegen(unittest.TestCase):
+
+    def run_code(self, code: str) -> dict:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        ns = {}
+        exec(compile(code, '<ffp_footprint_to_code>', 'exec'), ns)
+        plt.close('all')
+        return ns
+
+    def test_code_gives_the_same_footprint(self):
+        from diive.flux.lowres.codegen import ffp_footprint_to_code
+        kw = dict(zm=20., h=1500., ol=-50., sigmav=0.6, ustar=0.4)
+        cases = [
+            (dict(z0=0.15, wind_dir=230.), {}),
+            (dict(umean=3.), dict(rs=[0.5, 0.9], nx=800, crop=True)),
+            (dict(z0=0.15), dict(rs=None)),
+        ]
+        for extra, opts in cases:
+            with self.subTest(**extra, **opts):
+                code = ffp_footprint_to_code(**kw, **extra, **opts)
+                fp = self.run_code(code)['fp']
+                ref = ffp_footprint(**kw, **extra, **opts, verbose=0)
+                self.assertEqual(fp.x_ci_max, ref.x_ci_max)
+                np.testing.assert_array_equal(fp.f_2d, ref.f_2d)
+                self.assertEqual(fp.rs, ref.rs)
+
+    def test_default_contours_are_left_out(self):
+        from diive.flux.lowres.codegen import ffp_footprint_to_code
+        code = ffp_footprint_to_code(20., 1500., -50., 0.6, 0.4, z0=0.15,
+                                     rs=[r / 100 for r in range(10, 90, 10)])
+        self.assertNotIn('rs=', code)
+        self.assertIn('Kljun', code)
+
+
 if __name__ == '__main__':
     unittest.main()

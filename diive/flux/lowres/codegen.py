@@ -94,3 +94,73 @@ def jointunc_to_code(randunccol: str, scenario_lower_col: str, scenario_upper_co
               "jointunc_series = jointunc.jointunc_series  # {base}_JOINTUNC",
               "jointunc.report_summary()"]
     return "\n".join(lines) + "\n"
+
+
+def ffp_footprint_to_code(zm: float, h: float, ol: float, sigmav: float, ustar: float,
+                          *, z0: float | None = None, umean: float | None = None,
+                          wind_dir: float | None = None, rs="default", rslayer: bool = False,
+                          nx: int = 1000, crop: bool = False,
+                          source_area: float = 0.8) -> str:
+    """Render a ``ffp_footprint(...)`` snippet with its ``FootprintPlot`` as a string.
+
+    Mirrors what the GUI's flux footprint tab runs: the footprint of one record
+    (Kljun et al. 2015) and its map with the crosswind-integrated profile.
+    Arguments that equal the defaults of ``ffp_footprint`` are left out.
+
+    Args:
+        zm: Measurement height above displacement height (m).
+        h: Boundary-layer height (m).
+        ol: Obukhov length (m).
+        sigmav: Standard deviation of the lateral wind velocity (m s-1).
+        ustar: Friction velocity (m s-1).
+        z0: Roughness length (m), or None to use ``umean``.
+        umean: Mean wind speed at ``zm`` (m s-1), used without ``z0``.
+        wind_dir: Wind direction (degrees), or None for the along-wind frame.
+        rs: Source-area fractions of the contour lines, None for no contour lines.
+            ``"default"`` or the default fractions leave the argument out.
+        rslayer: Allow ``zm`` in the roughness sublayer.
+        nx: Number of grid elements.
+        crop: Crop the grid to the largest contour line.
+        source_area: Source area reported and highlighted in the plot (fraction).
+
+    Returns:
+        A runnable Python snippet as a string.
+    """
+    args = [f"zm={zm!r}", f"h={h!r}", f"ol={ol!r}", f"sigmav={sigmav!r}", f"ustar={ustar!r}"]
+    if z0 is not None:
+        args.append(f"z0={z0!r}")
+    else:
+        args.append(f"umean={umean!r}")
+    if wind_dir is not None:
+        args.append(f"wind_dir={wind_dir!r}")
+    from diive.flux.lowres.footprint import DEFAULT_RS
+    if rs is None:
+        args.append("rs=None")
+    elif not isinstance(rs, str):
+        rs = [float(r) for r in rs]
+        is_default = len(rs) == len(DEFAULT_RS) and all(
+            abs(a - b) < 1e-9 for a, b in zip(rs, DEFAULT_RS))
+        if not is_default:
+            args.append(f"rs={rs!r}")
+    if rslayer:
+        args.append("rslayer=True")
+    if nx != 1000:
+        args.append(f"nx={nx!r}")
+    if crop:
+        args.append("crop=True")
+    lines = ["import matplotlib.pyplot as plt",
+             "",
+             "import diive as dv",
+             "",
+             "# Kljun, N., Calanca, P., Rotach, M. W., & Schmid, H. P. (2015). A simple",
+             "# two-dimensional parameterisation for Flux Footprint Prediction (FFP).",
+             "# Geoscientific Model Development, 8(11), 3695-3713.",
+             "# https://doi.org/10.5194/gmd-8-3695-2015",
+             "fp = dv.flux.ffp_footprint("]
+    lines += [f"    {a}," for a in args]
+    lines += [")",
+              f"print(f\"Peak at {{fp.x_ci_max:.1f}} m\")",
+              "",
+              f"dv.plotting.FootprintPlot(fp, source_area={source_area!r}).plot()",
+              "plt.show()"]
+    return "\n".join(lines) + "\n"
