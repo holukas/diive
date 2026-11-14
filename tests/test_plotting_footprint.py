@@ -10,6 +10,7 @@ import numpy as np
 from matplotlib.collections import QuadMesh
 from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 
 import diive as dv
 from diive.core.plotting.footprint import FootprintPlot
@@ -198,6 +199,23 @@ class TestFootprintPlot(unittest.TestCase):
             self.assertFalse(any(legend.overlaps(b) for b in labels))
             for xy in ((0., 0.), p.peak_xy):
                 self.assertFalse(legend.contains(*ax.transData.transform(xy)))
+
+    def test_title_and_subtitle_do_not_overlap(self):
+        # The subtitle sat 2 % of the map height above the map, so on a tall map
+        # (e.g. the GUI canvas) it reached into the title.
+        for size in ((6, 5), (14, 14)):
+            with self.subTest(size=size):
+                fig = Figure(figsize=size)
+                ax = fig.add_axes((0.1, 0.05, 0.8, 0.8))
+                p = FootprintPlot(self.single)
+                p.plot(ax=ax, show_colorbar=False)
+                FigureCanvasAgg(fig).draw()  # the equal aspect moves the map at draw time
+                renderer = fig.canvas.get_renderer()
+                info = [t for t in ax.texts if t.get_text() == p.info_text()][0]
+                title = ax._left_title.get_window_extent(renderer)
+                sub = info.get_window_extent(renderer)
+                self.assertGreater(title.y0, sub.y1)
+                self.assertGreater(sub.y0, ax.get_window_extent(renderer).y1)
 
     def test_invalid_input(self):
         with self.assertRaises(TypeError):

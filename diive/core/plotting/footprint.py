@@ -616,8 +616,11 @@ class FootprintPlot:
         t = ax.title
         text = t.get_text()
         if fs is not None:
-            ax.text(0, 1.02, self.info_text(), transform=ax.transAxes, ha='left',
-                    va='bottom', fontsize=fs, color=_SOFT_INK)
+            # Offset in points, like the title pad: an offset in axes fraction grows
+            # with the map height and pushed the subtitle into the title on tall maps
+            ax.annotate(self.info_text(), xy=(0, 1), xycoords='axes fraction',
+                        xytext=(0, fs * 0.4), textcoords='offset points', ha='left',
+                        va='bottom', fontsize=fs, color=_SOFT_INK)
         if text:
             props = dict(color=t.get_color(), fontsize=t.get_fontsize(),
                          fontweight=t.get_fontweight())
