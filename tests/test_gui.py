@@ -882,6 +882,68 @@ def test_compound_extremes_tab(app):
     assert "must differ" in tab.status.text()
 
 
+def test_footprint_tab(app):
+    """The footprint tab draws the model of the typed-in values without data."""
+    from diive.flux.lowres.footprint import ffp_footprint
+    from diive.gui.registry import MENU_TAB_CLASSES
+
+    tab = MENU_TAB_CLASSES["Flux footprint"]()
+    w = tab.widget()
+    w.resize(1400, 900)  # the map needs room, as in the main window
+    w.show()
+    _wait_for_worker(tab)  # the tab draws the default values on build
+
+    # Map, profile and cumulative; the peak matches the library call.
+    titles = [ax.get_title(loc="left") for ax in tab.canvas.fig.axes]
+    assert "Flux footprint" in titles
+    assert tab._plot.ax_profile is not None and tab._plot.ax_cumulative is not None
+    ref = ffp_footprint(zm=20., h=1500., ol=-50., sigmav=0.6, ustar=0.4, z0=0.1,
+                        wind_dir=230., verbose=0)
+    assert tab._plot.peak_distance == ref.x_ci_max
+    assert tab.status.text().startswith(f"Peak at {ref.x_ci_max:.0f} m")
+
+    # A value outside the model's range gives a message, no plot.
+    tab.ol.setValue(-1)
+    tab._debounce.flush()
+    _wait_for_worker(tab)
+    assert tab._plot is None
+    assert "zm / ol must be larger than -15.5" in tab.status.text()
+
+    # Mean wind speed instead of z0, no profile panel, along-wind frame.
+    tab.ol.setValue(30)
+    tab.rough_combo.setCurrentText("Mean wind speed")
+    tab.show_profile.setChecked(False)
+    tab.use_wd.setChecked(False)
+    tab._debounce.flush()
+    _wait_for_worker(tab)
+    assert tab._plot is not None and not tab._plot.is_geographic
+    assert len(tab.canvas.fig.axes) == 2  # map and colour bar
+    assert tab._plot_params["z0"] is None and tab._plot_params["umean"] == 3.0
+
+    # Copy Python reproduces the run; state round-trips into a new tab.
+    code = tab._python_code()
+    assert "dv.flux.ffp_footprint(" in code and "umean=3.0" in code
+    assert "wind_dir" not in code and "z0" not in code
+    state = tab.save_state()
+    other = MENU_TAB_CLASSES["Flux footprint"]()
+    ow = other.widget()
+    ow.resize(1400, 900)
+    ow.show()
+    other.restore_state(state)
+    _wait_for_worker(other)
+    assert other._python_code() == code
+    assert other._plot.peak_distance == tab._plot.peak_distance
+
+    # Contours that are not numbers: a message instead of a run.
+    tab.rs.setText("10, abc")
+    tab.rs.editingFinished.emit()
+    tab._debounce.flush()
+    assert "Contours must be numbers" in tab.status.text()
+    assert tab._python_code() is None
+    w.close()
+    ow.close()
+
+
 def test_select_records_tab(app):
     # Data ▸ Select records by condition: pick a target (left list), build
     # keep/remove operations from a condition variable + range, stack several,

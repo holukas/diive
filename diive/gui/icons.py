@@ -415,6 +415,15 @@ def _ln_lag() -> QIcon:  # time lag: a signal and its right-shifted copy
     return QIcon(pm)
 
 
+def _ln_footprint() -> QIcon:  # tower dot and nested source-area contours upwind
+    pm, p = _line_canvas()
+    p.drawEllipse(QRectF(2, 7, 2, 2))                          # tower
+    p.drawEllipse(QRectF(4.5, 4, 10, 8))                       # outer contour
+    p.drawEllipse(QRectF(6.5, 6, 5, 4))                        # inner contour
+    p.end()
+    return QIcon(pm)
+
+
 def _ln_partition() -> QIcon:  # NEE -> GPP + RECO split (Y-fork)
     pm, p = _line_canvas()
     _line(p, 2, 8, 7.5, 8)                                     # incoming net flux
@@ -581,6 +590,7 @@ _LINE_RULES = [
     ("time lag", _ln_lag),
     ("lag", _ln_lag),
     ("chain", _ln_wave),
+    ("footprint", _ln_footprint),   # "Flux footprint" -- before "flux"
     ("flux", _ln_wave),
     # Date-range reset (before corrections' "set to": "Reset to full range").
     ("date range", _ln_calendar),

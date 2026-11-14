@@ -1301,6 +1301,35 @@ on the right with a results readout below it.
 > click **Load example TLAG data** to load a bundled dataset locally so you can try
 > the feature.
 
+### Flux footprint
+
+The footprint of one set of conditions after Kljun et al. (2015): where the measured
+flux comes from. The tab needs no loaded data. Type in the values and the map and the
+profile update as soon as a value changes.
+
+- **Measurement and surface:** the measurement height **zm** above the displacement
+  height (z - d), and the roughness, either as the **roughness length z0** or as the
+  **mean wind speed** at zm (pick one under *Roughness from*). **Allow roughness
+  sublayer** also calculates the footprint when zm lies in the roughness sublayer
+  (zm below 12.5 z0), where the model gives only a rough estimate.
+- **Atmosphere:** the **boundary-layer height h**, the **Obukhov length L** (negative
+  unstable, positive stable, a large value near-neutral), **sigma_v** (standard
+  deviation of the lateral wind) and **u\***.
+- **Wind direction:** with *Rotate into the wind direction* the map shows east and
+  north of the tower. Without it, the map shows the distance upwind and across the wind.
+- **Source areas and grid:** the contour lines in % (at most 90), the source area
+  that is **highlighted** and reported, the **grid size** (finer is slower) and
+  whether the grid is **cropped** to the largest contour.
+- **Display:** the profile and cumulative panels, the range rings and the contour
+  labels.
+
+The band above the plot shows the distance of the footprint **peak**, how far the
+highlighted contour reaches, the upwind distance within which the crosswind-integrated
+footprint reaches that share, and **zm / L**. Values outside the model's range (for
+example zm / L at -15.5 or below, or u\* at 0.1 m s⁻¹ or below) show a message
+instead of a map. **Copy Python** copies the matching `dv.flux.ffp_footprint` call
+and its plot. Please cite Kljun et al. (2015) when you use the footprint.
+
 ### NEE partitioning
 
 Split measured net ecosystem exchange (NEE) into its two component fluxes, **gross

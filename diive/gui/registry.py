@@ -168,6 +168,8 @@ MENU_TABS: dict[str, dict[str, LazyTab]] = {
         "Flux post-processing chain": _tab("fluxchain", "FluxChainTab"),
         "USTAR detection": _tab("ustar_detection", "UstarDetectionTab"),
         "Time lag analysis": _tab("timelag", "TimeLagAnalysisTab"),
+        # Single footprint from typed-in conditions, no data needed.
+        "Flux footprint": _tab("footprint", "FootprintTab"),
         # One tab for the four partitioning ports (Method + Mode switches).
         "NEE partitioning": _tab("partitioning", "PartitioningNEETab"),
         "Random uncertainty (PAS20)": _tab("uncertainty_randunc", "RandomUncertaintyTab"),
