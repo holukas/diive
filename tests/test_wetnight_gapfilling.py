@@ -79,6 +79,41 @@ class TestWetNightGapFilling(unittest.TestCase):
         self.assertFalse((wn.get_flag()[in2021] == FLAG_WETNIGHT).any())
         np.testing.assert_allclose(wn.gapfilled_[in2021].to_numpy(), self.plain.gapfilled_[in2021].to_numpy())
 
+    def test_month_with_negative_reference_respiration_uses_the_yearly_value(self):
+        # Dry-night NEE near zero in January 2021 (snow, noise): the unbounded monthly fit
+        # would give a negative reference respiration and fill the wet nights with uptake.
+        df = self.df.copy()
+        jan = (df.index.year == 2021) & (df.index.month == 1) & self.night.to_numpy() & df['NEE'].notna().to_numpy()
+        df.loc[jan, 'NEE'] = np.random.default_rng(3).normal(-0.5, 0.3, int(jan.sum()))
+        wn = LongTermGapFillingXGBoostWetNightTS(input_df=df, target_col='NEE', wet=self.wet, ta=self.ta,
+                                                 night=self.night, **XGB).run()
+        est = wn.wetnight_estimate_.dropna()
+        self.assertTrue((est > 0).all())
+        in_jan = (est.index.year == 2021) & (est.index.month == 1)
+        p = wn.wetnight_params_.loc[2021]
+        expected = lloyd_taylor(self.ta[est.index[in_jan]].to_numpy(), p['RREF_YEAR'], p['E0'])
+        np.testing.assert_allclose(est[in_jan].to_numpy(), expected)
+        filled = wn.get_flag() == FLAG_WETNIGHT
+        self.assertTrue((wn.gapfilled_[filled] > 0).all())
+
+    def test_year_whose_fit_fails_keeps_xgboost(self):
+        from unittest import mock
+        fit_year = LongTermGapFillingXGBoostWetNightTS._fit_year
+
+        def fail_2021(obj, observed, ta):
+            if observed.index.year[0] == 2021:
+                raise RuntimeError("Optimal parameters not found")
+            return fit_year(obj, observed, ta)
+
+        with mock.patch.object(LongTermGapFillingXGBoostWetNightTS, '_fit_year', fail_2021):
+            wn = LongTermGapFillingXGBoostWetNightTS(input_df=self.df, target_col='NEE', wet=self.wet,
+                                                     ta=self.ta, night=self.night, **XGB).run()
+        self.assertEqual(list(wn.wetnight_params_.index), [2020, 2022])
+        in2021 = wn.gapfilled_.index.year == 2021
+        self.assertFalse((wn.get_flag()[in2021] == FLAG_WETNIGHT).any())
+        np.testing.assert_allclose(wn.gapfilled_[in2021].to_numpy(), self.plain.gapfilled_[in2021].to_numpy())
+        self.assertTrue((wn.get_flag()[~in2021] == FLAG_WETNIGHT).any())
+
     def test_rejects_non_series(self):
         with self.assertRaises(TypeError):
             LongTermGapFillingXGBoostWetNightTS(input_df=self.df, target_col='NEE', wet=self.wet.to_numpy(),

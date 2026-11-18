@@ -610,16 +610,32 @@ class TestRerunCascade(unittest.TestCase):
             self.d33,
             levels=dataclasses.replace(self.d33.levels,
                                        level41_mds={'CUT_50': 'stale'},
+                                       level41_xgbwn={'CUT_50': 'stale'},
                                        level42_nt_of={'CUT_50': 'stale'}),
             level_ids=list(self.d33.level_ids) + ['L4.1', 'L4.2'],
             added_columns={**self.d33.added_columns,
-                           'L4.1_mds': [], 'L4.2_nt_of': []})
+                           'L4.1_mds': [], 'L4.1_xgbwn': [], 'L4.2_nt_of': []})
         reset = cascade_reset(seeded, 'L3.1')
         self.assertEqual(reset.levels.level41_mds, {})
+        self.assertEqual(reset.levels.level41_xgbwn, {})
         self.assertEqual(reset.levels.level42_nt_of, {})
         self.assertEqual(reset.level_ids, ['L2'])
         self.assertNotIn('L4.1_mds', reset.added_columns)
+        self.assertNotIn('L4.1_xgbwn', reset.added_columns)
         self.assertNotIn('L4.2_nt_of', reset.added_columns)
+
+    def test_every_additive_level_is_reset_and_its_columns_tracked(self):
+        # A new level41_*/level42_* field must be reset by a cascade and its
+        # columns dropped, or merged_df() exports fills from old thresholds (#451).
+        import dataclasses
+        from diive.flux.postprocessingchain.container import LevelResults
+        from diive.flux.postprocessingchain.levels._rerun import (
+            _ADDITIVE_FIELDS, _ADDITIVE_TRACKED_KEYS)
+        for f in dataclasses.fields(LevelResults):
+            for prefix, level in (('level41_', 'L4.1'), ('level42_', 'L4.2')):
+                if f.name.startswith(prefix):
+                    self.assertIn(f.name, _ADDITIVE_FIELDS)
+                    self.assertIn(f"{level}_{f.name.removeprefix(prefix)}", _ADDITIVE_TRACKED_KEYS)
 
     # --- unit: the additive (per-method) helpers ---
 

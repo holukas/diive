@@ -81,7 +81,7 @@ _PARTITIONING_REF_KEYS: tuple[str, ...] = (
 )
 
 _ADDITIVE_TRACKED_KEYS: tuple[str, ...] = (
-    'L4.1_mds', 'L4.1_rf', 'L4.1_xgb', 'L4.1_ref',
+    'L4.1_mds', 'L4.1_rf', 'L4.1_xgb', 'L4.1_xgbwn', 'L4.1_ref',
     'L4.2_nt_of', 'L4.2_nt_rp', 'L4.2_dt_rp', 'L4.2_dt_of',
     'L4.2_nt_dv', 'L4.2_dt_dv',
 ) + _PARTITIONING_REF_KEYS

@@ -67,8 +67,8 @@ class LongTermGapFillingXGBoostWetNightTS(LongTermGapFillingXGBoostTS):
         then filled from a Lloyd-Taylor model (Lloyd and Taylor 1994) fitted to the measured
         dry nights of the same year: the temperature sensitivity E0 per year, the reference
         respiration at 15 degC per month, or per year where a month has fewer than
-        ``min_records`` dry nights. A year with fewer than ``min_records`` dry nights keeps
-        the XGBoost fill.
+        ``min_records`` dry nights or its value is not positive. A year with fewer than
+        ``min_records`` dry nights, or whose fit does not converge, keeps the XGBoost fill.
 
         The gap-filled column ends in ``_gfXGWN`` instead of ``_gfXG``, so the two fills can
         exist side by side. Its flag is 0 for measured, 1 for XGBoost, 2 for the XGBoost
@@ -160,15 +160,24 @@ class LongTermGapFillingXGBoostWetNightTS(LongTermGapFillingXGBoostTS):
                 warn(f"{self.target_col}, {year}: {int(fit.sum())} dry measured nights, fewer than "
                      f"{self.min_records}; its wet night gaps keep the XGBoost fill.", verbose=self.verbose)
                 continue
-            rref_year, e0 = self._fit_year(observed[fit], self.ta[fit])
-            # Reference respiration per month with E0 of the year: least squares of rref * f(TA)
+            try:
+                rref_year, e0 = self._fit_year(observed[fit], self.ta[fit])
+            except RuntimeError as err:
+                warn(f"{self.target_col}, {year}: the Lloyd-Taylor fit did not converge ({err}); its wet "
+                     f"night gaps keep the XGBoost fill.", verbose=self.verbose)
+                continue
+            # Reference respiration per month with E0 of the year: least squares of rref * f(TA).
+            # Unlike the yearly fit it is not bounded, so a month of near-zero dry-night NEE can
+            # give a negative value, which would fill wet nights with uptake: keep the yearly one.
             unit = pd.Series(lloyd_taylor(self.ta[in_year].to_numpy(), 1.0, e0), index=df.index[in_year])
             rref = pd.Series(rref_year, index=unit.index)
             for month in range(1, 13):
                 fm = fit & (df.index.month == month)
                 if fm.sum() >= self.min_records:
                     f = unit[fm[in_year].to_numpy()]
-                    rref[unit.index.month == month] = (f * observed[fm]).sum() / (f * f).sum()
+                    rref_month = (f * observed[fm]).sum() / (f * f).sum()
+                    if rref_month > 0:
+                        rref[unit.index.month == month] = rref_month
             self._wetnight_estimate.loc[unit.index] = unit * rref
             params[year] = {'E0': e0, 'RREF_YEAR': rref_year, 'N_DRY_NIGHTS': int(fit.sum())}
         self._wetnight_params = pd.DataFrame(params).T
