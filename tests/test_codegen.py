@@ -637,6 +637,26 @@ class TestFluxCodegen(CodegenTestCase):
                                     divisor=1.349),
                    "JointUncertaintyPAS20(", "1.349")
 
+    def test_ffp_footprint(self):
+        # Running the snippet is covered in test_footprint.py; here the call shape:
+        # every keyword exists on ffp_footprint / FootprintPlot, defaults are left out
+        from diive.flux.lowres.codegen import ffp_footprint_to_code
+        code = self.check(ffp_footprint_to_code(20., 1500., -50., 0.6, 0.4, z0=0.15,
+                                                wind_dir=230., source_area=0.7),
+                          "dv.flux.ffp_footprint(", "z0=0.15", "wind_dir=230.0",
+                          "FootprintPlot(fp, source_area=0.7)")
+        for left_out in ("umean=", "rs=", "nx=", "crop=", "rslayer="):
+            self.assertNotIn(left_out, code)
+
+        code = self.check(ffp_footprint_to_code(20., 1500., 200., 0.6, 0.4, umean=3.5,
+                                                rs=[0.5, 0.8], rslayer=True, nx=600,
+                                                crop=True),
+                          "umean=3.5", "rs=[0.5, 0.8]", "rslayer=True", "nx=600",
+                          "crop=True")
+        self.assertNotIn("z0=", code)
+        self.assertIn("rs=None", ffp_footprint_to_code(20., 1500., 200., 0.6, 0.4,
+                                                       z0=0.15, rs=None))
+
     def test_partitioning_all_four_ports(self):
         from diive.flux.partitioning.codegen import partitioning_to_code
         expected = {
