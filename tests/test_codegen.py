@@ -608,8 +608,9 @@ class TestAnalysisCodegen(CodegenTestCase):
         from diive.analysis.seasonaltrend import seasonal_trend_to_code
         self.check(seasonal_trend_to_code("TA", view="anomalies",
                                           reference_start_year=2016,
-                                          reference_end_year=2020),
-                   "2016")
+                                          reference_end_year=2020,
+                                          min_month_coverage=0.8),
+                   "2016", "dv.times.resample_to_yearly_mean(", "min_month_coverage=0.8")
 
 
 # --- Flux -------------------------------------------------------------------

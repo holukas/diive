@@ -98,6 +98,81 @@ def resample_to_daily_agg(series: Series,
     return agg_ser
 
 
+def resample_to_yearly_mean(series: Series,
+                            min_month_coverage: float = 0.5) -> Series:
+    """Yearly means that a partial year cannot bias, one value per calendar year.
+
+    A plain yearly mean averages whatever records a year holds, so a year
+    without its winter months comes out too warm. Here each yearly mean is the
+    mean of the twelve monthly means, weighted by the days in each month. On
+    complete data this equals the plain mean. A year counts only if every
+    month reaches ``min_month_coverage``. The coverage of a month is its number
+    of valid records per day, relative to the fullest month of the record.
+
+    Use it for data at sub-monthly resolution (e.g. half-hourly). Months are
+    calendar months of the index as given.
+
+    Args:
+        series: Time series with a ``DatetimeIndex``.
+        min_month_coverage: Lowest coverage (0-1) every month of a year must
+            reach for the year to be kept. ``0`` keeps every year whose twelve
+            months each hold at least one value; a year with an empty month has
+            no yearly mean.
+
+    Returns:
+        Yearly means of the kept years, indexed by integer year (``YEAR``),
+        with the input series' name. ``attrs['coverage']`` holds the lowest
+        monthly coverage of every year from the first to the last year of the
+        record, kept or not.
+
+    Raises:
+        TypeError: If ``series`` does not have a ``DatetimeIndex``.
+        ValueError: If ``min_month_coverage`` is outside 0-1.
+
+    Example:
+        Leave out years in which a month has less than 80 % of its records::
+
+            yearly = dv.times.resample_to_yearly_mean(df['Tair_f'], min_month_coverage=0.8)
+            left_out = yearly.attrs['coverage'].index.difference(yearly.index)
+    """
+    if not isinstance(series.index, pd.DatetimeIndex):
+        raise TypeError("resample_to_yearly_mean requires a series with a DatetimeIndex.")
+    if not 0 <= min_month_coverage <= 1:
+        raise ValueError(f"min_month_coverage must be between 0 and 1, got {min_month_coverage}.")
+
+    valid = series.dropna()
+    if valid.empty:
+        yearly = pd.Series(dtype=float, name=series.name, index=pd.Index([], dtype=int, name='YEAR'))
+        yearly.attrs['coverage'] = pd.Series(dtype=float, name='MIN_MONTH_COVERAGE',
+                                             index=pd.Index([], dtype=int, name='YEAR'))
+        return yearly
+
+    # Every month of the first to the last year, also those without records
+    first = valid.index.min().normalize().replace(month=1, day=1)
+    last = valid.index.max().normalize().replace(month=12, day=1)
+    months = pd.date_range(first, last, freq='MS')
+    monthly = valid.resample('MS')
+    means = monthly.mean().reindex(months)
+    counts = monthly.count().reindex(months, fill_value=0)
+
+    days = pd.Series(months.days_in_month, index=months, dtype=float)
+    per_day = counts / days
+    coverage = per_day / per_day.max()
+
+    years = months.year
+    # min_count=12: a year with an empty month gets no mean
+    weighted = (means * days).groupby(years).sum(min_count=12) / days.groupby(years).sum()
+    year_coverage = coverage.groupby(years).min()
+
+    yearly = weighted[year_coverage >= min_month_coverage].dropna()
+    yearly.index = pd.Index(yearly.index.astype(int), name='YEAR')
+    yearly.name = series.name
+    year_coverage.index = pd.Index(year_coverage.index.astype(int), name='YEAR')
+    year_coverage.name = 'MIN_MONTH_COVERAGE'
+    yearly.attrs['coverage'] = year_coverage
+    return yearly
+
+
 def resample_series_to_freq(series: Series,
                             to_freqstr: str = '30min',
                             agg: Literal['mean', 'sum'] = 'mean',

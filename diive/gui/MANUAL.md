@@ -619,10 +619,17 @@ period** (red bars are above the reference mean, blue are below), handy for
 spotting warming or unusually wet or dry years. Set the reference years with the
 two boxes.
 
+Each yearly value is the mean of the twelve monthly means, so a few missing days do
+not shift it. A year is shown only if each of its months reaches **Min. month
+coverage** (default 50 % of the records of the fullest month). A year with missing
+months, such as a first year that starts in July, would look too warm or too cold, so
+it is left out. The plot title names the years left out, with the coverage of their
+sparsest month in brackets.
+
 - **Method.** *STL* (robust, recommended), *Classical*, or *Harmonic*.
 - **Robust** (STL) down-weights outliers; more faithful but slower.
-- Method and Robust changes apply on **Update**; variable, view, and reference
-  years update immediately.
+- Method and Robust changes apply on **Update**; variable, view, reference
+  years and minimum coverage update immediately.
 - The decomposition needs at least about 2 years of data (the anomaly view works
   with fewer).
 - The decomposition runs in a separate background process, so the window stays

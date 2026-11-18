@@ -167,6 +167,9 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   The chain (`run_level42_partitioning(mode='diive')`, `FluxConfig(partition_mode='diive')`, also
   with the GPP and RECO REF) and the GUI partitioning tab offer it too. The nighttime method gives
   the ONEFlux numbers.
+- **Yearly means with a coverage check:** `dv.times.resample_to_yearly_mean` computes each yearly
+  mean from the monthly means and leaves out years in which a month falls below
+  `min_month_coverage` (default 50 %), so a year with missing months does not get a biased mean.
 
 ### Changed
 
@@ -372,6 +375,11 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   missing on night records where a window's large VPD parameter `k` made ONEFlux's light response 0
   divided by 0 ([#446](https://github.com/holukas/diive/issues/446)). ONEFlux itself gives NaN there,
   so `mode='oneflux'` keeps it. All other values are the same in both modes.
+- **GUI, yearly anomalies from partial years (changes results):** the Seasonal trend tab averaged
+  whatever records a year held, so a year with missing winter months showed up as a warm anomaly
+  ([#449](https://github.com/holukas/diive/issues/449)). Yearly means now come from the monthly
+  means, a year with a month below the new **Min. month coverage** (default 50 %) is left out, and
+  the plot title names the years left out. **Copy Python** gives the same yearly means.
 
 ## [0.92.0] - 2026-10-21
 

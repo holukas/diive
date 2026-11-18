@@ -381,6 +381,7 @@ def seasonal_trend_to_code(
         view: str = 'decomposition',
         reference_start_year: int | None = None,
         reference_end_year: int | None = None,
+        min_month_coverage: float = 0.5,
         df_name: str = 'df',
 ) -> str:
     """Render a runnable seasonal-trend snippet for the current GUI view.
@@ -388,7 +389,9 @@ def seasonal_trend_to_code(
     Mirrors the GUI's Seasonal-trend & anomalies tab. ``view='decomposition'``
     resamples to a daily mean and runs :class:`SeasonalTrendDecomposition`,
     plotting the observed/trend/seasonal/residual panels; ``view='anomalies'``
-    plots the yearly-mean anomaly via :class:`~diive.plotting.LongtermAnomaliesYear`.
+    computes yearly means with :func:`~diive.times.resample_to_yearly_mean` (years
+    with a month below ``min_month_coverage`` are left out) and plots their anomaly
+    via :class:`~diive.plotting.LongtermAnomaliesYear`.
     Belongs in the library (not the GUI): it encodes the exact call shape and
     must stay correct as that API evolves; the GUI only calls it (the GUI <->
     library separation rule).
@@ -400,6 +403,8 @@ def seasonal_trend_to_code(
         view: ``'decomposition'`` or ``'anomalies'``.
         reference_start_year / reference_end_year: reference period for the
             anomaly view.
+        min_month_coverage: lowest monthly coverage (0-1) a year needs in the
+            anomaly view, passed to :func:`~diive.times.resample_to_yearly_mean`.
         df_name: variable name used for the input DataFrame.
 
     Returns:
@@ -408,10 +413,10 @@ def seasonal_trend_to_code(
     lines = ["import matplotlib.pyplot as plt", "import diive as dv", ""]
     if view == 'anomalies':
         lines += [
-            f"yearly = {df_name}[{varname!r}].resample('YE').mean()",
-            "yearly.index = yearly.index.year  # LongtermAnomaliesYear keys on integer years",
-            "yearly = yearly.dropna()",
-            f"yearly.name = {varname!r}",
+            "# Yearly means from monthly means; years with a month below the coverage are left out",
+            "yearly = dv.times.resample_to_yearly_mean(",
+            f"    {df_name}[{varname!r}], min_month_coverage={min_month_coverage!r})",
+            "print('Left out:', list(yearly.attrs['coverage'].index.difference(yearly.index)))",
             "anom = dv.plotting.LongtermAnomaliesYear(",
             "    series=yearly,",
             f"    reference_start_year={reference_start_year!r},",

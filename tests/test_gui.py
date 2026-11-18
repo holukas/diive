@@ -5526,6 +5526,39 @@ def test_seasonal_trend_tab(app):
     assert not [t for a in tab.canvas.fig.axes for t in a.texts if "Cannot plot" in t.get_text()]
 
 
+def test_seasonal_trend_anomalies_leave_out_partial_years(app):
+    # #449: a year without its winter showed up as a warm anomaly. Now a year
+    # with a month below the minimum coverage is left out and named in the title.
+    from diive.gui.tabs.seasonaltrend import SeasonalTrendTab
+
+    df = dv.load_exampledata_parquet().loc["2018":"2022"].copy()
+    df.loc["2021-01-01":"2021-03-31", "Tair_f"] = float("nan")  # three months missing
+    df.loc["2020-01-01":"2020-01-20", "Tair_f"] = float("nan")  # January 35 % covered
+    tab = SeasonalTrendTab()
+    tab.widget()
+    tab.on_data_loaded(df)
+    _wait_for_worker(tab)
+    tab.view.setCurrentText("Yearly anomalies")
+    QApplication.processEvents()
+
+    assert tab.min_coverage.value() == 50
+    assert list(tab._yearly.index) == [2018, 2019, 2022]
+    assert tab._yearly.name == "Tair_f"
+    assert [y for y, _ in tab._left_out_years()] == [2020, 2021]
+    title = tab.canvas.fig.axes[0].get_title()
+    assert "2020 (35 %)" in title and "2021 (0 %)" in title
+    assert (tab.ref_start.value(), tab.ref_end.value()) == (2018, 2022)
+
+    # A lower minimum brings back the year with a sparse month, without a recompute;
+    # a year with empty months stays out
+    tab.min_coverage.setValue(30)
+    assert not tab._computing()
+    assert list(tab._yearly.index) == [2018, 2019, 2020, 2022]
+    assert "2021 (0 %)" in tab.canvas.fig.axes[0].get_title()
+    assert "min_month_coverage=0.3" in tab._python_code()
+    assert tab.save_state()["controls"]["min_coverage"] == 30
+
+
 def test_seasonal_trend_short_data_graceful(window):
     # The window fixture has one year -> annual decomposition can't run. The tab
     # must show a friendly message (not crash), and the anomaly view still works.

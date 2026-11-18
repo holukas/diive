@@ -1144,5 +1144,65 @@ class TestRemovedRowCounts(unittest.TestCase):
         self.assertEqual(len(out), 4)
 
 
+class TestResampleToYearlyMean(unittest.TestCase):
+    """#449: yearly means from monthly means, years with a sparse month left out."""
+
+    @staticmethod
+    def _seasonal(start='2019-01-01 00:15', end='2021-12-31 23:45'):
+        # Half-hourly series with a strong annual cycle (cold winters, warm summers)
+        idx = pd.date_range(start, end, freq='30min', name='TIMESTAMP_MIDDLE')
+        doy = idx.dayofyear.to_numpy()
+        return pd.Series(5 - 10 * np.cos(2 * np.pi * doy / 365.25), index=idx, name='TA')
+
+    def test_complete_years_equal_the_plain_yearly_mean(self):
+        from diive.core.times.resampling import resample_to_yearly_mean
+        s = self._seasonal()
+        yearly = resample_to_yearly_mean(s)
+        plain = s.resample('YE').mean()
+        np.testing.assert_allclose(yearly.to_numpy(), plain.to_numpy(), rtol=0, atol=1e-12)
+        self.assertEqual(list(yearly.index), [2019, 2020, 2021])
+        self.assertEqual(yearly.name, 'TA')
+        self.assertTrue((yearly.attrs['coverage'] == 1).all())
+
+    def test_year_without_its_winter_is_left_out(self):
+        # The case of #449: three winter months missing made the year look warm
+        from diive.core.times.resampling import resample_to_yearly_mean
+        s = self._seasonal()
+        s.loc['2020-01-01':'2020-03-31'] = np.nan
+        self.assertGreater(s.loc['2020'].mean(), s.loc['2019'].mean() + 2)  # plain mean is biased
+        for threshold in (0.5, 0.0):  # an empty month has no yearly mean, even at 0
+            yearly = resample_to_yearly_mean(s, min_month_coverage=threshold)
+            self.assertEqual(list(yearly.index), [2019, 2021])
+        self.assertEqual(yearly.attrs['coverage'][2020], 0)
+        self.assertEqual(list(yearly.attrs['coverage'].index), [2019, 2020, 2021])
+
+    def test_partial_first_year_is_left_out(self):
+        from diive.core.times.resampling import resample_to_yearly_mean
+        yearly = resample_to_yearly_mean(self._seasonal(start='2019-07-01 00:15'))
+        self.assertEqual(list(yearly.index), [2020, 2021])
+        self.assertEqual(yearly.attrs['coverage'][2019], 0)
+
+    def test_sparse_month_follows_the_threshold_and_keeps_the_mean_unbiased(self):
+        from diive.core.times.resampling import resample_to_yearly_mean
+        s = self._seasonal()
+        complete = resample_to_yearly_mean(s)[2020]
+        s.loc['2020-01-01':'2020-01-20'] = np.nan  # 11 of 31 January days left
+        self.assertNotIn(2020, resample_to_yearly_mean(s, min_month_coverage=0.5).index)
+        yearly = resample_to_yearly_mean(s, min_month_coverage=0.3)
+        self.assertAlmostEqual(yearly.attrs['coverage'][2020], 11 / 31, places=6)
+        # The monthly means weight January fully, the plain mean does not
+        self.assertLess(abs(yearly[2020] - complete), abs(s.loc['2020'].mean() - complete) / 3)
+
+    def test_invalid_input(self):
+        from diive.core.times.resampling import resample_to_yearly_mean
+        s = self._seasonal()
+        with self.assertRaises(TypeError):
+            resample_to_yearly_mean(s.reset_index(drop=True))
+        with self.assertRaises(ValueError):
+            resample_to_yearly_mean(s, min_month_coverage=50)
+        empty = resample_to_yearly_mean(s * np.nan)
+        self.assertTrue(empty.empty and empty.attrs['coverage'].empty)
+
+
 if __name__ == '__main__':
     unittest.main()

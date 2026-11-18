@@ -9,7 +9,8 @@ year's anomaly relative to a reference period.
 
 All the maths is the library's: `dv.times.resample_to_daily_agg` to build the
 daily series, `dv.analysis.SeasonalTrendDecomposition` for the decomposition,
-and `dv.plotting.LongtermAnomaliesYear` for the anomaly bars. This tab only
+`dv.times.resample_to_yearly_mean` for yearly means with a coverage check, and
+`dv.plotting.LongtermAnomaliesYear` for the anomaly bars. This tab only
 collects the options, lays out the panels, and renders — no statistics of its
 own (strict GUI<->library separation).
 
@@ -45,6 +46,11 @@ from diive.gui.widgets.mpl_canvas import MplCanvas
 _DEFAULT_VAR = "Tair_f"
 #: Daily data -> the meaningful cycle is annual (365 observations).
 _PERIOD_DAYS = 365
+
+#: Default lowest monthly coverage (%) for a year in the anomaly view.
+_DEFAULT_MIN_COVERAGE = 50
+#: Left-out years named in the anomaly title before "and N more".
+_MAX_NAMED_YEARS = 6
 
 _VIEW_DECOMP = "Decomposition"
 _VIEW_ANOM = "Yearly anomalies"
@@ -89,7 +95,9 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
     def _init_state(self) -> None:
         self._decomp = None      # dict: observed/trend/seasonal/residual + strength
         self._decomp_error = None
-        self._yearly = None      # one value per year (for the anomaly view)
+        self._yearly = None      # one value per kept year (for the anomaly view)
+        self._yearly_all = None  # yearly means of every year with all months present
+        self._coverage = None    # lowest monthly coverage of every year of the record
         self._method_label = ""  # method the shown decomposition used
         self._loading_ctrls = False  # guard programmatic control updates
 
@@ -143,6 +151,19 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
         lay.addWidget(self.ref_start)
         lay.addWidget(QLabel("to"))
         lay.addWidget(self.ref_end)
+
+        lay.addSpacing(8)
+        lay.addWidget(QLabel("Min. month coverage"))
+        self.min_coverage = QSpinBox()
+        self.min_coverage.setRange(0, 100)
+        self.min_coverage.setSuffix(" %")
+        self.min_coverage.setValue(_DEFAULT_MIN_COVERAGE)
+        self.min_coverage.setToolTip(
+            "Yearly-anomaly view: a year is shown only if each of its months holds at "
+            "least this share of its records (relative to the fullest month). A year "
+            "with missing months would give a biased yearly mean.")
+        self.min_coverage.valueChanged.connect(self._on_coverage_changed)
+        lay.addWidget(self.min_coverage)
         lay.addStretch(1)
         return bar
 
@@ -153,7 +174,8 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
                 "controls": save_controls(
                     {"method": self.method, "robust": self.robust,
                      "view": self.view, "ref_start": self.ref_start,
-                     "ref_end": self.ref_end})}
+                     "ref_end": self.ref_end,
+                     "min_coverage": self.min_coverage})}
 
     def restore_state(self, state: dict) -> None:
         from diive.gui.widgets.state_utils import restore_controls
@@ -161,7 +183,8 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
         # the control values flat at the top level.
         restore_controls({"method": self.method, "robust": self.robust,
                           "view": self.view, "ref_start": self.ref_start,
-                          "ref_end": self.ref_end},
+                          "ref_end": self.ref_end,
+                          "min_coverage": self.min_coverage},
                          state.get("controls") or state)
         t = state.get("target")
         if t and self._df is not None and t in self._df.columns:
@@ -183,13 +206,36 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
             self._target, method=self.method.currentText().lower(),
             robust=self.robust.isChecked(), seasonal_period=_PERIOD_DAYS,
             view=view, reference_start_year=self.ref_start.value(),
-            reference_end_year=self.ref_end.value())
+            reference_end_year=self.ref_end.value(),
+            min_month_coverage=self.min_coverage.value() / 100)
 
     def _on_ref_changed(self, _value: int) -> None:
         # Cheap: only the anomaly view depends on the reference period.
         if not self._loading_ctrls and self._yearly is not None \
                 and self.view.currentText() == _VIEW_ANOM and not self._computing():
             self._render()
+
+    def _on_coverage_changed(self, _value: int) -> None:
+        # Cheap: the yearly means of all years are kept, only the selection changes.
+        if self._loading_ctrls or self._yearly_all is None or self._computing():
+            return
+        self._select_years()
+        self._fill_stats()
+        if self.view.currentText() == _VIEW_ANOM:
+            self._render()
+
+    def _select_years(self) -> None:
+        """Keep the years whose months all reach the minimum coverage."""
+        threshold = self.min_coverage.value() / 100
+        coverage = self._coverage.reindex(self._yearly_all.index)
+        self._yearly = self._yearly_all[coverage >= threshold]
+
+    def _left_out_years(self) -> list[tuple[int, float]]:
+        """Years of the record not shown, with their lowest monthly coverage."""
+        if self._coverage is None or self._yearly is None:
+            return []
+        left_out = self._coverage.index.difference(self._yearly.index)
+        return [(int(y), float(self._coverage[y])) for y in left_out]
 
     def _compute_request(self) -> tuple:
         return (self._df[self._target], self._target, self.method.currentText(),
@@ -225,23 +271,27 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
             except Exception as err:
                 decomp_error = str(err)
 
-        # Yearly means drive the anomaly view.
-        yearly = series.resample("YE").mean()
-        yearly.index = yearly.index.year
-        yearly = yearly.dropna()
+        # Yearly means drive the anomaly view. All years with twelve months are
+        # computed here; the tab keeps those that reach the minimum coverage, so
+        # changing it needs no recompute.
+        yearly = dv.times.resample_to_yearly_mean(series, min_month_coverage=0)
+        coverage = yearly.attrs["coverage"]
         yearly.name = target
         return {"decomp": decomp, "decomp_error": decomp_error,
-                "yearly": yearly, "method_label": method_label}
+                "yearly": yearly, "coverage": coverage, "method_label": method_label}
 
     def _render_payload(self, payload) -> None:
         self._decomp = payload["decomp"]
         self._decomp_error = payload["decomp_error"]
         self._method_label = payload["method_label"]
-        yearly = self._yearly = payload["yearly"]
+        self._yearly_all = payload["yearly"]
+        self._coverage = payload["coverage"]
+        self._select_years()
         # Seed the reference period to the full record on (re)compute.
-        if len(yearly):
+        years = self._coverage.index
+        if len(years):
             self._loading_ctrls = True
-            lo, hi = int(yearly.index.min()), int(yearly.index.max())
+            lo, hi = int(years.min()), int(years.max())
             for sp in (self.ref_start, self.ref_end):
                 sp.setRange(lo, hi)
             self.ref_start.setValue(lo)
@@ -256,12 +306,16 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
         trend = d["trend"].dropna() if d else pd.Series(dtype=float)
         change = (trend.iloc[-1] - trend.iloc[0]) if len(trend) else None
         n_years = self._yearly.index.nunique() if self._yearly is not None else 0
+        n_left_out = len(self._left_out_years())
+        years_text = _fmt(n_years)
+        if n_left_out:
+            years_text += f" ({n_left_out} left out)"
         cards = [
             ("Variable", self._target or "—"),
             ("Method", self._method_label),
             ("Seasonality", f"{d['strength']:.2f}" if d else "—"),
             ("Trend change", f"{change:+.2f}" if change is not None else "—"),
-            ("Years", _fmt(n_years)),
+            ("Years", years_text),
             ("Period", f"{_PERIOD_DAYS} d"),
         ]
         self._set_stat_cards(cards)
@@ -308,20 +362,35 @@ class SeasonalTrendTab(SingleVariableExplorerTab):
                          wrap=True, transform=axes[0].transAxes)
         self.canvas.draw()
 
+    def _left_out_note(self) -> str:
+        """One line naming the years left out for low coverage, or ''."""
+        left_out = self._left_out_years()
+        if not left_out:
+            return ""
+        # The value in brackets is the year's lowest monthly coverage
+        named = ", ".join(f"{y} ({cov * 100:.0f} %)" for y, cov in left_out[:_MAX_NAMED_YEARS])
+        more = len(left_out) - _MAX_NAMED_YEARS
+        if more > 0:
+            named += f" and {more} more"
+        return f"Left out, a month below {self.min_coverage.value()} % coverage: {named}"
+
     def _render_anomalies(self) -> None:
+        note = self._left_out_note()
         if self._yearly is None or self._yearly.empty:
-            self.canvas.show_message("No yearly data")
+            self.canvas.show_message(f"No yearly data\n{note}" if note else "No yearly data")
             return
         ax = self.canvas.new_axes(1)[0]
+        title = (f"{self._target} — yearly anomaly vs. "
+                 f"{self.ref_start.value()}–{self.ref_end.value()} mean")
+        if note:
+            title += f"\n{note}"
         try:
             LongtermAnomaliesYear(
                 series=self._yearly,
                 reference_start_year=self.ref_start.value(),
                 reference_end_year=self.ref_end.value(),
                 series_label=self._target,
-            ).plot(ax=ax, format_style=dv.plotting.FormatStyle(
-                title=f"{self._target} — yearly anomaly vs. "
-                      f"{self.ref_start.value()}–{self.ref_end.value()} mean"))
+            ).plot(ax=ax, format_style=dv.plotting.FormatStyle(title=title))
             self.canvas.draw()
         except Exception as err:
             self.canvas.show_message(f"Cannot plot:\n{err}")
