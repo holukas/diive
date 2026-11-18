@@ -189,32 +189,9 @@ class FlagQCF:
 
         self.idstr = validate_id_string(idstr=idstr)
 
-        # Identify FLAG columns
-        # If there are different USTAR scenarios, all flag columns that are not relevant for
-        # the current scenario must be removed.
-
-        # First check if there are USTAR scenarios
-        if ustar_scenarios:
-            # Get ID of USTAR scenario, e.g. 'CUT_50'. Info about the scenario is in the ID string.
-            # Therefore, here we can check if any USTAR scenario string appears in the ID string.
-            # Match whole '_label_' tokens: 'CUT_16' is not the scenario of '_L3.3_CUT_1625'.
-            current_ustar_scenario = [u for u in self.ustar_scenarios
-                                      if f"_{u}_" in f"_{self.idstr}_"]
-            # Make sure there is only one detected scenario
-            if len(current_ustar_scenario) == 1:
-                current_ustar_scenario = str(current_ustar_scenario[0])
-            else:
-                found = "No" if not current_ustar_scenario else "More than one"
-                raise ValueError(f"(!){found} USTAR scenario detected in idstr={self.idstr!r}: "
-                                 f"ustar_scenarios={self.ustar_scenarios}, "
-                                 f"matched={current_ustar_scenario}. "
-                                 f"idstr must contain exactly one scenario name.")
-            exclude_ustar_ids = self.ustar_scenarios.copy()
-            exclude_ustar_ids.remove(current_ustar_scenario)
-        else:
-            exclude_ustar_ids = None
-            # current_ustar_scenario = None
-
+        # Identify FLAG columns. With USTAR scenarios, the flag columns of the
+        # other scenarios are left out.
+        exclude_ustar_ids = self._other_ustar_scenarios(self.idstr, ustar_scenarios)
         flagcols = identify_flagcols(df=df, seriescol=target_col, exclude_ustar_ids=exclude_ustar_ids)
         self._flags_df = df[flagcols].copy()
 
@@ -247,6 +224,52 @@ class FlagQCF:
 
         self.daytime_accept_qcf_below = None
         self.nighttime_accept_qcf_below = None
+
+    @staticmethod
+    def _other_ustar_scenarios(idstr: str, ustar_scenarios: list | None) -> list | None:
+        """The USTAR scenarios whose flags are left out: all but the one named in *idstr*."""
+        if not ustar_scenarios:
+            return None
+        # Match whole '_label_' tokens: 'CUT_16' is not the scenario of '_L3.3_CUT_1625'.
+        current = [u for u in ustar_scenarios if f"_{u}_" in f"_{idstr}_"]
+        if len(current) != 1:
+            found = "No" if not current else "More than one"
+            raise ValueError(f"(!){found} USTAR scenario detected in idstr={idstr!r}: "
+                             f"ustar_scenarios={ustar_scenarios}, "
+                             f"matched={current}. "
+                             f"idstr must contain exactly one scenario name.")
+        others = list(ustar_scenarios)
+        others.remove(current[0])
+        return others
+
+    @classmethod
+    def input_columns(cls,
+                      df: DataFrame,
+                      target_col: str,
+                      swinpot_col: str = None,
+                      idstr: str = None,
+                      ustar_scenarios: list = None) -> list:
+        """The columns of *df* that FlagQCF reads, in the order of *df*.
+
+        These are the target, the potential radiation and the test flags that
+        would be used. ``FlagQCF(df=df[FlagQCF.input_columns(df, ...)], ...)``
+        gives the same flags and results as the full frame, while the instance
+        keeps a copy of these columns only. ``get()`` then returns these columns
+        plus the results.
+
+        Args:
+            df: Frame the flags would be taken from.
+            target_col, swinpot_col, idstr, ustar_scenarios: As for ``FlagQCF``.
+
+        Returns:
+            Column names, a subset of ``df.columns``.
+        """
+        exclude = cls._other_ustar_scenarios(validate_id_string(idstr=idstr), ustar_scenarios)
+        wanted = set(identify_flagcols(df=df, seriescol=target_col, exclude_ustar_ids=exclude))
+        wanted.add(target_col)
+        if swinpot_col:
+            wanted.add(swinpot_col)
+        return [c for c in df.columns if c in wanted]
 
     @property
     def flags(self) -> DataFrame:

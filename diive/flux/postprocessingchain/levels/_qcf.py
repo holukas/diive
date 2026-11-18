@@ -68,9 +68,16 @@ def finalize_level(
     for col in new_cols:
         detail(f"Added column {col}.")
 
+    # FlagQCF gets only the columns it reads and the results are added here, not
+    # with qcf.get(): the instance is kept in data.levels, and with the whole
+    # frame each one held a copy of it, once per level and USTAR scenario
+    # (1.2 GB per year with the 43 REF scenarios, #450).
+    qcf_cols = FlagQCF.input_columns(
+        fpc_df, target_col=run_qcf_on_col, swinpot_col=data.meta.swinpot_col,
+        idstr=idstr, ustar_scenarios=ustar_scenarios)
     qcf = FlagQCF(
         target_col=run_qcf_on_col,
-        df=fpc_df,
+        df=fpc_df[qcf_cols],
         idstr=idstr,
         swinpot_col=data.meta.swinpot_col,
         nighttime_threshold=data.meta.nighttime_threshold,
@@ -81,7 +88,10 @@ def finalize_level(
         daytime_accept_qcf_below=data.meta.daytime_accept_qcf_below,
         nighttime_accept_qcf_below=data.meta.nighttime_accept_qcf_below,
     )
-    fpc_df = qcf.get()
+    qcf_new_cols = [c for c in qcf.flags.columns if c not in fpc_df.columns]
+    fpc_df = pd.concat([fpc_df, qcf.flags[qcf_new_cols]], axis=1)
+    for col in qcf_new_cols:
+        detail(f"Added column {col}.")
 
     # Return a new FluxLevelData; never mutate the input.  ``levels`` is left
     # untouched here — the calling level function is responsible for setting

@@ -380,6 +380,12 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   ([#449](https://github.com/holukas/diive/issues/449)). Yearly means now come from the monthly
   means, a year with a month below the new **Min. month coverage** (default 50 %) is left out, and
   the plot title names the years left out. **Copy Python** gives the same yearly means.
+- **Memory of the flux chain QCF:** each level's `FlagQCF` kept a copy of the whole working frame,
+  at Level 3.3 once per USTAR scenario. With the 43 REF scenarios that was about 1.2 GB per year of
+  half-hourly data ([#450](https://github.com/holukas/diive/issues/450)). It now keeps only the
+  columns it reads (`FlagQCF.input_columns`), about 0.19 GB per year, and Level 3.3 runs about 20 %
+  faster. Results are the same. `get()` on these stored objects returns those columns plus the QCF
+  results; the full frame is `data.fpc_df`.
 
 ## [0.92.0] - 2026-10-21
 

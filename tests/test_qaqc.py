@@ -371,6 +371,32 @@ class TestFlagQCFValidation(unittest.TestCase):
             FlagQCF(df=df, target_col='FC', idstr='_CUT_16_CUT_50',
                     ustar_scenarios=scenarios)
 
+    def test_input_columns_give_the_same_result_as_the_full_frame(self):
+        # #450: the chain passes only these columns, so the instance it keeps
+        # holds no copy of the whole frame.
+        from diive.qaqc import FlagQCF
+        idx = pd.date_range('2022-06-01', periods=6, freq='30min')
+        rng = np.random.default_rng(1)
+        df = pd.DataFrame({
+            'OTHER': rng.normal(size=6),
+            'FLAG_L2_FC_T1_TEST': [0., 1, 0, 2, 0, 1],
+            'FC': np.arange(1.0, 7.0),
+            'FLAG_L3.3_CUT_16_FC_USTAR_TEST': [0., 0, 2, 0, 0, 0],
+            'FLAG_L3.3_CUT_50_FC_USTAR_TEST': [2., 0, 0, 0, 0, 2],
+            'FLAG_L2_TA_T1_TEST': [2., 2, 2, 2, 2, 2],  # another variable's flag
+            'SW_IN_POT': [0., 0, 300, 500, 10, 0],
+        }, index=idx)
+        kw = dict(target_col='FC', swinpot_col='SW_IN_POT', idstr='_L3.3_CUT_50',
+                  ustar_scenarios=['CUT_16', 'CUT_50'])
+        cols = FlagQCF.input_columns(df, **kw)
+        self.assertEqual(cols, ['FLAG_L2_FC_T1_TEST', 'FC',
+                                'FLAG_L3.3_CUT_50_FC_USTAR_TEST', 'SW_IN_POT'])
+        full, narrow = FlagQCF(df=df, **kw), FlagQCF(df=df[cols], **kw)
+        for q in (full, narrow):
+            q.calculate(daytime_accept_qcf_below=1, nighttime_accept_qcf_below=2)
+        pd.testing.assert_frame_equal(full.flags, narrow.flags, check_exact=True)
+        self.assertEqual(list(narrow.df.columns), cols)
+
 
 class TestFlagQCFNeverNaN(unittest.TestCase):
     """QCF is always 0/1/2 for a record, never NaN (finding L8).

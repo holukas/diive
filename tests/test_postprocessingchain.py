@@ -516,6 +516,22 @@ class TestRerunCascade(unittest.TestCase):
         cls.d33 = run_level33_constant_ustar(cls.d32, thresholds=[0.1],
                                              threshold_labels=['CUT_50'])
 
+    def test_level_qcf_keeps_only_the_columns_it_reads(self):
+        # #450: each level's FlagQCF stays in data.levels (L3.3 once per USTAR
+        # scenario). Given the whole fpc_df, every one held a full copy of it.
+        import pandas as pd
+        levels = self.d33.levels
+        for name, qcf in [('L2', levels.level2_qcf), ('L3.2', levels.level32_qcf),
+                          ('L3.3', levels.level33_qcf['CUT_50'])]:
+            with self.subTest(level=name):
+                self.assertLess(qcf.df.shape[1], 15)
+                self.assertLess(qcf.df.shape[1], self.d33.fpc_df.shape[1] / 2)
+                self.assertIn(qcf.series_name, qcf.df.columns)
+                self.assertTrue(set(qcf.df.columns) <= set(self.d33.fpc_df.columns))
+        # The results still land in fpc_df
+        q33 = levels.level33_qcf['CUT_50']
+        pd.testing.assert_series_equal(self.d33.fpc_df[q33.flagqcfcol], q33.flagqcf)
+
     # --- integration: re-running a real level ---
 
     def test_rerun_level2_drops_its_own_columns_and_cascades(self):
