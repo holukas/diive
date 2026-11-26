@@ -149,8 +149,11 @@ one month of half-hourly measurements at a grassland site, with the source-area 
   percentiles leave.
 - **Flux footprint:** `ffp_footprint` and `ffp_climatology` calculate the flux footprint
   prediction (FFP) of Kljun et al. (2015) for a single record and as a climatology of many records,
-  with the same results as the authors' Python code. The climatology runs on all cores
-  (`n_jobs`) and skips the cells a footprint cannot reach, so it is much faster than that code.
+  with the same results as the authors' Python code. Two cases differ on purpose: a climatology
+  with `nx` and `ny` but no `domain` uses the cell height of `ny` (that code used `nx`, which
+  dropped contour lines), and a contour list of fractions holding 1.0 drops only that value (that
+  code divided all values by 100). The climatology runs on all cores (`n_jobs`) and skips the cells a footprint cannot
+  reach, so it is much faster than that code.
 - **Footprint plot:** `FootprintPlot` maps a single footprint or a footprint climatology with
   labelled source-area contours, the tower, the footprint peak, range rings and a north arrow. For a
   single footprint it adds the crosswind-integrated and cumulative profile. A new example shows a

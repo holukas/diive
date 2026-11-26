@@ -162,6 +162,27 @@ class TestFootprintClimatology(unittest.TestCase):
         self.assertEqual(res.x_2d.shape, (101, 101))
         self.assertEqual((res.x_2d.min(), res.x_2d.max()), (-200., 200.))
 
+    def test_cell_height_from_ny(self):
+        # #452: without domain or dx the reference took dy from nx, so with nx != ny
+        # the contour levels used the wrong cell area and most lines were missing.
+        kw = dict(**SERIES, z0=0.2, nx=200, ny=100, verbose=0)
+        res = ffp_climatology(**kw)
+        ref = ffp_climatology(**kw, domain=[-1000., 1000., -1000., 1000.])
+        np.testing.assert_array_equal(res.fclim_2d, ref.fclim_2d)
+        self.assertEqual(res.fr, ref.fr)
+        self.assertTrue(all(fr is not None for fr in res.fr))
+
+    def test_rs_list_with_100_percent(self):
+        # #452: a list holding 1.0 (fractions) or 100 (percent) was divided by 100.
+        from diive.flux.lowres.footprint import _normalize_rs
+        self.assertEqual(_normalize_rs([0.1, 0.5, 1.0], 0), [0.1, 0.5])
+        self.assertEqual(_normalize_rs([10, 50, 100], 0), [0.1, 0.5])
+        self.assertEqual(_normalize_rs([1, 50], 0), [0.01, 0.5])
+        self.assertIsNone(_normalize_rs([0.95], 0))
+        res = ffp_footprint(zm=20., h=1500., ol=-50., sigmav=0.6, ustar=0.4, z0=0.15,
+                            rs=[0.1, 0.5, 1.0], verbose=0)
+        self.assertEqual(res.rs, [0.1, 0.5])
+
     def test_crop(self):
         full = ffp_climatology(**SERIES, z0=0.2, nx=200, verbose=0)
         cropped = ffp_climatology(**SERIES, z0=0.2, nx=200, crop=True, verbose=0)

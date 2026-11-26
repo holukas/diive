@@ -27,7 +27,14 @@ the records in their order, so every cell gets the same sum as in the reference.
 numerics live in ``diive.core.funcs.ffp_kernel``, which the workers import without the
 rest of ``diive.flux``.
 
-Deliberate deviations, none of them changes the result of valid input:
+Deliberate deviations. Only the first two change results of valid input:
+
+- ``ffp_climatology`` with ``nx`` and ``ny`` but without ``domain`` or ``dx`` computes the
+  cell height from ``ny``. The reference computes it from ``nx``, so for ``nx != ny`` it
+  integrated the contour levels with the wrong cell area and missed contour lines.
+- An ``rs`` list counts as percent only when a value is above 1. The reference also took
+  a list of fractions that contains 1.0 as percent and divided every value by 100. Now
+  1.0 (100 %) is dropped like any value above 90 %.
 
 - Invalid input raises ``ValueError`` in ``ffp_footprint`` (the reference prints a
   message and continues with the invalid values). ``ffp_climatology`` skips invalid
@@ -145,8 +152,9 @@ def ffp_footprint(zm: float, h: float, ol: float, sigmav: float, ustar: float, *
         wind_dir: Wind direction (degrees, 0-360) to rotate the footprint into.
             None keeps the footprint along the positive x axis.
         rs: Source-area fraction(s) for contour lines, as fractions (0.8) or percent
-            (80), at most 90 %. A single value above 90 % becomes 90 %. None gives no
-            contour lines.
+            (80), at most 90 %. A list counts as percent when one of its values is
+            above 1. A single value above 90 % becomes 90 %, list values above 90 % are
+            dropped. None gives no contour lines.
         rslayer: If True, also calculate the footprint when ``zm`` lies in the
             roughness sublayer (``zm <= 12.5 * z0``), where the model gives only a
             rough estimate.
@@ -502,12 +510,14 @@ def _normalize_rs(rs, verbose):
             rs = 0.9
         rs = [rs]
     rs = list(rs)
-    if np.max(rs) >= 1:
+    # Percent only if a value is above 1: a list of fractions may hold 1.0 (100 %),
+    # which the reference took as a list in percent and divided every value by 100
+    if np.max(rs) > 1:
         rs = [r / 100. for r in rs]
     if np.max(rs) > 0.9:
         warn("rs values above 90 % were dropped.", verbose=verbose)
         rs = [r for r in rs if r <= 0.9]
-    return list(np.sort(rs))
+    return list(np.sort(rs)) or None
 
 
 def _per_record(values, ts_len, name):
@@ -560,7 +570,7 @@ def _resolve_domain(domain, dx, dy, nx, ny):
     else:
         domain = [-1000, 1000, -1000, 1000]
         dx = (domain[1] - domain[0]) / float(nx)
-        dy = (domain[3] - domain[2]) / float(nx)
+        dy = (domain[3] - domain[2]) / float(ny)  # the reference divides by nx here
     return (*domain, dx, dy, nx, ny)
 
 
