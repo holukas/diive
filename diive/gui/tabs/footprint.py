@@ -111,12 +111,20 @@ class FootprintTab(DiiveTab):
         self._runner.done.connect(self._on_done)
         self._runner.failed.connect(self._on_failed)
         self._debounce = Debouncer(root, self._request)
-        for w in self._state_controls().values():
+        # Only the model inputs rerun the model; the display controls redraw the last
+        # result and the highlight rebuilds only the plot object (L455)
+        drawing = {"source_area", "show_profile", "show_rings", "show_labels"}
+        for key, w in self._state_controls().items():
+            if key in drawing:
+                continue
             for name in ("valueChanged", "toggled", "currentTextChanged", "editingFinished"):
                 sig = getattr(w, name, None)
                 if sig is not None:
                     sig.connect(self._debounce.trigger)
                     break
+        for w in (self.show_profile, self.show_rings, self.show_labels):
+            w.toggled.connect(self._redraw)
+        self.source_area.valueChanged.connect(self._rehighlight)
         self._apply_roughness_mode()
         self._request()
         return root
@@ -185,7 +193,7 @@ class FootprintTab(DiiveTab):
         cf = QFormLayout(cont)
         self.rs = QLineEdit("10, 20, 30, 40, 50, 60, 70, 80")
         self.rs.setToolTip("Source areas of the contour lines in %, comma separated, "
-                           "at most 90.")
+                           "above 0 and at most 90.")
         self.source_area = QSpinBox()
         self.source_area.setRange(10, 90)
         self.source_area.setSingleStep(10)
@@ -195,7 +203,7 @@ class FootprintTab(DiiveTab):
         self.source_area.setToolTip("Source area highlighted on the map and reported above "
                                     "it. Use one of the contour lines.")
         self.nx = QSpinBox()
-        self.nx.setRange(600, 5000)
+        self.nx.setRange(600, 3000)  # 3000 takes about 3 s, 5000 took 9 s and 2.5 GB
         self.nx.setSingleStep(100)
         self.nx.setValue(1000)
         self.nx.setKeyboardTracking(False)
@@ -266,7 +274,8 @@ class FootprintTab(DiiveTab):
         """Model inputs as ``ffp_footprint`` keyword arguments.
 
         Raises:
-            ValueError: If the contour list is not a list of numbers.
+            ValueError: If the contour list is not a list of numbers above 0 and at
+                most 90 (%).
         """
         use_z0 = _ROUGHNESS[self.rough_combo.currentText()] == "z0"
         text = self.rs.text().replace(";", ",")
@@ -274,6 +283,8 @@ class FootprintTab(DiiveTab):
             rs = [float(t) for t in text.split(",") if t.strip()]
         except ValueError:
             raise ValueError("Contours must be numbers in %, comma separated.") from None
+        if any(not 0 < r <= 90 for r in rs):
+            raise ValueError("Contours must be above 0 and at most 90 %.")
         return dict(zm=self.zm.value(), h=self.h.value(), ol=self.ol.value(),
                     sigmav=self.sigmav.value(), ustar=self.ustar.value(),
                     z0=self.z0.value() if use_z0 else None,
@@ -287,6 +298,9 @@ class FootprintTab(DiiveTab):
         try:
             params = self._params()
         except ValueError as exc:
+            # A run for the previous values would otherwise land and draw over the
+            # message (L446)
+            self._runner.cancel()
             self._on_failed(str(exc))
             return
         self.status.setText("Calculating the footprint ...")
@@ -315,6 +329,22 @@ class FootprintTab(DiiveTab):
             self._on_failed(plot)
             return
         self._plot, self._plot_params, self._plot_area = plot, params, area
+        if area != self.source_area.value():  # the highlight changed during the run
+            self._rehighlight()
+            return
+        self._render()
+
+    def _redraw(self, *_) -> None:
+        if self._plot is not None:
+            self._render()
+
+    def _rehighlight(self, *_) -> None:
+        """Report and highlight another source area without rerunning the model."""
+        if self._plot is None:
+            return
+        from diive.core.plotting.footprint import FootprintPlot
+        self._plot_area = self.source_area.value()
+        self._plot = FootprintPlot(self._plot.result, source_area=self._plot_area / 100.)
         self._render()
 
     def _render(self) -> None:

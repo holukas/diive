@@ -940,6 +940,33 @@ def test_footprint_tab(app):
     tab._debounce.flush()
     assert "Contours must be numbers" in tab.status.text()
     assert tab._python_code() is None
+    # #452: 100 % is outside the model, not a list in another unit.
+    tab.rs.setText("10, 50, 100")
+    tab._request()
+    assert "at most 90 %" in tab.status.text()
+
+    # #452: an input error cancels a run for earlier values, which used to land and
+    # draw over the message.
+    tab.rs.setText("10, 50, 80")
+    tab._request()
+    tab.rs.setText("10, abc")
+    tab._request()
+    _wait_for_worker(tab)
+    assert tab._plot is None
+    assert "Contours must be numbers" in tab.status.text()
+
+    # #452: display controls and the highlight redraw the last result without a run.
+    tab.rs.setText("10, 50, 80")
+    tab._request()
+    _wait_for_worker(tab)
+    result = tab._plot.result
+    tab.show_rings.setChecked(False)
+    tab.show_profile.setChecked(True)
+    tab.source_area.setValue(50)
+    assert not tab._runner.is_busy and not tab._debounce.pending()
+    assert tab._plot.result is result
+    assert tab._plot.source_area_r == 0.5
+    assert tab._plot.ax_profile is not None  # redrawn with the profile panel
     w.close()
     ow.close()
 
